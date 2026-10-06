@@ -1,0 +1,22 @@
+/release/
+
+# Генерируется в CI (.github/scripts/configure-signing.sh)
+/src-tauri/tauri.signing.conf.json
+
+# Dependencies and build output
+node_modules/
+/dist/
+/src-tauri/target/
+
+# Test reports
+/playwright-report/
+/test-results/
+coverage/
+
+# Local environment and agent state
+.env
+.env.*
+!.env.example
+.claude/
+.DS_Store
+*.log

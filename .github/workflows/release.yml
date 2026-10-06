@@ -1,0 +1,173 @@
+# ============================================================
+# LEXORA — Release Workflow
+# Триггеры:
+#   • push тега v* (например v0.1.0) — сборка и draft GitHub Release;
+#   • ручной запуск (workflow_dispatch) — пробная сборка БЕЗ публикации:
+#     инсталляторы лежат в артефактах запуска (Actions → run → Artifacts).
+#
+# Артефакты:
+#   • macOS   — universal DMG (Intel + Apple Silicon);
+#   • Windows — NSIS-установщик (.exe, установка на пользователя);
+#   • Linux   — AppImage/deb (экспериментально).
+#
+# Подпись кода — опциональна и включается наличием секретов
+# (см. docs/release.md). Без секретов сборка идёт неподписанной.
+# ============================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  # Тег, tauri.conf.json, Cargo.toml и package.json должны совпадать:
+  # иначе в имени инсталлятора и в «О программе» окажутся разные версии.
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check versions are in sync
+        shell: bash
+        run: |
+          tauri_version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          package_version=$(node -p "require('./package.json').version")
+          cargo_version=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -n 1)
+          echo "tauri.conf.json=$tauri_version package.json=$package_version Cargo.toml=$cargo_version"
+
+          if [[ "$tauri_version" != "$package_version" || "$tauri_version" != "$cargo_version" ]]; then
+            echo "::error::Версии расходятся: tauri.conf.json=$tauri_version, package.json=$package_version, Cargo.toml=$cargo_version"
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "${GITHUB_REF_NAME#v}" != "$tauri_version" ]]; then
+            echo "::error::Тег $GITHUB_REF_NAME не совпадает с версией приложения $tauri_version"
+            exit 1
+          fi
+
+  build-installers:
+    needs: verify-version
+    permissions:
+      contents: write # needed to create the GitHub Release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            os: macos
+            # universal-бинарник собирается из двух target'ов
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+            experimental: false
+          - platform: windows-latest
+            os: windows
+            rust-targets: ''
+            # только NSIS: per-user установка без прав администратора
+            args: --bundles nsis
+            experimental: false
+          # Дополнительная платформа: падение не блокирует релиз остальных
+          - platform: ubuntu-latest
+            os: linux
+            rust-targets: ''
+            args: ''
+            experimental: true
+
+    continue-on-error: ${{ matrix.experimental }}
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # WebKitGTK и прочие системные зависимости Tauri на Linux
+      - name: Install Linux dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      # Windows, вариант «обычный сертификат» (OV/EV .pfx): импорт в хранилище
+      # текущего пользователя. Без секрета WINDOWS_CERTIFICATE шаг ничего не делает.
+      - name: Import Windows certificate (PFX)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERTIFICATE)) {
+            Write-Host 'WINDOWS_CERTIFICATE не задан — PFX-подпись пропущена'
+            exit 0
+          }
+          # certutil -encode добавляет строки -----BEGIN/END CERTIFICATE----- — отбрасываем их
+          $base64 = ($env:WINDOWS_CERTIFICATE -split '\r?\n' | Where-Object { $_ -notmatch '^-----' }) -join ''
+          $pfx = Join-Path $env:RUNNER_TEMP 'certificate.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($base64))
+          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx
+          "WINDOWS_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      # Подпись кода: см. .github/scripts/configure-signing.sh и docs/release.md.
+      # Выход: mode (unsigned|developer-id|azure|pfx) и args (--config с override-ом).
+      - name: Configure code signing
+        id: signing
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ secrets.AZURE_SIGNING_PROFILE }}
+        run: bash .github/scripts/configure-signing.sh "${{ matrix.os }}"
+
+      # CLI, который Tauri вызывает через bundle.windows.signCommand
+      - name: Install Azure Artifact Signing CLI
+        if: steps.signing.outputs.mode == 'azure'
+        run: cargo install --locked artifact-signing-cli
+
+      # tauri-action сам запускает beforeBuildCommand (npm run build)
+      # из tauri.conf.json и собирает бандлы. Для тега — загружает их
+      # в draft release; для ручного запуска — в артефакты workflow.
+      - name: Build and upload release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: 'Lexora ${{ github.ref_name }}'
+          releaseBody: 'See the assets below to download and install this version.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }} ${{ steps.signing.outputs.args }}
+          uploadWorkflowArtifacts: ${{ github.event_name == 'workflow_dispatch' }}

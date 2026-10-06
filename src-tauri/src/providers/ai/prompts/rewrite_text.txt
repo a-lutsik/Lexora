@@ -1,0 +1,32 @@
+Rewrite the following text according to the specified mode.
+
+Mode: {mode}
+
+Mode descriptions:
+- "clearer": Make the text easier to understand. Simplify complex sentences, remove ambiguity.
+- "shorter": Make it more concise. Remove redundancy and filler without losing meaning.
+- "formal": Elevate the register. Use formal vocabulary, avoid contractions and colloquialisms.
+- "friendly": Make it warmer, more approachable. Add a conversational and welcoming tone.
+- "professional": Business-appropriate tone. Clear, direct, and polished.
+- "simpler": Use simpler vocabulary and shorter sentences. Target a general audience.
+- "rephrase": Rephrase with alternative wording and sentence structure. Preserve meaning.
+- "custom": Follow the custom instruction below. Keep the original language unless the instruction asks to translate.
+
+Custom instruction (used when mode is "custom"; otherwise ignore):
+{custom_instruction}
+
+Text language: {language}
+
+Text to rewrite:
+{text}
+
+Return strict JSON:
+{
+  "rewritten_text": "<the full rewritten text>",
+  "changes_summary": "<brief 1-sentence description of what was changed>"
+}
+
+IMPORTANT:
+- Preserve the original meaning and key information.
+- Keep the same language as the input, unless the custom instruction explicitly asks to translate.
+- Do NOT add content that was not implied in the original.

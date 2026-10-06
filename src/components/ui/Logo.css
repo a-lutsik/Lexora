@@ -1,0 +1,38 @@
+.lexora-logo-mark-img {
+  display: block;
+  border-radius: 22%;
+  object-fit: cover;
+}
+
+.lexora-brand-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.lexora-brand-name {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Compact brand badge — shared top-left mark for popup-sized windows */
+.lexora-brand-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex-shrink: 0;
+  cursor: move;
+}
+
+.lexora-brand-badge-name {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}

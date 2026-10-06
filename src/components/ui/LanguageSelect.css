@@ -1,0 +1,85 @@
+/* ============================================================
+   LEXORA — LanguageSelect (searchable combobox)
+   ============================================================ */
+
+.language-select-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+}
+
+.language-select-search {
+  margin: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  outline: none;
+}
+
+.language-select-search:focus-visible {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 2px var(--color-accent-dim);
+}
+
+.language-select-list {
+  position: static;
+  max-height: 260px;
+  overflow-y: auto;
+  border: none;
+  box-shadow: none;
+  margin: 0;
+  padding: 4px;
+  border-radius: 0;
+  list-style: none;
+}
+
+.language-select-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.language-select-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-full);
+}
+
+.language-select--compact .custom-select-trigger {
+  min-width: 0;
+}
+
+.language-select-dropdown .custom-select-option-label {
+  min-width: 0;
+}
+
+.language-select-dropdown .custom-select-option-label > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.language-select-code {
+  margin-left: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.custom-select-option.is-disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+  pointer-events: none;
+}

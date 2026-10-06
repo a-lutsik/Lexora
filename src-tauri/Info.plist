@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LEXORA — macOS System Services (NSServices)
+  Этот файл автоматически мержится Tauri CLI в итоговый Info.plist
+  .app-бандла при `tauri build` / `tauri dev` (см. tauri.app docs:
+  "macOS Application Bundle — Info.plist merging").
+
+  NSPortName должен совпадать с CFBundleName (= productName в
+  tauri.conf.json → "Lexora") — именно под этим именем NSApplication
+  регистрирует mach-порт для сервисных запросов.
+
+  NSMessage — имя Objective-C селектора без суффикса `:userData:error:`,
+  реализовано в src/services.rs (класс LexoraServices).
+-->
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Lexora records your voice to score pronunciation and give phoneme-level feedback.</string>
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Translate</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>translateSelection</string>
+            <key>NSPortName</key>
+            <string>Lexora</string>
+            <key>NSTimeout</key>
+            <string>15</string>
+            <key>NSRequiredContext</key>
+            <dict/>
+            <key>NSSendTypes</key>
+            <array>
+                <string>public.utf8-plain-text</string>
+                <string>public.plain-text</string>
+                <string>NSStringPboardType</string>
+            </array>
+            <key>NSReturnTypes</key>
+            <array/>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Add to Vocabulary</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>addToVocabulary</string>
+            <key>NSPortName</key>
+            <string>Lexora</string>
+            <key>NSTimeout</key>
+            <string>15</string>
+            <key>NSRequiredContext</key>
+            <dict/>
+            <key>NSSendTypes</key>
+            <array>
+                <string>public.utf8-plain-text</string>
+                <string>public.plain-text</string>
+                <string>NSStringPboardType</string>
+            </array>
+            <key>NSReturnTypes</key>
+            <array/>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Speak</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>speakSelection</string>
+            <key>NSPortName</key>
+            <string>Lexora</string>
+            <key>NSTimeout</key>
+            <string>15</string>
+            <key>NSRequiredContext</key>
+            <dict/>
+            <key>NSSendTypes</key>
+            <array>
+                <string>public.utf8-plain-text</string>
+                <string>public.plain-text</string>
+                <string>NSStringPboardType</string>
+            </array>
+            <key>NSReturnTypes</key>
+            <array/>
+        </dict>
+    </array>
+</dict>
+</plist>

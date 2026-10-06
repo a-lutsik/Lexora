@@ -1,0 +1,72 @@
+You are a visual mnemonic designer for a language-learning app.
+
+Given a word, its sense, and THREE candidate visual associations, pick the single best association and produce a ready-to-use image-generation prompt.
+
+INPUT:
+Word or phrase: "{{word}}"
+Sense: "{{sense}}"
+Associations (JSON):
+{{associations_json}}
+Previously used scenes (prefer a different situation if listed):
+{{avoid_scenes}}
+
+GOAL:
+Select the association that best lets a learner guess THIS word/phrase without seeing a translation or caption.
+
+SCORE each association on (1–10 integers):
+- clarity: how clearly the scene communicates the sense
+- memorability: how sticky / exaggerated / vivid it is
+- ambiguity: LOWER is better (how easily it could mean something else)
+- cultural_universality: how understandable across cultures
+
+Pick the highest overall utility (prefer high clarity + memorability + cultural_universality, low ambiguity). Break ties by clarity, then memorability.
+
+Reject or heavily penalize an association if:
+- a learner would name a different concrete noun (mosquito, insect, dog, phone, …) instead of this word/phrase
+- it is a still life / catalog photo of an object rather than a situation that shows the sense
+- it repeats a previously used scene listed above
+- for interpersonal meanings (annoying, pesky, polite, rude, clingy…), it does not show a social situation with clear emotion
+
+OUTPUT:
+Return a valid JSON object matching this schema exactly:
+{
+  "selected_id": "a",
+  "scores": [
+    {
+      "id": "a",
+      "clarity": 8,
+      "memorability": 7,
+      "ambiguity": 3,
+      "cultural_universality": 9
+    },
+    {
+      "id": "b",
+      "clarity": 6,
+      "memorability": 8,
+      "ambiguity": 4,
+      "cultural_universality": 7
+    },
+    {
+      "id": "c",
+      "clarity": 7,
+      "memorability": 6,
+      "ambiguity": 5,
+      "cultural_universality": 8
+    }
+  ],
+  "image_prompt": "Full ready-to-use image generation prompt describing the main scene, character actions, facial expressions/emotions, important visual clues, composition, and a clean expressive educational illustration style suitable for a modern language-learning app. No text, no captions, no labels, no speech bubbles.",
+  "photo_search_query": "short English stock-photo search phrase describing the concrete scene (not the bare word alone)"
+}
+
+RULES for image_prompt:
+- Describe the selected association as a concrete illustrated scene of THIS meaning.
+- Prefer exaggerated but friendly facial expressions and body language.
+- For behavior / "be + adjective" phrases, show people acting that way (e.g. someone repeatedly interrupting or asking the same question), not a related animal or object.
+- Simple composition, 1–3 characters/objects, minimal background, strong visual storytelling.
+- Explicitly end with: no text, no captions, no labels.
+- Do NOT merely say "illustrate the word {{word}}".
+
+RULES for photo_search_query:
+- English, 4–12 words, concrete nouns/actions from the winning scene.
+- Describe the behavioral situation (e.g. "child repeatedly asking parent same question"), never a collocation noun that is a different word (e.g. not "mosquito" for "pesky").
+- Suitable for Unsplash/Wikimedia photograph search as a fallback.

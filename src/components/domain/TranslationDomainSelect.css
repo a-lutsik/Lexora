@@ -1,0 +1,13 @@
+.translation-domain-select {
+  display: flex;
+  flex-direction: column;
+  min-width: 9.5rem;
+}
+
+.translation-domain-select.is-compact {
+  min-width: 7rem;
+}
+
+.translation-domain-select.is-compact.has-detected {
+  min-width: 7.5rem;
+}

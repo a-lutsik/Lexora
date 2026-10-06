@@ -1,0 +1,74 @@
+// ============================================================
+// LEXORA — Constants
+// ============================================================
+
+export const SRS_STATUS_LABELS: Record<string, string> = {
+  new:       'New',
+  learning:  'Learning',
+  review:    'Review',
+  mature:    'Mature',
+  suspended: 'Suspended',
+} as const;
+
+export const STUDY_MODE_LABELS: Record<string, string> = {
+  flashcard:       'Flashcard',
+  typing:          'Typing',
+  image:           'Image',
+  listening:       'Listening',
+  cloze:           'Fill the Gap',
+  irregular_verbs: 'Irregular Verbs',
+  definition:      'Definition',
+  speaking:        'Speaking',
+} as const;
+
+export const DEFAULT_VOCABULARY_FILTERS = {
+  search: '',
+  languageId: null,
+  status: 'all' as const,
+  collectionId: null,
+  sortBy: 'added_date' as const,
+  sortDir: 'desc' as const,
+  page: 1,
+  perPage: 50,
+} as const;
+
+export const TAURI_WINDOW_LABELS = {
+  MAIN:   'main',
+  POPUP:  'popup',
+  STICKER: 'sticker',
+} as const;
+
+export const QUERY_KEYS = {
+  VOCABULARY:   'vocabulary',
+  VOCABULARY_ENTRY: 'vocabulary-entry',
+  STUDY_QUEUE:  'study-queue',
+  STICKER_CARD: 'sticker-card',
+  COLLECTIONS:  'collections',
+  LANGUAGES:    'languages',
+  SETTINGS:     'settings',
+  STATS:        'stats',
+  DUE_COUNT:    'due-count',
+  WRITING_PATTERNS: 'writing-patterns',
+  PRONUNCIATION_HISTORY: 'pronunciation-history',
+  PROBLEM_PHONEMES: 'problem-phonemes',
+  MINIMAL_PAIRS: 'minimal-pairs',
+  WORD_IMAGE: 'word-image',
+  DIALOGUE_SCENARIOS: 'dialogue-scenarios',
+  DIALOGUE_SESSION: 'dialogue-session',
+  MODEL_ROUTES: 'model-routes',
+  MODEL_CATALOG: 'model-catalog',
+  AI_USAGE: 'ai-usage',
+} as const;
+
+/** Backend events emitted with `app.emit`. */
+export const APP_EVENTS = {
+  CARD_ENRICH: 'lexora:card-enrich',
+  TRANSLATION_BACKFILLED: 'lexora:translation-backfilled',
+} as const;
+
+export const STALE_TIME = {
+  SHORT:  10_000,   // 10s — due count, etc.
+  MEDIUM: 30_000,   // 30s — vocabulary list
+  LONG:   300_000,  // 5min — collections, languages
+  NEVER:  Infinity, // settings
+} as const;

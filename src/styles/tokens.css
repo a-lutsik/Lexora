@@ -1,0 +1,148 @@
+/* ============================================================
+   LEXORA — Design Tokens
+   Единственный источник цветов, отступов и типографики.
+   Не используй магические числа нигде в коде — только var().
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ── Colors: Backgrounds ───────────────────────────────── */
+  --color-bg-primary:      #0f0f13;
+  --color-bg-secondary:    #1a1a24;
+  --color-bg-elevated:     #22222f;
+  --color-bg-overlay:      rgba(15, 15, 19, 0.85);
+
+  /* ── Colors: Accent (Indigo) ──────────────────────────── */
+  --color-accent:          #6366f1;
+  --color-accent-hover:    #818cf8;
+  --color-accent-active:   #4f46e5;
+  --color-accent-dim:      rgba(99, 102, 241, 0.15);
+  --color-accent-glow:     rgba(99, 102, 241, 0.25);
+
+  /* ── Colors: Semantic ─────────────────────────────────── */
+  --color-warn:            #f59e0b;   /* Amber — frequency badges */
+  --color-warn-dim:        rgba(245, 158, 11, 0.15);
+  --color-success:         #10b981;   /* Emerald — mature/learned */
+  --color-success-dim:     rgba(16, 185, 129, 0.15);
+  --color-danger:          #ef4444;
+  --color-danger-dim:      rgba(239, 68, 68, 0.15);
+  /* WCAG AA: #ef4444 как ТЕКСТ на тёмных/dim-фонах даёт только 3.6–4.4:1.
+     Для текста ошибок используй --color-danger-text (#f87171 → 4.9–6.9:1). */
+  --color-danger-text:     #f87171;
+  /* Белый текст на #ef4444 — 3.76:1 (FAIL). Для бейджей с белым текстом — #dc2626 (4.83:1). */
+  --color-danger-strong:   #dc2626;
+  --color-info:            #3b82f6;
+  --color-info-dim:        rgba(59, 130, 246, 0.15);
+
+  /* ── Colors: Voice studio neon ────────────────────────── */
+  --color-neon-cyan:           #22d3ee;
+  --color-neon-cyan-text:      #67e8f9;
+  --color-neon-cyan-glow:      rgba(34, 211, 238, 0.45);
+  --color-neon-magenta:        #e879f9;
+  --color-neon-magenta-text:   #f0abfc;
+  --color-neon-magenta-glow:   rgba(232, 121, 249, 0.45);
+  --color-neon-green:          #34d399;
+  --color-neon-green-text:     #6ee7b7;
+  --color-neon-green-glow:     rgba(52, 211, 153, 0.45);
+
+  /* ── Colors: Text ─────────────────────────────────────── */
+  --color-text-primary:    #f1f5f9;
+  --color-text-secondary:  #94a3b8;
+  /* WCAG AA fix: было #475569 (2.1–2.5:1 — FAIL). #7d92a8 даёт 5.96:1 на bg-primary,
+     5.38:1 на bg-secondary, 4.90:1 на bg-elevated. */
+  --color-text-muted:      #7d92a8;
+  --color-text-disabled:   #334155;
+
+  /* ── Colors: Borders ──────────────────────────────────── */
+  --color-border:          rgba(255, 255, 255, 0.08);
+  --color-border-hover:    rgba(255, 255, 255, 0.14);
+  --color-border-focus:    var(--color-accent);
+
+  /* ── SRS Status Colors ────────────────────────────────── */
+  --color-status-new:      #94a3b8;
+  --color-status-new-dim:  rgba(148, 163, 184, 0.15);
+  --color-status-learning: #60a5fa;
+  --color-status-learning-dim: rgba(96, 165, 250, 0.15);
+  --color-status-review:   #a5b4fc; /* WCAG AA: accent-hover на accent-dim/elevated давал 4.48:1; #a5b4fc → 6.7:1 */
+  --color-status-review-dim: var(--color-accent-dim);
+  --color-status-mature:   var(--color-success);
+  --color-status-mature-dim: var(--color-success-dim);
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-sans:   'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:   'JetBrains Mono', 'Fira Code', monospace;
+
+  --text-xs:     0.75rem;    /* 12px */
+  --text-sm:     0.875rem;   /* 14px */
+  --text-base:   1rem;       /* 16px */
+  --text-lg:     1.125rem;   /* 18px */
+  --text-xl:     1.25rem;    /* 20px */
+  --text-2xl:    1.5rem;     /* 24px */
+  --text-3xl:    1.875rem;   /* 30px */
+  --text-4xl:    2.25rem;    /* 36px */
+
+  --font-weight-regular: 400;
+  --font-weight-medium:  500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:    700;
+
+  --line-height-tight:  1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* ── Spacing (4px base grid) ──────────────────────────── */
+  --space-1:   0.25rem;   /*  4px */
+  --space-2:   0.5rem;    /*  8px */
+  --space-3:   0.75rem;   /* 12px */
+  --space-4:   1rem;      /* 16px */
+  --space-5:   1.25rem;   /* 20px */
+  --space-6:   1.5rem;    /* 24px */
+  --space-8:   2rem;      /* 32px */
+  --space-10:  2.5rem;    /* 40px */
+  --space-12:  3rem;      /* 48px */
+  --space-16:  4rem;      /* 64px */
+
+  /* ── Border Radius ────────────────────────────────────── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   16px;
+  --radius-xl:   20px;
+  --radius-2xl:  24px;
+  --radius-full: 9999px;
+
+  /* ── Shadows ──────────────────────────────────────────── */
+  --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg:    0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-xl:    0 16px 48px rgba(0, 0, 0, 0.7);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.4),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-accent: 0 0 24px rgba(99, 102, 241, 0.2);
+
+  /* ── Glassmorphism ────────────────────────────────────── */
+  --glass-bg:     rgba(15, 15, 19, 0.75);
+  --glass-bg-light: rgba(34, 34, 47, 0.7);
+  --glass-blur:   blur(24px);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+
+  /* ── Transitions ──────────────────────────────────────── */
+  --transition-fast:   100ms ease;
+  --transition-base:   200ms ease;
+  --transition-slow:   350ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Layout ───────────────────────────────────────────── */
+  --sidebar-width:    260px;
+  --topbar-height:    60px;
+  --content-max-width: 1200px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast:   0ms;
+    --transition-base:   0ms;
+    --transition-slow:   0ms;
+    --transition-spring: 0ms;
+  }
+}

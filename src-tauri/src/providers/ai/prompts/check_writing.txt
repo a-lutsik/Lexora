@@ -1,0 +1,36 @@
+Check the following text for language issues. Analyze every sentence carefully.
+
+Categories to check: spelling, grammar, punctuation, word_choice, clarity, style, tone, unnatural.
+
+For EACH issue found, return a JSON object with these fields:
+- "category": one of [spelling, grammar, punctuation, word_choice, clarity, style, tone, unnatural]
+- "severity": "error" (clear mistake), "warning" (likely wrong), or "suggestion" (could be improved)
+- "original_fragment": the EXACT problematic text fragment as it appears in the original
+- "suggested_fix": the corrected version of ONLY that fragment
+- "explanation": 1-2 sentence explanation of why this is wrong or could be improved
+- "rule_hint": a brief grammar/style rule suitable for a tooltip (optional, null if not applicable)
+- "offset_start": 0-based start index of original_fragment (JavaScript string index)
+- "offset_end": EXCLUSIVE end index. original_fragment MUST equal input.substring(offset_start, offset_end).
+  Example: in "he go", fragment "go" is offset_start=3, offset_end=5 (NOT 4).
+
+Text language: {language}
+
+Text to check:
+{text}
+
+Return strict JSON:
+{
+  "issues": [ ... ],
+  "overall_score": <0-100 integer quality score>,
+  "summary": "<brief 1-sentence overall assessment>"
+}
+
+If the text has no issues, return: { "issues": [], "overall_score": 100, "summary": "No issues found. The text is well-written." }
+
+IMPORTANT:
+- offset_start and offset_end must precisely match original_fragment: input.substring(offset_start, offset_end) === original_fragment.
+- offset_end is EXCLUSIVE (do not report the last character index).
+- original_fragment must be an exact substring of the input text.
+- suggested_fix replaces ONLY original_fragment — do not include neighbouring letters.
+- Do NOT overlap issues (each character should belong to at most one issue).
+- Order issues by offset_start ascending.
