@@ -26,12 +26,23 @@ export function useGrammarWatchStatus() {
   });
 }
 
+/** Optimistic: the checkbox/list change at once, rolled back if saving fails. */
 export function useUpdateGrammarWatchSettings() {
   const client = useQueryClient();
+  const key = [QUERY_KEYS.GRAMMAR_WATCH_SETTINGS];
   return useMutation({
     mutationFn: (settings: GrammarWatchSettings) => ipc.grammar.updateSettings(settings),
+    onMutate: async (settings) => {
+      await client.cancelQueries({ queryKey: key });
+      const previous = client.getQueryData<GrammarWatchSettings>(key);
+      client.setQueryData(key, settings);
+      return { previous };
+    },
+    onError: (_error, _settings, context) => {
+      if (context?.previous) client.setQueryData(key, context.previous);
+    },
     onSuccess: (saved) => {
-      client.setQueryData([QUERY_KEYS.GRAMMAR_WATCH_SETTINGS], saved);
+      client.setQueryData(key, saved);
     },
   });
 }

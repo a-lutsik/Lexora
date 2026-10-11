@@ -5,7 +5,7 @@
 // ============================================================
 
 import { useId, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { KeyboardEvent } from 'react';
 import {
   useGrammarWatchSettings,
   useGrammarWatchStatus,
@@ -21,23 +21,32 @@ export function GrammarWatchSection() {
   const update = useUpdateGrammarWatchSettings();
   const requestAccess = useRequestGrammarWatchAccess();
   const [newApp, setNewApp] = useState('');
+  // Shown until the save settles, so the checkbox never flips back mid-save.
+  const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
   const inputId = useId();
 
   const supported = status?.supported ?? false;
-  const enabled = settings?.enabled ?? false;
+  const enabled = pendingEnabled ?? settings?.enabled ?? false;
   const excluded = settings?.excludedApps ?? [];
   const needsAccess = supported && enabled && status?.accessibilityTrusted === false;
 
   const save = (next: { enabled?: boolean; excludedApps?: string[] }) => {
     if (!settings) return;
-    update.mutate({
-      enabled: next.enabled ?? settings.enabled,
-      excludedApps: next.excludedApps ?? settings.excludedApps,
-    });
+    update.mutate(
+      {
+        enabled: next.enabled ?? settings.enabled,
+        excludedApps: next.excludedApps ?? settings.excludedApps,
+      },
+      { onSettled: () => setPendingEnabled(null) },
+    );
   };
 
-  const handleAdd = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleToggle = (checked: boolean) => {
+    setPendingEnabled(checked);
+    save({ enabled: checked });
+  };
+
+  const handleAdd = () => {
     const bundleId = newApp.trim();
     if (!bundleId || excluded.includes(bundleId)) {
       setNewApp('');
@@ -45,6 +54,12 @@ export function GrammarWatchSection() {
     }
     save({ excludedApps: [...excluded, bundleId] });
     setNewApp('');
+  };
+
+  const handleAddKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    handleAdd();
   };
 
   return (
@@ -59,7 +74,7 @@ export function GrammarWatchSection() {
             type="checkbox"
             checked={enabled}
             disabled={!supported || isLoading || update.isPending}
-            onChange={(event) => save({ enabled: event.target.checked })}
+            onChange={(event) => handleToggle(event.target.checked)}
             className="settings-checkbox"
           />
           <span className="settings-checkbox-text text-sm font-medium">
@@ -118,20 +133,23 @@ export function GrammarWatchSection() {
               </li>
             ))}
           </ul>
-          <form className="grammar-settings-add" onSubmit={handleAdd}>
+          {/* Not a <form>: the section lives inside the Settings form, and a
+              nested submit would also run the page-wide save. */}
+          <div className="grammar-settings-add">
             <input
               id={inputId}
               type="text"
               className="settings-input settings-input--mono"
               value={newApp}
               onChange={(event) => setNewApp(event.target.value)}
+              onKeyDown={handleAddKey}
               placeholder="com.example.app or com.example.*"
               disabled={!settings}
             />
-            <Button type="submit" size="sm" disabled={!newApp.trim() || update.isPending}>
+            <Button size="sm" onClick={handleAdd} disabled={!newApp.trim() || update.isPending}>
               Add
             </Button>
-          </form>
+          </div>
         </div>
       </div>
     </div>

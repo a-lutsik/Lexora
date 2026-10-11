@@ -37,6 +37,11 @@ export default defineConfig({
     deviceScaleFactor: 2,
     permissions: ['microphone'],
     launchOptions: {
+      // PLAYWRIGHT_CHROMIUM_PATH: use a preinstalled Chromium when its build
+      // differs from the one this @playwright/test version expects.
+      ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
+        ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
+        : {}),
       args: [
         '--use-fake-ui-for-media-stream',
         '--use-fake-device-for-media-stream',
