@@ -23,6 +23,7 @@ pub const TRANSLATE_SHORTCUT: &str = "CmdOrCtrl+Shift+L";
 pub const STICKERS_SHORTCUT: &str = "CmdOrCtrl+Shift+S";
 
 /// Максимальная длина захваченного текста (по символам, не по байтам).
+#[cfg(any(target_os = "macos", test))]
 const MAX_CAPTURE_CHARS: usize = 8000;
 /// Пауза после скрытия popup, чтобы фокус вернулся в исходное приложение.
 const FOCUS_RETURN_DELAY: Duration = Duration::from_millis(90);
@@ -120,6 +121,7 @@ pub fn register_shortcuts(
 }
 
 /// Trim + отсечение слишком длинного захвата. Пустая строка → None.
+#[cfg(any(target_os = "macos", test))]
 pub(crate) fn normalize_captured(text: &str) -> Option<String> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -143,6 +145,7 @@ fn hide_popup_for_capture(app: &AppHandle) {
 
 /// Новый захват из буфера только если содержимое реально изменилось.
 /// Старый буфер не выдаём за выделение (частый false-positive Cmd+C).
+#[cfg(any(target_os = "macos", test))]
 pub(crate) fn capture_from_clipboard_delta(
     before: Option<&str>,
     after: Option<&str>,

@@ -82,7 +82,7 @@ export function ImageOverlayViewer({
       <div className={`image-overlay-canvas-wrapper is-${mode}`}>
         {mode !== 'text-only' && (
           <div className="image-overlay-image-container">
-            <img src={imageUrl} alt="Uploaded document or photo" className="image-overlay-base-img" />
+            <img src={imageUrl} alt="Uploaded document" className="image-overlay-base-img" />
 
             {/* Bounding box overlays */}
             {mode === 'overlay' &&
@@ -92,9 +92,11 @@ export function ImageOverlayViewer({
                 const isSelected = selectedBlock === block;
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={idx}
                     className={`image-bbox-chip ${isSelected ? 'is-selected' : ''}`}
+                    aria-pressed={isSelected}
                     style={{
                       left: `${x}%`,
                       top: `${y}%`,
@@ -108,7 +110,7 @@ export function ImageOverlayViewer({
                       <span className="image-bbox-original">{block.originalText}</span>
                       <span className="image-bbox-translated">{block.translatedText}</span>
                     </span>
-                  </div>
+                  </button>
                 );
               })}
           </div>
@@ -130,22 +132,25 @@ export function ImageOverlayViewer({
                   <div
                     key={idx}
                     className={`image-block-card ${selectedBlock === block ? 'is-selected' : ''}`}
-                    onClick={() => setSelectedBlock(block)}
                   >
-                    <div className="image-block-orig text-secondary text-sm">
-                      {block.originalText}
-                    </div>
-                    <div className="image-block-trans text-primary text-sm font-medium">
-                      {block.translatedText}
-                    </div>
+                    <button
+                      type="button"
+                      className="image-block-select"
+                      aria-pressed={selectedBlock === block}
+                      onClick={() => setSelectedBlock(block)}
+                    >
+                      <span className="image-block-orig text-secondary text-sm">
+                        {block.originalText}
+                      </span>
+                      <span className="image-block-trans text-primary text-sm font-medium">
+                        {block.translatedText}
+                      </span>
+                    </button>
                     {onAddToVocabulary && (
                       <button
                         type="button"
                         className="btn-card-add text-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAddToVocabulary(block.originalText, block.translatedText);
-                        }}
+                        onClick={() => onAddToVocabulary(block.originalText, block.translatedText)}
                         aria-label={`Save ${block.originalText} to vocabulary`}
                       >
                         + Add to Vocab

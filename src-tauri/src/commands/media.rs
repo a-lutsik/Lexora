@@ -138,6 +138,8 @@ pub async fn get_image_path(
 
 /// Generate (or stock-search) a photo for a lexeme and persist it on the media row.
 /// Seed SVGs are placeholders — they do not skip generation.
+// The inputs are independent call-site values; a struct would only rename them.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn ensure_lexeme_image(
     app: &AppHandle,
     pool: &Arc<DbPool>,

@@ -52,19 +52,23 @@ export function ImageTranslateTab({
   }, [imagePreviewUrl]);
 
   // Global paste handler on window while tab is mounted
+  // Paste always uses the latest handler (current languages and state)
+  // without re-subscribing on every render.
+  const processImageFileRef = useRef<(file: File) => Promise<void>>(async () => undefined);
+
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       if (!e.clipboardData) return;
       const file = getClipboardImage(e.clipboardData);
       if (file) {
         e.preventDefault();
-        processImageFile(file);
+        void processImageFileRef.current(file);
       }
     };
 
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [sourceLang, targetLang]);
+  }, []);
 
   const processImageFile = async (file: File) => {
     setUploadError(null);
@@ -100,11 +104,13 @@ export function ImageTranslateTab({
       });
     } catch (err) {
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.error('Failed to encode image', err);
       }
       setUploadError('Could not read the image. Try another file or paste a screenshot.');
     }
   };
+  processImageFileRef.current = processImageFile;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

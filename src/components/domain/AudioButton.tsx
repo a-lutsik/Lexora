@@ -19,6 +19,8 @@ type AudioButtonProps = {
   ariaLabel?: string;
   /** Кастомный обработчик вместо TTS по умолчанию. */
   onSpeak?: (text: string) => void;
+  /** Called after playback starts (e.g. return focus to an input). */
+  onPlayed?: () => void;
 };
 
 const PLAYING_LOCK_MS = 1500;
@@ -38,6 +40,7 @@ export function AudioButton({
   size = 'md',
   ariaLabel = 'Play pronunciation',
   onSpeak,
+  onPlayed,
 }: AudioButtonProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,6 +61,7 @@ export function AudioButton({
     } else {
       void ipc.media.playTts(text, language);
     }
+    onPlayed?.();
     timeoutRef.current = setTimeout(() => setIsPlaying(false), PLAYING_LOCK_MS);
   };
 

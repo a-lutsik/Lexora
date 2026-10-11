@@ -37,16 +37,15 @@ test.describe('Add Word Flow', () => {
     const translateBtn = dialog.getByRole('button', { name: 'Translate' });
     const inputBox = await input.boundingBox();
     const btnBox = await translateBtn.boundingBox();
-    expect(inputBox).not.toBeNull();
-    expect(btnBox).not.toBeNull();
-    expect(inputBox!.width).toBeGreaterThan(240);
-    expect(inputBox!.x + inputBox!.width).toBeLessThan(btnBox!.x);
+    if (!inputBox || !btnBox) throw new Error('Input or Translate button is not laid out');
+    expect(inputBox.width).toBeGreaterThan(240);
+    expect(inputBox.x + inputBox.width).toBeLessThan(btnBox.x);
   });
 
   test('typing word + click Translate shows translation result', async ({ page }) => {
     await page.getByRole('button', { name: 'Add new word' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByPlaceholder('Type word or phrase in English...').fill('apple');
+    await dialog.getByRole('textbox', { name: 'Word or phrase to translate' }).fill('apple');
     await dialog.getByRole('button', { name: 'Translate' }).click();
 
     await expect(dialog.getByText('яблоко')).toBeVisible({ timeout: 8000 });
@@ -57,7 +56,7 @@ test.describe('Add Word Flow', () => {
   test('Enter in input triggers translate', async ({ page }) => {
     await page.getByRole('button', { name: 'Add new word' }).click();
     const dialog = page.getByRole('dialog');
-    const input = dialog.getByPlaceholder('Type word or phrase in English...');
+    const input = dialog.getByRole('textbox', { name: 'Word or phrase to translate' });
     await input.fill('apple');
     await input.press('Enter');
 
@@ -67,7 +66,7 @@ test.describe('Add Word Flow', () => {
   test('Add to Vocabulary button becomes enabled after translation', async ({ page }) => {
     await page.getByRole('button', { name: 'Add new word' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByPlaceholder('Type word or phrase in English...').fill('apple');
+    await dialog.getByRole('textbox', { name: 'Word or phrase to translate' }).fill('apple');
     await dialog.getByRole('button', { name: 'Translate' }).click();
 
     await expect(dialog.getByText('яблоко')).toBeVisible({ timeout: 8000 });
@@ -77,7 +76,7 @@ test.describe('Add Word Flow', () => {
   test('clicking Add to Vocabulary saves entry and shows success', async ({ page }) => {
     await page.getByRole('button', { name: 'Add new word' }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByPlaceholder('Type word or phrase in English...').fill('apple');
+    await dialog.getByRole('textbox', { name: 'Word or phrase to translate' }).fill('apple');
     await dialog.getByRole('button', { name: 'Translate' }).click();
 
     await expect(dialog.getByText('яблоко')).toBeVisible({ timeout: 8000 });

@@ -84,7 +84,7 @@ impl DialogueRepo {
         conn: &Connection,
         language: Option<&str>,
     ) -> Result<Vec<DialogueScenarioDto>, AppError> {
-        let mut rows = if let Some(lang) = language.filter(|s| !s.is_empty()) {
+        let rows = if let Some(lang) = language.filter(|s| !s.is_empty()) {
             let mut stmt = conn.prepare(
                 "SELECT id, slug, title, level, language, description, tutor_role,
                         opening_line, suggested_vocab_json, sort_order
@@ -110,7 +110,7 @@ impl DialogueRepo {
                 .map_err(|e| AppError::Database(e.to_string()))?;
             mapped
         };
-        Ok(rows.drain(..).collect())
+        Ok(rows)
     }
 
     pub fn get_scenario_by_id(conn: &Connection, id: i64) -> Result<DialogueScenarioDto, AppError> {

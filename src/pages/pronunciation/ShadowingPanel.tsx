@@ -68,10 +68,11 @@ export function ShadowingPanel({ language }: ShadowingPanelProps) {
   });
 
   useEffect(() => {
-    if (!drill.latest || drill.phase !== 'feedback') return;
-    if (lastRecordedId.current === drill.latest.id) return;
-    lastRecordedId.current = drill.latest.id;
-    setSessionScores((prev) => [...prev, drill.latest!.overallScore]);
+    const latest = drill.latest;
+    if (!latest || drill.phase !== 'feedback') return;
+    if (lastRecordedId.current === latest.id) return;
+    lastRecordedId.current = latest.id;
+    setSessionScores((prev) => [...prev, latest.overallScore]);
   }, [drill.latest, drill.phase]);
 
   const session = computeSessionStats(sessionScores);

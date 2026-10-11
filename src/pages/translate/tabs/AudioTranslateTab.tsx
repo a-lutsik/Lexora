@@ -133,6 +133,7 @@ export function AudioTranslateTab({
       setIsRecording(true);
     } catch (err) {
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.error('Microphone access error', err);
       }
       setMicError(microphoneErrorMessage(err));
@@ -158,6 +159,7 @@ export function AudioTranslateTab({
     } catch (err) {
       releaseMic();
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.error('Stop recording error', err);
       }
       setMicError('Could not finish the recording. Try again or upload a file.');
@@ -207,6 +209,7 @@ export function AudioTranslateTab({
       );
     } catch (err) {
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.error('Failed to encode audio', err);
       }
       setMicError('Could not read the audio. Try another file or record again.');
@@ -283,6 +286,7 @@ export function AudioTranslateTab({
       await ipc.media.playTts(text, lang);
     } catch (err) {
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.warn('TTS error', err);
       }
     } finally {
@@ -328,6 +332,7 @@ export function AudioTranslateTab({
       window.setTimeout(() => setCopiedSide(null), 2000);
     } catch (err) {
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.warn('Clipboard copy failed', err);
       }
     }

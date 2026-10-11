@@ -110,6 +110,7 @@ export function TextTranslateTab({
       copyTimerRef.current = window.setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.warn('Clipboard copy failed', err);
       }
     }
@@ -143,6 +144,7 @@ export function TextTranslateTab({
       await ipc.media.playTts(text, lang);
     } catch (err) {
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.warn('TTS playback error', err);
       }
     } finally {

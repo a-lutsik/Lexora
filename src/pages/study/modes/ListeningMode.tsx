@@ -76,11 +76,12 @@ export function ListeningMode({ entry, onComplete }: ListeningModeProps) {
         <div className="typing-prompt-label">
           Listen and type what you hear:
         </div>
-        <div
-          className="study-audio-replay"
-          onClick={() => inputRef.current?.focus()}
-        >
-          <AudioButton text={lexeme.text} ariaLabel="Replay pronunciation" />
+        <div className="study-audio-replay">
+          <AudioButton
+            text={lexeme.text}
+            ariaLabel="Replay pronunciation"
+            onPlayed={() => inputRef.current?.focus()}
+          />
           <div className="study-audio-hint">Click to replay</div>
         </div>
       </div>

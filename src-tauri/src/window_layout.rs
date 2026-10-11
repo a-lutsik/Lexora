@@ -11,6 +11,7 @@
 use tauri::{Window, WindowEvent};
 
 const MAIN_WINDOW: &str = "main";
+#[cfg(target_os = "macos")]
 const RESYNC_DELAY_MS: u64 = 400;
 
 /// Первый проход после создания окна — до того, как пользователь

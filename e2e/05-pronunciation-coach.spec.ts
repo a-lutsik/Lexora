@@ -89,7 +89,7 @@ test.describe('Pronunciation Coach Flow', () => {
     await expect(page.getByRole('tab', { name: 'Shadowing' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByText(/Round \d of 3/)).toHaveCount(0);
 
-    await expect(page.getByLabelText('Phrase to shadow')).toHaveText('apple');
+    await expect(page.getByLabel('Phrase to shadow')).toHaveText('apple');
     await expect(page.getByRole('textbox', { name: 'Phrase to shadow' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Say phrase' }).click();
     await expect(page.getByText('Speak now')).toBeVisible({ timeout: 8000 });
@@ -100,8 +100,8 @@ test.describe('Pronunciation Coach Flow', () => {
     await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toBeVisible({
       timeout: 8000,
     });
-    await expect(page.getByText('92%')).toBeVisible();
-    await expect(page.getByText('Passed')).toBeVisible();
+    await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toContainText('92%');
+    await expect(page.getByText('Passed', { exact: true })).toBeVisible();
     await expect(page.getByText(/Round \d of 3/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Postpone phrase' })).toHaveCount(0);
   });
@@ -216,19 +216,19 @@ test.describe('Shadowing below pass threshold', () => {
     await page.waitForSelector('.pronunciation-page', { timeout: 10_000 });
 
     await page.getByRole('tab', { name: 'Shadowing' }).click();
-    await expect(page.getByLabelText('Phrase to shadow')).toHaveText('apple');
+    await expect(page.getByLabel('Phrase to shadow')).toHaveText('apple');
     await page.getByRole('button', { name: 'Say phrase' }).click();
     await expect(page.getByText('Speak now')).toBeVisible({ timeout: 8000 });
     await page.waitForTimeout(250);
     await page.getByRole('button', { name: 'Stop recording' }).click();
 
-    await expect(page.getByText('84%')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toContainText('84%', { timeout: 8000 });
     await expect(page.getByText('Need 90% to pass')).toBeVisible();
-    await expect(page.getByLabelText('Phrase to shadow')).toHaveText('apple');
+    await expect(page.getByLabel('Phrase to shadow')).toHaveText('apple');
     await expect(page.getByText(/Close both lips/)).toBeVisible({ timeout: 5000 });
 
     await page.getByRole('button', { name: 'Postpone phrase' }).click();
-    await expect(page.getByLabelText('Phrase to shadow')).toHaveText('banana');
+    await expect(page.getByLabel('Phrase to shadow')).toHaveText('banana');
     await expect(page.getByText('Need 90% to pass')).toHaveCount(0);
     await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toHaveAttribute(
       'aria-valuenow',

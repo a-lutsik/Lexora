@@ -343,6 +343,8 @@ impl LexemeRepo {
     }
 
     /// Add a translation for a lexeme (no dedup — callers use upsert helpers).
+    // One parameter per column of the `translation` row.
+    #[allow(clippy::too_many_arguments)]
     pub fn add_translation(
         conn: &Connection,
         lexeme_id: i64,
@@ -373,6 +375,8 @@ impl LexemeRepo {
     }
 
     /// Insert translation if the same (lexeme, target, domain, normalized text) is absent.
+    // One parameter per column of the `translation` row.
+    #[allow(clippy::too_many_arguments)]
     pub fn upsert_translation(
         conn: &Connection,
         lexeme_id: i64,

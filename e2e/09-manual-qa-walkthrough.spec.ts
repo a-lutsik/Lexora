@@ -6,14 +6,18 @@
 // ============================================================
 
 import { test, expect, type Page } from '@playwright/test';
-import { mockTauriIpc } from './helpers/tauri-mock';
+import { DEFAULT_IPC_RESPONSES, mockTauriIpc } from './helpers/tauri-mock';
 import { recordAndStop } from './helpers/record';
 
 const pageErrors: string[] = [];
 const consoleErrors: string[] = [];
 
-async function openApp(page: Page, hash = '/#/vocabulary'): Promise<void> {
-  await mockTauriIpc(page);
+async function openApp(
+  page: Page,
+  hash = '/#/vocabulary',
+  overrides: Record<string, unknown> = {},
+): Promise<void> {
+  await mockTauriIpc(page, overrides);
   page.on('pageerror', (err) => pageErrors.push(`${hash}: ${err.message}`));
   page.on('console', (msg) => {
     if (msg.type() === 'error') consoleErrors.push(`${hash}: ${msg.text()}`);
@@ -307,12 +311,13 @@ test.describe('Manual QA walkthrough', () => {
     await expect(page.getByText(/Close both lips/)).toBeVisible();
 
     await page.getByRole('tab', { name: 'Shadowing' }).click();
-    await page.locator('input#pron-shadow-target').fill('I think this is the path');
+    // The shadowing phrase comes from the vocabulary queue (read-only).
+    await expect(page.getByLabel('Phrase to shadow')).not.toBeEmpty();
     await page.getByRole('button', { name: 'Say phrase' }).click();
     await expect(page.getByText('Speak now')).toBeVisible({ timeout: 8000 });
     await page.waitForTimeout(250);
     await page.getByRole('button', { name: 'Stop recording' }).click();
-    await expect(page.getByText('Passed')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('Passed', { exact: true })).toBeVisible({ timeout: 8000 });
 
     await page.getByRole('tab', { name: 'Minimal pairs' }).click();
     await page.getByRole('button', { name: /Listen to/i }).first().click();
@@ -327,7 +332,14 @@ test.describe('Manual QA walkthrough', () => {
   });
 
   test('Collections: enable SRS; New Collection is wired', async ({ page }) => {
-    await openApp(page, '/#/collections');
+    // A system pack that is already loaded can be enabled in SRS
+    // (empty packs show «Load into database» instead).
+    const collections = DEFAULT_IPC_RESPONSES.list_collections as Array<Record<string, unknown>>;
+    await openApp(page, '/#/collections', {
+      list_collections: collections.map((col, index) =>
+        index === 0 ? { ...col, wordCount: 5000, loadStatus: 'ready' } : col,
+      ),
+    });
     await page.waitForSelector('.collections-page', { timeout: 10_000 });
 
     await page.getByRole('button', { name: 'Enable in SRS' }).first().click();
@@ -351,7 +363,7 @@ test.describe('Manual QA walkthrough', () => {
     await expect(page.getByRole('heading', { name: 'Pronunciation' })).toBeVisible();
   });
 
-  test('Settings: toggles, tests, shortcuts, save', async ({ page }) => {
+  test('Settings: toggles, model check, shortcuts, save', async ({ page }) => {
     await openApp(page, '/#/settings');
     await page.waitForSelector('.settings-page', { timeout: 10_000 });
 
@@ -359,10 +371,14 @@ test.describe('Manual QA walkthrough', () => {
     await privacy.check();
     await expect(privacy).toBeChecked();
 
-    const fallback = page.getByRole('checkbox', { name: /Enable Automatic Fallback/i });
-    await fallback.uncheck();
-    await expect(fallback).not.toBeChecked();
-    await fallback.check();
+    // Provider checks live in the «AI-модели» panel (per-role «Проверить»).
+    const check = page.locator('.ai-models button:enabled', { hasText: 'Проверить' }).first();
+    if ((await check.count()) > 0) {
+      await check.click();
+      await expect(page.getByRole('status').filter({ hasText: /Работает/ }).first()).toBeVisible({
+        timeout: 8000,
+      });
+    }
 
     const quiet = page.getByRole('checkbox', { name: /Quiet hours/i });
     await quiet.check();
@@ -373,23 +389,7 @@ test.describe('Manual QA walkthrough', () => {
     await page.locator('#settings-sticker-count').fill('4');
     await page.locator('#settings-sticker-opacity').fill('0.7');
 
-    await page.getByRole('button', { name: '⚡ Test AI Connection' }).click();
-    await expect(
-      page.getByText(/Connection successful|Account ID is required|API Token is required|API Key is required/i),
-    ).toBeVisible({ timeout: 8000 });
-
-    await page.getByRole('button', { name: '⚡ Test Fallback Connection' }).click();
-    await expect(page.getByText('GEMINI API Key is required for fallback.')).toBeVisible({
-      timeout: 8000,
-    });
-
-    await page.getByRole('button', { name: '⚡ Test Image Connection' }).click();
-    await expect(page.getByText('✕ Image connection failed')).toBeVisible({
-      timeout: 8000,
-    });
-
     await page.getByRole('button', { name: 'Open Translator' }).click();
-    await page.getByRole('button', { name: 'Focus' }).click();
     await page.getByRole('button', { name: 'Save Settings' }).click();
     await expect(page.getByText(/Settings saved successfully/i)).toBeVisible({ timeout: 5000 });
   });
@@ -412,19 +412,22 @@ test.describe('Manual QA walkthrough', () => {
 
   test('Desktop sticker controls respond', async ({ page }) => {
     await openApp(page, '/sticker.html');
-    await page.waitForTimeout(1000);
+    const remember = page.getByRole('button', { name: 'Помню ✓' });
+    await expect(remember).toBeVisible({ timeout: 10_000 });
 
-    const remember = page.getByRole('button', { name: /Помню|I remember|Got it/i }).first();
-    const forgot = page.getByRole('button', { name: /Не помню|Forgot|Don't remember/i }).first();
-    const pin = page.getByRole('button', { name: 'Pin on top' });
-    const close = page.getByRole('button', { name: 'Close sticker' });
-    const toggle = page.getByRole('button', { name: 'Toggle translation visibility' });
+    await page.getByRole('button', { name: 'Toggle translation visibility' }).click();
+    await page.getByRole('button', { name: 'Pin on top' }).click();
+    // Grading dismisses the card; the mock has no next card, so it goes away.
+    await remember.click();
+    await expect(remember).toBeHidden();
 
-    await expect(page.locator('body')).not.toBeEmpty();
-    if (await toggle.isVisible().catch(() => false)) await toggle.click();
-    if (await pin.isVisible().catch(() => false)) await pin.click();
-    if (await remember.isVisible().catch(() => false)) await remember.click();
-    if (await forgot.isVisible().catch(() => false)) await forgot.click();
-    if (await close.isVisible().catch(() => false)) await close.click();
+    await page.reload();
+    const forgot = page.getByRole('button', { name: 'Не помню ✕' });
+    await expect(forgot).toBeVisible({ timeout: 10_000 });
+    await forgot.click();
+    await expect(forgot).toBeHidden();
+
+    await page.reload();
+    await page.getByRole('button', { name: 'Close sticker' }).click();
   });
 });

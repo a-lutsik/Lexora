@@ -88,9 +88,9 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
   }, [entry, targetLangId]);
 
   const needsFetch =
-    Boolean(entry) &&
+    entry != null &&
     targetLangId != null &&
-    !entry!.translations.some((t) => t.targetLanguageId === targetLangId);
+    !entry.translations.some((t) => t.targetLanguageId === targetLangId);
 
   useEffect(() => {
     if (!needsFetch || !entry) return;

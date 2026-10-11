@@ -103,6 +103,7 @@ pub fn say_playback_args(text: &str, voice: Option<&str>) -> Vec<String> {
     args
 }
 
+#[cfg(target_os = "macos")]
 fn apply_say_voice(cmd: &mut Command, voice: Option<&str>) {
     if let Some(name) = voice {
         cmd.arg("-v").arg(name);

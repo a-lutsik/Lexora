@@ -430,6 +430,8 @@
 .word-detail-target-select {
   max-width: 200px;
 }
+
+.word-detail-translation {
   font-size: var(--text-xl);
   font-weight: var(--font-weight-semibold);
   color: var(--color-accent-hover);

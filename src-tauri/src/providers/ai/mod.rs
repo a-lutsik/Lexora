@@ -2781,8 +2781,10 @@ mod tests {
 
     #[test]
     fn fallback_slot_skips_when_disabled() {
-        let mut settings = crate::commands::settings::AppSettings::default();
-        settings.fallback_enabled = false;
+        let settings = crate::commands::settings::AppSettings {
+            fallback_enabled: false,
+            ..Default::default()
+        };
         assert_eq!(fallback_slot(&settings), None);
     }
 

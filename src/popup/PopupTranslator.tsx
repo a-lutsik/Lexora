@@ -418,7 +418,9 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
       </div>
 
       <div className="popup-toolbar">
-        <div className="popup-lang-pair" onMouseDown={(e) => e.stopPropagation()}>
+        {/* Layout-only wrapper: keeps the press inside the dropdown from
+            reaching window-level handlers; the selects themselves are focusable. */}
+        <div className="popup-lang-pair" role="presentation" onMouseDown={(e) => e.stopPropagation()}>
           <LanguageSelect
             className="popup-lang-select"
             compact
@@ -446,7 +448,9 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             ariaLabel="Target language"
           />
         </div>
-        <div className="popup-domain-wrap" onMouseDown={(e) => e.stopPropagation()}>
+        {/* Layout-only wrapper: keeps the press inside the dropdown from
+            reaching window-level handlers; the selects themselves are focusable. */}
+        <div className="popup-domain-wrap" role="presentation" onMouseDown={(e) => e.stopPropagation()}>
           <TranslationDomainSelect
             compact
             value={lexicalDomain}

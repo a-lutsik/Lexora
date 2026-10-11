@@ -40,6 +40,7 @@ export function TranslationHistoryTab() {
       window.setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
       if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
         console.warn('Clipboard copy failed', err);
       }
     }

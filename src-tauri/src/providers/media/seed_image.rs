@@ -235,10 +235,11 @@ fn ensure_seed_images_inner(
     Ok(written)
 }
 
+/// (lexeme id, text, photo query, first translation).
+pub type PendingPhotoUpgrade = (i64, String, String, Option<String>);
+
 /// System lexemes still showing a seed SVG (eligible for stock/photo upgrade).
-pub fn lexemes_pending_photo_upgrade(
-    pool: &DbPool,
-) -> Result<Vec<(i64, String, String, Option<String>)>, AppError> {
+pub fn lexemes_pending_photo_upgrade(pool: &DbPool) -> Result<Vec<PendingPhotoUpgrade>, AppError> {
     let conn = pool.get()?;
     let mut stmt = conn.prepare(
         "SELECT l.id, l.text, IFNULL(l.visual_photo_query, l.text),
