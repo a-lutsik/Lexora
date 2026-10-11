@@ -1,6 +1,7 @@
 pub mod ai_usage;
 pub mod collection;
 pub mod dialogue;
+pub mod grammar_watch;
 pub mod lexeme;
 pub mod model_route;
 pub mod pronunciation;

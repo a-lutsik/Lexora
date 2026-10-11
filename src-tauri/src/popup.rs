@@ -85,6 +85,12 @@ fn return_focus_to_source_app(app: &AppHandle) {
     let _ = (app, pid);
 }
 
+/// Hand focus back to `pid` if Lexora took it (writing-check panel).
+#[cfg(target_os = "macos")]
+pub(crate) fn activate_app_pid(app: &AppHandle, pid: i32) {
+    macos::activate_app_dispatch(app, pid);
+}
+
 fn remember_cursor_anchor(cursor: Option<CursorAnchor>) {
     if let Ok(mut lock) = LAST_CURSOR_ANCHOR.lock() {
         *lock = cursor;

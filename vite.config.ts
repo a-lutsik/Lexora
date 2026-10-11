@@ -39,6 +39,7 @@ export default defineConfig(() => ({
         main: resolve(__dirname, 'index.html'),
         popup: resolve(__dirname, 'popup.html'),
         sticker: resolve(__dirname, 'sticker.html'),
+        grammar: resolve(__dirname, 'grammar.html'),
       },
     },
   },

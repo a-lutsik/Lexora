@@ -417,3 +417,11 @@ CREATE INDEX IF NOT EXISTS idx_minimal_pair_language_type
 CREATE INDEX IF NOT EXISTS idx_minimal_pair_contrast
     ON minimal_pair(language, contrast_phoneme_a, contrast_phoneme_b);
 
+
+-- ── V025__grammar_watch.sql: system-wide writing check (opt-in) ──
+CREATE TABLE IF NOT EXISTS grammar_watch_settings (
+    id             INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled        INTEGER NOT NULL DEFAULT 0,
+    excluded_apps  TEXT    NOT NULL DEFAULT '[]',   -- JSON: bundle ids, «prefix*»
+    updated_at     DATETIME DEFAULT (unixepoch())
+);

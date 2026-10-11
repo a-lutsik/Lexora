@@ -58,12 +58,19 @@ export const QUERY_KEYS = {
   MODEL_ROUTES: 'model-routes',
   MODEL_CATALOG: 'model-catalog',
   AI_USAGE: 'ai-usage',
+  GRAMMAR_WATCH_SETTINGS: 'grammar-watch-settings',
+  GRAMMAR_WATCH_STATUS: 'grammar-watch-status',
+  GRAMMAR_CHECK: 'grammar-check',
 } as const;
 
 /** Backend events emitted with `app.emit`. */
 export const APP_EVENTS = {
   CARD_ENRICH: 'lexora:card-enrich',
   TRANSLATION_BACKFILLED: 'lexora:translation-backfilled',
+  /** Focused-field state for the writing-check badge (`GrammarFieldPayload`). */
+  GRAMMAR_FIELD: 'lexora:grammar-field',
+  /** The backend collapsed the writing-check panel (payload: `false`). */
+  GRAMMAR_PANEL: 'lexora:grammar-panel',
 } as const;
 
 export const STALE_TIME = {

@@ -1,6 +1,7 @@
 pub mod collections;
 pub mod dialogue;
 pub mod export_import;
+pub mod grammar_watch;
 pub mod media;
 pub mod models;
 pub mod pronunciation;

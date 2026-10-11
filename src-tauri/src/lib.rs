@@ -9,6 +9,7 @@ pub mod commands;
 pub mod db;
 pub mod display;
 pub mod error;
+pub mod grammar_watch;
 pub mod hotkeys;
 pub mod popup;
 pub mod pronunciation;
@@ -204,6 +205,9 @@ pub fn run() {
             // Хранилище отложенного текста для popup окна
             app.manage(popup::PendingPopupText::default());
 
+            // Проверка текста в других приложениях (opt-in, macOS)
+            grammar_watch::start(app.handle());
+
             if let Some(main) = app.get_webview_window("main") {
                 window_layout::prepare_main_window(&main);
             }
@@ -238,6 +242,16 @@ pub fn run() {
             commands::writing::accept_all_issues,
             commands::writing::get_writing_error_patterns,
             commands::writing_exercises::generate_writing_exercises,
+            // System-wide writing check («Grammarly mode»)
+            commands::grammar_watch::get_grammar_watch_settings,
+            commands::grammar_watch::update_grammar_watch_settings,
+            commands::grammar_watch::get_grammar_watch_status,
+            commands::grammar_watch::request_grammar_watch_access,
+            commands::grammar_watch::get_grammar_field,
+            commands::grammar_watch::apply_grammar_fix,
+            commands::grammar_watch::set_grammar_panel_open,
+            commands::grammar_watch::snooze_grammar_field,
+            commands::grammar_watch::exclude_grammar_app,
             // Pronunciation coach
             commands::pronunciation::save_audio_recording,
             commands::pronunciation::evaluate_pronunciation,

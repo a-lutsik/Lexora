@@ -35,6 +35,9 @@ pub(crate) const ISSUE_STATUSES: &[&str] = &["pending", "accepted", "rejected"];
 pub struct CheckWritingInput {
     pub text: String,
     pub language: Option<String>,
+    /// Never store this check (system-wide check of text typed in other apps).
+    #[serde(default)]
+    pub ephemeral: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -277,7 +280,7 @@ pub async fn check_writing(
 
     // Privacy mode: чувствительный текст не попадает в БД вообще —
     // ни writing_check, ни writing_issue, ни writing_error_pattern.
-    if settings.writing_privacy_mode {
+    if settings.writing_privacy_mode || input.ephemeral {
         return Ok(ephemeral_check_dto(
             text,
             language,

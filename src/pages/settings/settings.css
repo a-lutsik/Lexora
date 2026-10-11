@@ -541,3 +541,64 @@
 .settings-advanced {
   display: contents;
 }
+/* ── Writing check in other apps (GrammarWatchSection) ───── */
+
+.grammar-settings-access {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warn-dim);
+  color: var(--color-text-primary);
+}
+
+.grammar-settings-apps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grammar-settings-app {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-left: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-elevated);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.grammar-settings-app-remove {
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+
+.grammar-settings-app-remove:hover,
+.grammar-settings-app-remove:focus-visible {
+  color: var(--color-danger-text);
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.grammar-settings-add {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.grammar-settings-add .settings-input {
+  flex: 1;
+}

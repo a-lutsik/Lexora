@@ -23,6 +23,7 @@ import type { AppSettings } from '../../lib/types';
 import { SetupWizard } from '../../components/setup/SetupWizard';
 import { AiModelsPanel } from './AiModelsPanel';
 import { AiUsagePanel } from './AiUsagePanel';
+import { GrammarWatchSection } from './GrammarWatchSection';
 import './settings.css';
 
 type BackupStatus = {
@@ -363,6 +364,8 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
+
+          <GrammarWatchSection />
 
           {/* Desktop Stickers Section */}
           <div className="settings-section">

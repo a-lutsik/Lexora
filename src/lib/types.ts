@@ -568,6 +568,41 @@ export type WritingCheckDto = {
 export type CheckWritingInput = {
   text: string;
   language?: string | null;
+  /** Never store the check (text typed in other apps). */
+  ephemeral?: boolean;
+};
+
+// ── System-wide writing check («Grammarly mode», V025) ──────────
+
+export type GrammarWatchSettings = {
+  enabled: boolean;
+  /** macOS bundle ids; an entry ending in «*» matches a prefix. */
+  excludedApps: string[];
+};
+
+export type GrammarWatchStatus = {
+  /** The platform can watch other apps' text fields (macOS only). */
+  supported: boolean;
+  accessibilityTrusted: boolean;
+};
+
+/** Focused-field state pushed to the badge window. */
+export type GrammarFieldPayload =
+  | { kind: 'hidden' }
+  | { kind: 'pending'; fieldId: number }
+  | {
+      kind: 'check';
+      fieldId: number;
+      text: string;
+      appName: string | null;
+      bundleId: string | null;
+    };
+
+export type ApplyGrammarFixInput = {
+  fieldId: number;
+  /** Text the check ran on — must still be in the field. */
+  checkedText: string;
+  correctedText: string;
 };
 
 export type RewriteTextInput = {

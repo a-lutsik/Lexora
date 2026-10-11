@@ -5,6 +5,10 @@
 
 import { invoke, type Channel } from '@tauri-apps/api/core';
 import type {
+  ApplyGrammarFixInput,
+  GrammarFieldPayload,
+  GrammarWatchSettings,
+  GrammarWatchStatus,
   AddVocabularyInput,
   AddVocabularyBatchInput,
   AddVocabularyBatchResult,
@@ -383,6 +387,37 @@ export const ipc = {
 
     setStickerPinned: (pinned: boolean) =>
       invoke<void>('set_sticker_pinned', { pinned }),
+  },
+
+  // ── System-wide writing check («Grammarly mode») ──────
+
+  grammar: {
+    getSettings: () =>
+      invoke<GrammarWatchSettings>('get_grammar_watch_settings'),
+
+    updateSettings: (settings: GrammarWatchSettings) =>
+      invoke<GrammarWatchSettings>('update_grammar_watch_settings', { settings }),
+
+    getStatus: () =>
+      invoke<GrammarWatchStatus>('get_grammar_watch_status'),
+
+    requestAccess: () =>
+      invoke<void>('request_grammar_watch_access'),
+
+    getField: () =>
+      invoke<GrammarFieldPayload>('get_grammar_field'),
+
+    applyFix: (input: ApplyGrammarFixInput) =>
+      invoke<void>('apply_grammar_fix', { input }),
+
+    setPanelOpen: (open: boolean) =>
+      invoke<void>('set_grammar_panel_open', { open }),
+
+    snooze: (fieldId: number) =>
+      invoke<void>('snooze_grammar_field', { fieldId }),
+
+    excludeApp: (bundleId: string) =>
+      invoke<GrammarWatchSettings>('exclude_grammar_app', { bundleId }),
   },
 
   // ── Popup (inline assistant + dictionary card) ────────
