@@ -60,11 +60,58 @@ pub struct WatchConfig {
     pub language: String,
 }
 
+/// What the watcher saw last — shown in Settings so the user can tell why
+/// no badge appears (no access, excluded app, text too short, …).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub enum ActivityCode {
+    #[default]
+    Starting,
+    Disabled,
+    NoAccess,
+    NoField,
+    ExcludedApp,
+    UnsupportedField,
+    FieldTooLong,
+    Waiting,
+    TooShort,
+    OtherLanguage,
+    Shown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchActivity {
+    pub code: ActivityCode,
+    pub app_name: Option<String>,
+    /// Field role for `UnsupportedField`, language for `OtherLanguage`.
+    pub detail: Option<String>,
+    /// Unix seconds when this was observed.
+    pub at: i64,
+}
+
+impl WatchActivity {
+    pub fn new(code: ActivityCode, app_name: Option<String>, detail: Option<String>) -> Self {
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+            .unwrap_or(0);
+        Self {
+            code,
+            app_name,
+            detail,
+            at,
+        }
+    }
+}
+
 /// Managed state shared by the watcher thread and the IPC commands.
 pub struct GrammarWatchState {
     pub config: RwLock<WatchConfig>,
     /// Last payload sent to the badge window — read on window mount.
     pub last_payload: Mutex<FieldPayload>,
+    pub activity: Mutex<WatchActivity>,
 }
 
 impl Default for GrammarWatchState {
@@ -72,8 +119,37 @@ impl Default for GrammarWatchState {
         Self {
             config: RwLock::new(WatchConfig::default()),
             last_payload: Mutex::new(FieldPayload::Hidden),
+            activity: Mutex::new(WatchActivity::default()),
         }
     }
+}
+
+/// Record what the watcher sees (cheap; called on every poll).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn report(
+    app: &AppHandle,
+    code: ActivityCode,
+    app_name: Option<&str>,
+    detail: Option<&str>,
+) {
+    let Some(state) = app.try_state::<GrammarWatchState>() else {
+        return;
+    };
+    let Ok(mut activity) = state.activity.lock() else {
+        return;
+    };
+    // Same observation: keep its first timestamp ("since …").
+    if activity.code == code
+        && activity.app_name.as_deref() == app_name
+        && activity.detail.as_deref() == detail
+    {
+        return;
+    }
+    *activity = WatchActivity::new(
+        code,
+        app_name.map(str::to_string),
+        detail.map(str::to_string),
+    );
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -82,16 +158,22 @@ pub struct GrammarWatchStatus {
     /// The platform can watch other apps' text fields (macOS only for now).
     pub supported: bool,
     pub accessibility_trusted: bool,
+    pub activity: WatchActivity,
 }
 
 pub fn is_supported() -> bool {
     cfg!(target_os = "macos")
 }
 
-pub fn status() -> GrammarWatchStatus {
+pub fn status(app: &AppHandle) -> GrammarWatchStatus {
+    let activity = app
+        .try_state::<GrammarWatchState>()
+        .and_then(|state| state.activity.lock().ok().map(|a| a.clone()))
+        .unwrap_or_default();
     GrammarWatchStatus {
         supported: is_supported(),
         accessibility_trusted: crate::hotkeys::accessibility_trusted(),
+        activity,
     }
 }
 
@@ -265,7 +347,22 @@ mod tests {
     }
 
     #[test]
-    fn status_reports_platform_support() {
-        assert_eq!(status().supported, cfg!(target_os = "macos"));
+    fn activity_serializes_for_the_settings_status_line() -> Result<(), serde_json::Error> {
+        let activity = WatchActivity {
+            code: ActivityCode::OtherLanguage,
+            app_name: Some("Telegram".to_string()),
+            detail: Some("en".to_string()),
+            at: 5,
+        };
+        assert_eq!(
+            serde_json::to_value(activity)?,
+            serde_json::json!({
+                "code": "other_language",
+                "appName": "Telegram",
+                "detail": "en",
+                "at": 5
+            })
+        );
+        Ok(())
     }
 }

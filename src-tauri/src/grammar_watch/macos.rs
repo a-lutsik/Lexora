@@ -7,8 +7,8 @@
 
 use super::logic::{self, Decision, Observation, Rect, TextEdit, WatchState};
 use super::{
-    config_snapshot, publish, refresh_language, FieldPayload, WatchConfig, BADGE_SIZE,
-    GRAMMAR_LABEL, PANEL_EVENT, PANEL_HEIGHT, PANEL_WIDTH,
+    config_snapshot, publish, refresh_language, report, ActivityCode, FieldPayload, WatchConfig,
+    BADGE_SIZE, GRAMMAR_LABEL, PANEL_EVENT, PANEL_HEIGHT, PANEL_WIDTH,
 };
 use crate::display::{pick_bounds_for_point, LogicalBounds};
 use crate::error::AppError;
@@ -327,47 +327,73 @@ struct FieldSnapshot {
     text: String,
 }
 
+/// Why there is no eligible field — reported to the Settings status line.
+struct Skipped {
+    code: ActivityCode,
+    app: Option<AppInfo>,
+    detail: Option<String>,
+}
+
+impl Skipped {
+    fn new(code: ActivityCode, app: Option<&AppInfo>, detail: Option<String>) -> Probe {
+        Probe::Nothing(Skipped {
+            code,
+            app: app.cloned(),
+            detail,
+        })
+    }
+}
+
 enum Probe {
     /// Lexora itself is focused (the badge/panel was clicked) — keep state.
     OwnApp,
     /// No eligible field.
-    Nothing,
+    Nothing(Skipped),
     Field(FieldSnapshot),
 }
 
 fn probe(system: &AxElement, own_pid: i32, config: &WatchConfig, cache: &mut AppCache) -> Probe {
     let Some(app_element) = system.copy_element(ATTR_FOCUSED_APP) else {
-        return Probe::Nothing;
+        return Skipped::new(ActivityCode::NoField, None, None);
     };
     let Some(pid) = app_element.pid() else {
-        return Probe::Nothing;
+        return Skipped::new(ActivityCode::NoField, None, None);
     };
     if pid == own_pid {
         return Probe::OwnApp;
     }
     let app = cache.info(pid);
     if logic::is_app_excluded(app.bundle_id.as_deref(), &config.excluded_apps) {
-        return Probe::Nothing;
+        return Skipped::new(ActivityCode::ExcludedApp, Some(&app), app.bundle_id.clone());
     }
     cache.enable_accessibility(&app_element, pid);
     let Some(element) = app_element.copy_element(ATTR_FOCUSED_UI) else {
-        return Probe::Nothing;
+        return Skipped::new(ActivityCode::NoField, Some(&app), None);
     };
     let role = element.copy_string(ATTR_ROLE);
     let subrole = element.copy_string(ATTR_SUBROLE);
     // Role first: the value of a password field is never read.
     if !logic::is_checkable_role(role.as_deref(), subrole.as_deref()) {
-        return Probe::Nothing;
+        let detail = match (role, subrole) {
+            (Some(role), Some(subrole)) => Some(format!("{role} / {subrole}")),
+            (role, None) => role,
+            (None, subrole) => subrole,
+        };
+        return Skipped::new(ActivityCode::UnsupportedField, Some(&app), detail);
     }
     let max_chars = i64::try_from(logic::MAX_CHECK_CHARS).unwrap_or(i64::MAX);
     if element
         .copy_i64(ATTR_CHAR_COUNT)
         .is_some_and(|count| count > max_chars)
     {
-        return Probe::Nothing;
+        return Skipped::new(ActivityCode::FieldTooLong, Some(&app), None);
     }
     let Some(text) = element.copy_string(ATTR_VALUE) else {
-        return Probe::Nothing;
+        return Skipped::new(
+            ActivityCode::UnsupportedField,
+            Some(&app),
+            Some("no text value".to_string()),
+        );
     };
     Probe::Field(FieldSnapshot {
         element,
@@ -448,7 +474,13 @@ fn run(app: AppHandle) {
     let mut language_checked = Instant::now();
     loop {
         let config = config_snapshot(&app);
-        if !config.enabled || !crate::hotkeys::accessibility_trusted() {
+        if !config.enabled {
+            report(&app, ActivityCode::Disabled, None, None);
+            thread::sleep(IDLE_INTERVAL);
+            continue;
+        }
+        if !crate::hotkeys::accessibility_trusted() {
+            report(&app, ActivityCode::NoAccess, None, None);
             thread::sleep(IDLE_INTERVAL);
             continue;
         }
@@ -480,8 +512,15 @@ fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
         let checkable = |text: &str| logic::text_is_checkable(text, &config.language);
         let mut field_changed = false;
         let decision = match observed {
+            // Keep the last report: the user may be reading it in Settings.
             Probe::OwnApp => return,
-            Probe::Nothing => {
+            Probe::Nothing(skipped) => {
+                report(
+                    app,
+                    skipped.code,
+                    skipped.app.as_ref().and_then(|info| info.name.as_deref()),
+                    skipped.detail.as_deref(),
+                );
                 field_changed = watcher.field.is_some();
                 watcher.field = None;
                 watcher.state.observe(None, checkable, now)
@@ -499,6 +538,7 @@ fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
                     checkable,
                     now,
                 );
+                report_field(app, &watcher.state, &snapshot, config, now);
                 if !same {
                     field_changed = true;
                     watcher.field = Some(TrackedField {
@@ -567,6 +607,32 @@ fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
     }
     for action in actions {
         run_action(app, action);
+    }
+}
+
+/// Status line for a readable field: typing, why it is skipped, or checked.
+fn report_field(
+    app: &AppHandle,
+    state: &WatchState,
+    snapshot: &FieldSnapshot,
+    config: &WatchConfig,
+    now: Instant,
+) {
+    let app_name = snapshot.app.name.as_deref();
+    if state.is_settling(now) {
+        report(app, ActivityCode::Waiting, app_name, None);
+        return;
+    }
+    match logic::rejection(&snapshot.text, &config.language) {
+        Some(logic::Rejection::TooShort) => report(app, ActivityCode::TooShort, app_name, None),
+        Some(logic::Rejection::TooLong) => report(app, ActivityCode::FieldTooLong, app_name, None),
+        Some(logic::Rejection::OtherLanguage) => report(
+            app,
+            ActivityCode::OtherLanguage,
+            app_name,
+            Some(config.language.as_str()),
+        ),
+        None => report(app, ActivityCode::Shown, app_name, None),
     }
 }
 

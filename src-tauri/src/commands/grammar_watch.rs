@@ -41,8 +41,8 @@ pub async fn update_grammar_watch_settings(
 }
 
 #[tauri::command]
-pub fn get_grammar_watch_status() -> GrammarWatchStatus {
-    grammar_watch::status()
+pub fn get_grammar_watch_status(app: AppHandle) -> GrammarWatchStatus {
+    grammar_watch::status(&app)
 }
 
 /// Show the macOS Accessibility prompt (once per launch).

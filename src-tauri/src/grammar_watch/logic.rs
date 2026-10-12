@@ -103,13 +103,31 @@ pub fn script_matches_language(text: &str, language: &str) -> bool {
     letters > 0 && (matching as f64) / (letters as f64) >= SCRIPT_MATCH_RATIO
 }
 
-/// Worth an AI call: long enough, not too long, in the learning language.
-pub fn text_is_checkable(text: &str, language: &str) -> bool {
+/// Why a text is not sent for a check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rejection {
+    TooShort,
+    TooLong,
+    OtherLanguage,
+}
+
+pub fn rejection(text: &str, language: &str) -> Option<Rejection> {
     let trimmed = text.trim();
     let chars = trimmed.chars().count();
-    (MIN_CHECK_CHARS..=MAX_CHECK_CHARS).contains(&chars)
-        && trimmed.split_whitespace().count() >= MIN_CHECK_WORDS
-        && script_matches_language(trimmed, language)
+    if chars > MAX_CHECK_CHARS {
+        Some(Rejection::TooLong)
+    } else if chars < MIN_CHECK_CHARS || trimmed.split_whitespace().count() < MIN_CHECK_WORDS {
+        Some(Rejection::TooShort)
+    } else if !script_matches_language(trimmed, language) {
+        Some(Rejection::OtherLanguage)
+    } else {
+        None
+    }
+}
+
+/// Worth an AI call: long enough, not too long, in the learning language.
+pub fn text_is_checkable(text: &str, language: &str) -> bool {
+    rejection(text, language).is_none()
 }
 
 // ── Watch state machine ──────────────────────────────────
@@ -162,6 +180,11 @@ impl WatchState {
             badge_visible: false,
             pending: false,
         }
+    }
+
+    /// The user typed within the last `SETTLE_DELAY`.
+    pub fn is_settling(&self, now: Instant) -> bool {
+        self.active && now.duration_since(self.changed_at) < SETTLE_DELAY
     }
 
     pub fn field_id(&self) -> Option<u64> {
@@ -485,6 +508,30 @@ mod tests {
         assert!(script_matches_language("こんにちは", "ja"));
         // No letters at all.
         assert!(!script_matches_language("12345 !!!", "en"));
+    }
+
+    #[test]
+    fn rejection_reasons() {
+        assert_eq!(rejection("ok thanks", "en"), Some(Rejection::TooShort));
+        assert_eq!(
+            rejection("Я сегодня иду в магазин", "en"),
+            Some(Rejection::OtherLanguage)
+        );
+        assert_eq!(
+            rejection(&"word ".repeat(MAX_CHECK_CHARS), "en"),
+            Some(Rejection::TooLong)
+        );
+        assert_eq!(rejection("She dont like apples.", "en"), None);
+    }
+
+    #[test]
+    fn settling_tracks_typing_pause() {
+        let t0 = Instant::now();
+        let mut state = WatchState::new(t0);
+        assert!(!state.is_settling(t0));
+        state.observe(obs(false, "She dont"), always, t0);
+        assert!(state.is_settling(t0 + Duration::from_millis(100)));
+        assert!(!state.is_settling(t0 + SETTLE_DELAY));
     }
 
     #[test]
