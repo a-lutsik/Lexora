@@ -7,7 +7,7 @@
 import { useCallback, useState, useEffect, useRef, type FormEvent } from 'react';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { ipc } from '../../lib/ipc';
-import { formatIpcError } from '../../lib/utils';
+import { formatIpcError, pluralize } from '../../lib/utils';
 import { useSettings, useUpdateSettings, useApiKeysStatus } from '../../hooks/useSettings';
 import { useLanguageOptions, resolveLanguageId, useLanguages } from '../../hooks/useLanguages';
 import { Button } from '../../components/ui/Button';
@@ -209,7 +209,7 @@ export default function SettingsPage() {
         return;
       }
       const count = await ipc.vocabulary.exportData(path);
-      setBackupStatus({ state: 'success', message: `Exported ${count} words` });
+      setBackupStatus({ state: 'success', message: `Exported ${pluralize(count, 'word')}` });
     } catch (err: unknown) {
       setBackupStatus({
         state: 'error',

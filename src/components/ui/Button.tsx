@@ -15,6 +15,7 @@ type ButtonProps = {
   isLoading?: boolean;
   onClick?:  React.MouseEventHandler<HTMLButtonElement>;
   type?:     'button' | 'submit' | 'reset';
+  className?: string;
   'aria-label'?: string;
 };
 
@@ -26,12 +27,13 @@ export function Button({
   isLoading = false,
   onClick,
   type = 'button',
+  className,
   'aria-label': ariaLabel,
 }: ButtonProps) {
   return (
     <button
       type={type}
-      className={`btn btn--${variant} btn--${size}${isLoading ? ' btn--loading' : ''}`}
+      className={`btn btn--${variant} btn--${size}${isLoading ? ' btn--loading' : ''}${className ? ` ${className}` : ''}`}
       disabled={disabled || isLoading}
       onClick={onClick}
       aria-label={ariaLabel}

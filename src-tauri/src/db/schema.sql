@@ -208,6 +208,9 @@ CREATE TABLE IF NOT EXISTS review_event (
 CREATE INDEX IF NOT EXISTS idx_review_event_state
     ON review_event(review_state_id, timestamp DESC);
 
+CREATE INDEX IF NOT EXISTS idx_review_event_timestamp
+    ON review_event(timestamp, review_state_id);
+
 -- ── User Settings ─────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS user_settings (
@@ -424,4 +427,16 @@ CREATE TABLE IF NOT EXISTS grammar_watch_settings (
     enabled        INTEGER NOT NULL DEFAULT 0,
     excluded_apps  TEXT    NOT NULL DEFAULT '[]',   -- JSON: bundle ids, «prefix*»
     updated_at     DATETIME DEFAULT (unixepoch())
+);
+
+-- ── Sticker window positions (V026) ──────────────────────
+-- Внешний прямоугольник окна `sticker-N` в физических пикселях.
+
+CREATE TABLE IF NOT EXISTS sticker_window_position (
+    slot       INTEGER PRIMARY KEY,
+    x          INTEGER NOT NULL,
+    y          INTEGER NOT NULL,
+    width      INTEGER NOT NULL,
+    height     INTEGER NOT NULL,
+    updated_at DATETIME DEFAULT (unixepoch())
 );

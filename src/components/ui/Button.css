@@ -38,14 +38,14 @@
 /* ── Variants ───────────────────────────────────────────── */
 
 .btn--primary {
-  background: var(--color-accent);
+  background: var(--color-accent-solid);
   color: white;
   box-shadow: 0 0 0 0 var(--color-accent-glow);
 }
 
 .btn--primary:hover:not(:disabled),
 .btn--primary:focus-visible:not(:disabled) {
-  background: var(--color-accent-hover);
+  background: var(--color-accent-solid-hover);
   box-shadow: 0 0 20px var(--color-accent-glow);
   transform: translateY(-1px);
 }

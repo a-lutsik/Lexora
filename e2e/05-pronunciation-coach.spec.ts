@@ -244,7 +244,7 @@ test.describe('Speaking study mode', () => {
     await page.waitForSelector('text=Study Session', { timeout: 10_000 });
 
     await page.getByRole('radio', { name: /Speaking/ }).click();
-    await page.getByRole('button', { name: 'Start study session' }).click();
+    await page.getByRole('button', { name: /^Start Session/ }).click();
 
     await expect(page.getByText('Say this word aloud:')).toBeVisible({ timeout: 8000 });
     await expect(page.locator('.flashcard-word')).toHaveText('apple');

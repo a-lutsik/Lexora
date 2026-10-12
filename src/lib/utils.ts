@@ -7,6 +7,46 @@ export function cx(...classes: Array<string | false | null | undefined>): string
   return classes.filter(Boolean).join(' ');
 }
 
+/** Экранирует пользовательскую строку для безопасной вставки в RegExp. */
+export function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** «1 word» / «2 words»: английское склонение по числу. */
+export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+export type TextSegment = { text: string; match: boolean };
+
+/**
+ * Режет `text` по вхождениям `term` без учёта регистра.
+ * Безопасна для любого ввода («C++», «(», «[x» не бросают SyntaxError).
+ */
+export function splitByTerm(text: string, term: string): TextSegment[] {
+  const needle = term.trim();
+  if (!needle) return text ? [{ text, match: false }] : [];
+  const lowered = needle.toLowerCase();
+  return text
+    .split(new RegExp(`(${escapeRegExp(needle)})`, 'gi'))
+    .filter((part) => part !== '')
+    .map((part) => ({ text: part, match: part.toLowerCase() === lowered }));
+}
+
+/**
+ * Подпись частотности по подсказке бэкенда ('top-1000' | 'top-5000' | 'rank-N').
+ * Возвращает null, если подсказки нет или формат неизвестен — лучше ничего,
+ * чем выдуманное число.
+ */
+export function formatFrequencyHint(hint: string | null | undefined): string | null {
+  if (!hint) return null;
+  const top = /^top-(\d+)$/.exec(hint);
+  if (top?.[1]) return `Top ${Number(top[1]).toLocaleString('en-US')}`;
+  const rank = /^rank-(\d+)$/.exec(hint);
+  if (rank?.[1]) return `★ ${Number(rank[1]).toLocaleString('en-US')}`;
+  return null;
+}
+
 const MS_PER_DAY = 86_400_000;
 
 /**

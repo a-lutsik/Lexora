@@ -1,5 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
-import { appendTranscript, copyToClipboard, cx, formatIpcError, formatRelativeDate } from './utils';
+import {
+  appendTranscript,
+  copyToClipboard,
+  cx,
+  escapeRegExp,
+  formatFrequencyHint,
+  formatIpcError,
+  formatRelativeDate,
+  pluralize,
+  splitByTerm,
+} from './utils';
+
+describe('pluralize', () => {
+  it('uses the singular only for exactly one', () => {
+    expect(pluralize(1, 'word')).toBe('1 word');
+    expect(pluralize(0, 'word')).toBe('0 words');
+    expect(pluralize(2, 'word')).toBe('2 words');
+    expect(pluralize(5282, 'card')).toBe('5282 cards');
+  });
+
+  it('accepts an irregular plural', () => {
+    expect(pluralize(1, 'entry', 'entries')).toBe('1 entry');
+    expect(pluralize(3, 'entry', 'entries')).toBe('3 entries');
+  });
+});
 
 describe('cx', () => {
   it('joins truthy class names with spaces', () => {
@@ -178,4 +202,59 @@ describe('copyToClipboard', () => {
 
     await expect(copyToClipboard('apple')).resolves.toBe(false);
   });
+});
+
+describe('escapeRegExp', () => {
+  it.each(['C++', '(', '[x', 'a.b*', '$^', '\\', '{1,2}', 'a|b', '?'])(
+    'makes %s match itself literally',
+    (value) => {
+      expect(() => new RegExp(escapeRegExp(value))).not.toThrow();
+      expect(new RegExp(`^${escapeRegExp(value)}$`).test(value)).toBe(true);
+    },
+  );
+});
+
+describe('splitByTerm', () => {
+  it('marks case-insensitive matches and keeps the original casing', () => {
+    expect(splitByTerm('Apple pie, apple tart', 'apple')).toEqual([
+      { text: 'Apple', match: true },
+      { text: ' pie, ', match: false },
+      { text: 'apple', match: true },
+      { text: ' tart', match: false },
+    ]);
+  });
+
+  it.each(['C++', '(', '[x', '*'])('does not throw for the special term %s', (term) => {
+    const segments = splitByTerm(`I like ${term} a lot`, term);
+    expect(segments.filter((s) => s.match).map((s) => s.text)).toEqual([term]);
+    expect(segments.map((s) => s.text).join('')).toBe(`I like ${term} a lot`);
+  });
+
+  it('returns the whole text unmarked for an empty or blank term', () => {
+    expect(splitByTerm('hello', '')).toEqual([{ text: 'hello', match: false }]);
+    expect(splitByTerm('hello', '   ')).toEqual([{ text: 'hello', match: false }]);
+    expect(splitByTerm('', 'x')).toEqual([]);
+  });
+
+  it('returns the whole text unmarked when nothing matches', () => {
+    expect(splitByTerm('hello world', 'zzz')).toEqual([{ text: 'hello world', match: false }]);
+  });
+});
+
+describe('formatFrequencyHint', () => {
+  it.each([
+    ['top-1000', 'Top 1,000'],
+    ['top-5000', 'Top 5,000'],
+    ['rank-7', '★ 7'],
+    ['rank-12345', '★ 12,345'],
+  ])('formats %s', (hint, expected) => {
+    expect(formatFrequencyHint(hint)).toBe(expected);
+  });
+
+  it.each([null, undefined, '', 'common', 'rank-', 'rank-x', 'top-'])(
+    'returns null instead of inventing a value for %s',
+    (hint) => {
+      expect(formatFrequencyHint(hint)).toBeNull();
+    },
+  );
 });

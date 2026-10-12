@@ -36,6 +36,9 @@
 
 **ЗАПРЕЩЕНО** добавлять без обсуждения: Redux, MobX, class components, jQuery, Lodash, moment.js, any CSS framework (Tailwind, Bootstrap), any UI component library (MUI, Ant Design, Chakra).
 
+**Согласованные исключения:**
+- `src/components/ui/ErrorBoundary.tsx` — единственный допустимый class-компонент: в React 18 error boundary (`getDerivedStateFromError` / `componentDidCatch`) не имеет hook-аналога. Новые class-компоненты по-прежнему запрещены.
+
 ---
 
 ## 2. СТРУКТУРА РЕПОЗИТОРИЯ

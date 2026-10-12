@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { useAddVocabularyBatch, useImportWordList } from '../../hooks/useVocabulary';
 import { useSettings } from '../../hooks/useSettings';
 import { MAX_BULK_WORDS, parseWordList } from '../../lib/wordList';
-import { formatIpcError } from '../../lib/utils';
+import { formatIpcError, pluralize } from '../../lib/utils';
 import type { AddVocabularyBatchResult } from '../../lib/types';
 import './vocabulary.css';
 
@@ -243,7 +243,7 @@ export function BulkAddModal({ isOpen, mode, onClose, onQueued }: BulkAddModalPr
             disabled={!canSubmit || isPending}
             aria-label={
               mode === 'paste'
-                ? `Add ${parsed.words.length} words`
+                ? `Add ${pluralize(parsed.words.length, 'word')}`
                 : 'Add words from file'
             }
           >

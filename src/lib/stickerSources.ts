@@ -4,6 +4,7 @@
 //   "all"     — every word in the study queue
 //   "mine"    — user-added (source != collection)
 //   "c:<id>"  — lexemes that belong to that collection
+// Фильтр очереди из токенов строит бэкенд (stickers.rs::sticker_queue_filters).
 // ============================================================
 
 export const STICKER_SOURCE_ALL = 'all';
@@ -93,19 +94,4 @@ export function toggleStickerSource(
   const has = expanded.includes(token);
   const next = has ? expanded.filter((item) => item !== token) : [...expanded, token];
   return normalizeStickerSources(next, allCollectionIds);
-}
-
-export function stickerSourcesToQueueFilter(sources: readonly string[]): {
-  includeMine?: boolean;
-  collectionIds?: number[];
-} {
-  if (sources.includes(STICKER_SOURCE_ALL) || sources.length === 0) {
-    return {};
-  }
-  return {
-    includeMine: sources.includes(STICKER_SOURCE_MINE),
-    collectionIds: sources
-      .map(parseCollectionSourceId)
-      .filter((id): id is number => id !== null),
-  };
 }

@@ -18,7 +18,7 @@ test.describe('Add Word Flow', () => {
     // Слово из mock list_vocabulary
     await expect(page.getByText('apple')).toBeVisible({ timeout: 8000 });
     // Кнопка добавления слова
-    await expect(page.getByRole('button', { name: 'Add new word' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add Word', exact: true })).toBeVisible();
   });
 
   test('search input is visible', async ({ page }) => {
@@ -26,7 +26,7 @@ test.describe('Add Word Flow', () => {
   });
 
   test('clicking Add new word opens dialog', async ({ page }) => {
-    await page.getByRole('button', { name: 'Add new word' }).click();
+    await page.getByRole('button', { name: 'Add Word', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByText('Add Word to Vocabulary')).toBeVisible();
@@ -43,7 +43,7 @@ test.describe('Add Word Flow', () => {
   });
 
   test('typing word + click Translate shows translation result', async ({ page }) => {
-    await page.getByRole('button', { name: 'Add new word' }).click();
+    await page.getByRole('button', { name: 'Add Word', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'Word or phrase to translate' }).fill('apple');
     await dialog.getByRole('button', { name: 'Translate' }).click();
@@ -54,7 +54,7 @@ test.describe('Add Word Flow', () => {
   });
 
   test('Enter in input triggers translate', async ({ page }) => {
-    await page.getByRole('button', { name: 'Add new word' }).click();
+    await page.getByRole('button', { name: 'Add Word', exact: true }).click();
     const dialog = page.getByRole('dialog');
     const input = dialog.getByRole('textbox', { name: 'Word or phrase to translate' });
     await input.fill('apple');
@@ -64,7 +64,7 @@ test.describe('Add Word Flow', () => {
   });
 
   test('Add to Vocabulary button becomes enabled after translation', async ({ page }) => {
-    await page.getByRole('button', { name: 'Add new word' }).click();
+    await page.getByRole('button', { name: 'Add Word', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'Word or phrase to translate' }).fill('apple');
     await dialog.getByRole('button', { name: 'Translate' }).click();
@@ -74,7 +74,7 @@ test.describe('Add Word Flow', () => {
   });
 
   test('clicking Add to Vocabulary saves entry and shows success', async ({ page }) => {
-    await page.getByRole('button', { name: 'Add new word' }).click();
+    await page.getByRole('button', { name: 'Add Word', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('textbox', { name: 'Word or phrase to translate' }).fill('apple');
     await dialog.getByRole('button', { name: 'Translate' }).click();
@@ -86,7 +86,7 @@ test.describe('Add Word Flow', () => {
   });
 
   test('Close dialog button closes modal', async ({ page }) => {
-    await page.getByRole('button', { name: 'Add new word' }).click();
+    await page.getByRole('button', { name: 'Add Word', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
@@ -95,7 +95,7 @@ test.describe('Add Word Flow', () => {
   });
 
   test('reopening Add Word starts with empty fields', async ({ page }) => {
-    await page.getByRole('button', { name: 'Add new word' }).click();
+    await page.getByRole('button', { name: 'Add Word', exact: true }).click();
     const dialog = page.getByRole('dialog');
     const input = dialog.getByRole('textbox', { name: 'Word or phrase to translate' });
     await input.fill('apple');
@@ -103,7 +103,7 @@ test.describe('Add Word Flow', () => {
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).not.toBeVisible({ timeout: 3000 });
 
-    await page.getByRole('button', { name: 'Add new word' }).click();
+    await page.getByRole('button', { name: 'Add Word', exact: true }).click();
     await expect(dialog).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByRole('textbox', { name: 'Word or phrase to translate' })).toHaveValue('');
     await expect(dialog.getByLabel(/personal notes/i)).toHaveValue('');

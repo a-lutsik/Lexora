@@ -70,8 +70,12 @@ impl ReviewRepo {
         let now_sec = chrono::Utc::now().timestamp();
         let next_due_at = now_sec + (days_until_next * 86400);
 
+        // 3–4. State update and history event are one unit of work: a failed
+        // event insert must not leave the schedule moved without a log entry.
+        let tx = conn.unchecked_transaction()?;
+
         // 3. Update review_state in database
-        conn.execute(
+        tx.execute(
             "UPDATE review_state SET
                 status = ?1,
                 ease = ?2,
@@ -94,7 +98,7 @@ impl ReviewRepo {
         )?;
 
         // 4. Record history event
-        conn.execute(
+        tx.execute(
             "INSERT INTO review_event (review_state_id, mode, grade, user_response, latency_ms, error_type, timestamp)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
@@ -108,6 +112,7 @@ impl ReviewRepo {
             ],
         )?;
 
+        tx.commit()?;
         Ok(next_due_at)
     }
 
@@ -282,6 +287,27 @@ mod tests {
             due_at >= before + 63 * 86_400 && due_at <= before + 63 * 86_400 + 10,
             "due_at ≈ now + 63 days"
         );
+    }
+
+    #[test]
+    fn process_review_is_atomic_when_event_insert_fails() {
+        let pool = setup_db();
+        let conn = pool.get().expect("conn");
+        let (_, rs_id) = add_word(&conn, "zzt_rev_atomic");
+        let before = state_of(&conn, rs_id);
+
+        // Make the history insert fail *after* review_state was already updated.
+        conn.execute_batch(
+            "CREATE TRIGGER zzt_fail_event BEFORE INSERT ON review_event
+             BEGIN SELECT RAISE(ABORT, 'simulated review_event failure'); END;",
+        )
+        .expect("create failing trigger");
+
+        let res = ReviewRepo::process_review(&conn, rs_id, "flashcard", 3, None, None, None);
+        assert!(res.is_err(), "event insert failure must surface as Err");
+
+        // No silent partial write (AGENTS §0.3): the SRS state is untouched.
+        assert_eq!(state_of(&conn, rs_id), before);
     }
 
     #[test]

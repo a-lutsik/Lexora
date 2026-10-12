@@ -709,4 +709,103 @@ describe('PopupTranslator', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/empty answer/i);
     expect(screen.getByRole('button', { name: '+ Add Word' })).toBeDisabled();
   });
+
+  it.each(['C++', '(', '[x', 'a.b*', '\\'])(
+    'renders a result for the regex-special query "%s" without crashing',
+    async (query) => {
+      const user = userEvent.setup();
+      invokeMock.mockImplementation((cmd: string) =>
+        Promise.resolve(
+          cmd === 'translate_text'
+            ? {
+                ...translationResult,
+                text: query,
+                mainTranslation: 'перевод',
+                exampleSentence: `Here we use ${query} in a sentence.`,
+                exampleSentence2: `And ${query.toUpperCase()} again.`,
+              }
+            : null,
+        ),
+      );
+      renderWithQueryClient(<PopupTranslator />);
+
+      await user.type(
+        screen.getByRole('textbox', { name: 'Translate query' }),
+        `${query.replace(/[{[]/g, '$&$&')}{Enter}`,
+      );
+
+      expect(await screen.findByText('перевод')).toBeInTheDocument();
+      const examples = screen.getByLabelText('Example sentences in context');
+      expect(examples.querySelector('.popup-example-highlight')).toHaveTextContent(query);
+    },
+  );
+
+  it('shows an error and keeps the Add button usable when adding a word fails', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'translate_text') return Promise.resolve(translationResult);
+      if (cmd === 'add_to_vocabulary') return Promise.reject(new Error('database is locked'));
+      return Promise.resolve(null);
+    });
+
+    renderWithQueryClient(<PopupTranslator />);
+    await user.type(screen.getByRole('textbox', { name: 'Translate query' }), 'apple{Enter}');
+    await screen.findByText('яблоко');
+
+    await user.click(screen.getByRole('button', { name: '+ Add Word' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn.t add this word/i);
+    expect(screen.queryByRole('button', { name: '✓ Added to Vocabulary' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Add Word' })).toBeEnabled();
+  });
+
+  it('clears the add error when a new word is looked up', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'translate_text') return Promise.resolve(translationResult);
+      if (cmd === 'add_to_vocabulary') return Promise.reject(new Error('database is locked'));
+      return Promise.resolve(null);
+    });
+
+    renderWithQueryClient(<PopupTranslator />);
+    const input = screen.getByRole('textbox', { name: 'Translate query' });
+    await user.type(input, 'apple{Enter}');
+    await screen.findByText('яблоко');
+    await user.click(screen.getByRole('button', { name: '+ Add Word' }));
+    await screen.findByRole('alert');
+
+    await user.clear(input);
+    await user.type(input, 'pear{Enter}');
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
+  describe('frequency badge', () => {
+    async function lookup(frequencyHint: string | null) {
+      const user = userEvent.setup();
+      invokeMock.mockImplementation((cmd: string) =>
+        Promise.resolve(cmd === 'translate_text' ? { ...translationResult, frequencyHint } : null)
+      );
+      renderWithQueryClient(<PopupTranslator />);
+      await user.type(screen.getByRole('textbox', { name: 'Translate query' }), 'apple{Enter}');
+      await screen.findByText('яблоко');
+    }
+
+    it('shows nothing when the word has no frequency data (no invented numbers)', async () => {
+      await lookup(null);
+      expect(screen.queryByText(/★/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Top \d/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/3,241|4,200/)).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ['top-1000', 'Top 1,000'],
+      ['top-5000', 'Top 5,000'],
+      ['rank-12345', '★ 12,345'],
+    ])('renders the real hint %s as "%s"', async (hint, label) => {
+      await lookup(hint);
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.queryByText(/3,241|4,200/)).not.toBeInTheDocument();
+    });
+  });
 });

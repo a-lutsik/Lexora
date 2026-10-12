@@ -11,6 +11,7 @@ import { SafeHtml } from '../../../components/ui/SafeHtml';
 import { useEvaluateAnswer } from '../../../hooks/useStudyQueue';
 import { useStudyContinueHotkey } from '../../../hooks/useStudyContinueHotkey';
 import { TypingMode } from './TypingMode';
+import { escapeRegExp } from '../../../lib/utils';
 import type { EvaluationResult, StudyGrade, VocabularyEntryDto } from '../../../lib/types';
 
 type IrregularVerbsModeProps = {
@@ -22,10 +23,6 @@ type VerbForms = {
   past: string;
   participle: string;
 };
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 // Tolerant patterns for forms stored in translation text / sense, e.g.:
 //   "прош. went, прич. gone — шёл"

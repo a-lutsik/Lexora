@@ -1,10 +1,11 @@
 /* ============================================================
    LEXORA — Desktop Sticker Styles
-   High-end floating ambient card (~260×110):
+   High-end floating ambient card (окно 380×150, см. stickers.rs):
    3 visual states matching mockup:
    1. Default: Frosted dark glassmorphism
    2. Due: Glowing indigo status dot (● Due now)
    3. Mature: Emerald aurora backlight glow
+   Цвета и тени — из tokens.css (--sticker-*).
    ============================================================ */
 
 html,
@@ -23,13 +24,18 @@ html body {
 }
 
 .sticker-container {
+  /* Размеры элементов карточки: иконки 22px, точка статуса 6px. */
+  --sticker-icon-size: 22px;
+  --sticker-icon-gap: var(--space-1);
+  --sticker-dot-size: 6px;
+
   width: 100vw;
   height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
-  padding: 6px;
+  padding: var(--space-2);
   overflow: hidden;
   user-select: none;
   box-sizing: border-box;
@@ -40,39 +46,43 @@ html body {
 .sticker-card {
   width: 100%;
   height: 100%;
-  background: rgba(18, 18, 26, 0.84);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-sizing: border-box;
+  background: var(--sticker-surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--sticker-border);
   border-radius: var(--radius-xl);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  padding: 10px 14px;
+  box-shadow: var(--sticker-shadow);
+  padding: var(--space-2) var(--space-3);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   position: relative;
   overflow: hidden;
-  animation: sticker-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  transition: all var(--transition-base);
+  animation: sticker-enter var(--transition-slow) both;
+  transition:
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    background var(--transition-base);
 }
 
 .sticker-card:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--sticker-border-hover);
 }
 
 /* ── State 2: Due / Review State (Indigo Glow) ───────────── */
 
 .sticker-card--due {
-  border-color: rgba(99, 102, 241, 0.35);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(99, 102, 241, 0.2);
+  border-color: var(--sticker-border-due);
+  box-shadow: var(--sticker-shadow-due);
 }
 
 /* ── State 3: Mature Word State (Emerald Aurora Glow) ────── */
 
 .sticker-card--mature {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(18, 18, 26, 0.88) 55%);
-  border-color: rgba(16, 185, 129, 0.4);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 28px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  background: var(--sticker-surface-mature);
+  border-color: var(--sticker-border-mature);
+  box-shadow: var(--sticker-shadow-mature);
 }
 
 /* ── Top Row: Word & Control Icons ──────────────────────── */
@@ -102,9 +112,9 @@ html body {
 }
 
 .sticker-word {
-  font-size: 17px;
+  font-size: var(--text-lg);
   font-weight: var(--font-weight-bold);
-  color: #ffffff;
+  color: var(--color-text-primary);
   letter-spacing: -0.01em;
   line-height: var(--line-height-tight);
 }
@@ -122,15 +132,15 @@ html body {
 .sticker-controls {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--sticker-icon-gap);
   flex-shrink: 0;
 }
 
 .sticker-icon-btn {
-  width: 22px;
-  height: 22px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  width: var(--sticker-icon-size);
+  height: var(--sticker-icon-size);
+  background: var(--sticker-control-bg);
+  border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   cursor: pointer;
   padding: 0;
@@ -138,22 +148,35 @@ html body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast);
   position: relative;
 }
 
-/* A11y: визуально 22px, кликабельная область ≥ 44×44px */
-.sticker-icon-btn::after {
+/* A11y: визуально 22px, кликабельная область 44px в высоту. По ширине
+   области соседних иконок стыкуются в середине зазора и не перекрываются:
+   иначе клик по краю иконки срабатывал на соседней кнопке. 6 иконок по 44px
+   в ширину не помещаются рядом со словом в окне 380px. */
+.sticker-icon-btn::after,
+.sticker-controls .popup-audio-btn.popup-audio-btn--sm::after {
   content: '';
   position: absolute;
-  inset: -11px;
-  border-radius: inherit;
+  inset: auto;
+  top: 50%;
+  left: calc(var(--sticker-icon-gap) / -2);
+  right: calc(var(--sticker-icon-gap) / -2);
+  height: var(--touch-target-min);
+  transform: translateY(-50%);
+  border-radius: 0;
 }
 
-.sticker-icon-btn:hover:not(:disabled) {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.2);
+.sticker-icon-btn:hover:not(:disabled),
+.sticker-icon-btn:focus-visible {
+  color: var(--color-text-primary);
+  background: var(--sticker-control-bg-hover);
+  border-color: var(--sticker-border-hover);
 }
 
 .sticker-icon-btn:disabled {
@@ -165,13 +188,14 @@ html body {
 .sticker-icon-btn--active {
   color: var(--color-accent-hover);
   background: var(--color-accent-dim);
-  border-color: rgba(99, 102, 241, 0.3);
+  border-color: var(--color-accent-glow);
 }
 
-.sticker-icon-btn--close:hover {
-  background: rgba(239, 68, 68, 0.25);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #f87171;
+.sticker-icon-btn--close:hover,
+.sticker-icon-btn--close:focus-visible {
+  background: var(--color-danger-dim);
+  border-color: var(--color-danger);
+  color: var(--color-danger-text);
 }
 
 /* ── Translation & Due status row ───────────────────────── */
@@ -181,8 +205,7 @@ html body {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  min-height: 18px;
-  margin: 1px 0;
+  min-height: var(--space-5);
 }
 
 .sticker-sub-row--context {
@@ -190,9 +213,9 @@ html body {
 }
 
 .sticker-translation {
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
-  color: #94a3b8;
+  color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -203,7 +226,17 @@ html body {
 .sticker-translation--hidden {
   color: var(--color-text-muted);
   letter-spacing: 0.15em;
-  font-size: 11px;
+  font-size: var(--text-xs);
+}
+
+.sticker-error {
+  font-size: var(--text-xs);
+  color: var(--color-danger-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
 
 .sticker-example {
@@ -227,31 +260,19 @@ html body {
 .sticker-due-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
-  color: #818cf8;
+  color: var(--color-accent-hover);
 }
 
 .sticker-due-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #6366f1;
-  box-shadow: 0 0 8px #6366f1;
-}
-
-/* ── Empty / loading / error state ───────────────────────── */
-
-.sticker-status {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
+  width: var(--sticker-dot-size);
+  height: var(--sticker-dot-size);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  box-shadow: 0 0 var(--space-2) var(--color-accent);
 }
 
 /* ── Source filter overlay ───────────────────────────────── */
@@ -260,10 +281,10 @@ html body {
   position: absolute;
   inset: 0;
   z-index: 2;
-  background: rgba(18, 18, 26, 0.96);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  padding: 10px 12px;
+  background: var(--sticker-surface-solid);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  padding: var(--space-2) var(--space-3);
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -274,32 +295,47 @@ html body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
 
-/* ── Action Buttons: Помню, Не помню, Later ──────────────── */
+/* ── Action Buttons: Помню, Не помню, Позже ──────────────── */
 
 .sticker-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 2px;
+  gap: var(--space-2);
 }
 
 .sticker-btn {
   flex: 1;
-  padding: 4px 6px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-md);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
   font-family: var(--font-sans);
   cursor: pointer;
   border: 1px solid transparent;
-  transition: all var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
   text-align: center;
   white-space: nowrap;
+  position: relative;
+}
+
+/* A11y: кнопка визуально компактная, кликабельная область 44px в высоту. */
+.sticker-btn::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--touch-target-min);
+  transform: translateY(-50%);
 }
 
 .sticker-btn:disabled {
@@ -308,44 +344,47 @@ html body {
 }
 
 .sticker-btn--good {
-  background: rgba(16, 185, 129, 0.16);
-  border-color: rgba(16, 185, 129, 0.35);
-  color: #34d399;
+  background: var(--color-success-dim);
+  border-color: var(--sticker-success-border);
+  color: var(--color-neon-green);
 }
 
-.sticker-btn--good:hover:not(:disabled) {
-  background: rgba(16, 185, 129, 0.3);
-  border-color: #10b981;
-  color: #ffffff;
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+.sticker-btn--good:hover:not(:disabled),
+.sticker-btn--good:focus-visible {
+  background: var(--sticker-success-bg-hover);
+  border-color: var(--color-success);
+  color: var(--color-text-primary);
+  box-shadow: var(--sticker-success-glow);
 }
 
 .sticker-btn--again {
-  background: rgba(239, 68, 68, 0.16);
-  border-color: rgba(239, 68, 68, 0.35);
-  color: #f87171;
+  background: var(--color-danger-dim);
+  border-color: var(--sticker-danger-border);
+  color: var(--color-danger-text);
 }
 
-.sticker-btn--again:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.3);
-  border-color: #ef4444;
-  color: #ffffff;
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+.sticker-btn--again:hover:not(:disabled),
+.sticker-btn--again:focus-visible {
+  background: var(--sticker-danger-bg-hover);
+  border-color: var(--color-danger);
+  color: var(--color-text-primary);
+  box-shadow: var(--sticker-danger-glow);
 }
 
 .sticker-btn--later {
   flex: 0 0 auto;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--sticker-control-bg);
   /* Был #64748b — 3.6:1 на фоне стикера (FAIL); text-secondary → 6.3:1 */
   color: var(--color-text-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-2);
 }
 
-.sticker-btn--later:hover {
-  background: rgba(255, 255, 255, 0.1);
+.sticker-btn--later:hover:not(:disabled),
+.sticker-btn--later:focus-visible {
+  background: var(--sticker-control-bg-hover);
   color: var(--color-text-primary);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--sticker-border-hover);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -13,8 +13,7 @@ import { useTranslate } from '../hooks/useTranslate';
 import { useAddToVocabulary } from '../hooks/useVocabulary';
 import { useSessionLanguagePair } from '../hooks/useSessionLanguagePair';
 import { useLanguageOptions } from '../hooks/useLanguages';
-import { PosBadge } from '../components/ui/Badge';
-import { FreqBadge as FrequencyBadge } from '../components/domain/FreqBadge';
+import { Badge, PosBadge } from '../components/ui/Badge';
 import { LanguageSelect } from '../components/ui/LanguageSelect';
 import { TranslationDomainSelect } from '../components/domain/TranslationDomainSelect';
 import { BrandBadge } from '../components/ui/Logo';
@@ -24,6 +23,7 @@ import { isCardEnrichComplete, type CardEnrichEvent } from '../lib/types';
 import { isLongWritingText, OPEN_WRITING_EVENT, saveWritingDraft } from '../lib/writingText';
 import { classifyPopupText, formatImageProviderError, formatProviderError } from '../lib/inlineAssistant';
 import { useSessionLexicalDomain } from '../hooks/useSessionLexicalDomain';
+import { formatFrequencyHint, splitByTerm } from '../lib/utils';
 import type { LexicalDomain } from '../lib/translationDomain';
 
 const AUTO_TEXT_DEBOUNCE_MS = 800;
@@ -158,11 +158,13 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
     setImagePending(false);
     setExamplesPending(false);
     setAdded(false);
+    addMutation.reset();
   };
 
   const handleTranslate = (text: string, overrideTarget?: string, overrideDomain?: LexicalDomain) => {
     if (!text.trim()) return;
     setAdded(false);
+    addMutation.reset();
     setEnrichPatch(null);
     setImagePending(true);
     setExamplesPending(true);
@@ -370,6 +372,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
 
   const isWritingQuery = isLongWritingText(query);
   const canOpenAssistant = Boolean(onOpenAssistant) && classifyPopupText(query) === 'assistant';
+  const frequencyLabel = formatFrequencyHint(data?.frequencyHint);
   const exampleSentences = data
     ? uniqueExampleSentences(data.exampleSentence, data.exampleSentence2)
     : [];
@@ -381,17 +384,14 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
     !added;
 
   // Highlights the query word inside the example sentence
-  const renderHighlightedExample = (sentence: string, targetWord: string) => {
-    if (!targetWord) return sentence;
-    const parts = sentence.split(new RegExp(`(${targetWord})`, 'gi'));
-    return parts.map((part, i) =>
-      part.toLowerCase() === targetWord.toLowerCase() ? (
-        <span key={i} className="popup-example-highlight">{part}</span>
+  const renderHighlightedExample = (sentence: string, targetWord: string) =>
+    splitByTerm(sentence, targetWord).map((segment, i) =>
+      segment.match ? (
+        <span key={i} className="popup-example-highlight">{segment.text}</span>
       ) : (
-        part
+        segment.text
       )
     );
-  };
 
   return (
     <div className="popup-card">
@@ -616,7 +616,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
 
               <div className="popup-badges-row">
                 <PosBadge pos={data.partOfSpeech} />
-                <FrequencyBadge rank={data.frequencyHint ? 4200 : 3241} />
+                {frequencyLabel && <Badge variant="warn">{frequencyLabel}</Badge>}
               </div>
             </div>
             <div className="popup-hero-visual">
@@ -672,6 +672,12 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             </div>
           )}
         </div>
+      )}
+
+      {addMutation.isError && !added && (
+        <p className="popup-add-error" role="alert">
+          Couldn’t add this word. Please try again.
+        </p>
       )}
 
       {/* Footer action */}

@@ -15,8 +15,9 @@ import { SrsStatusBadge, PosBadge } from '../../components/ui/Badge';
 import { FreqBadge } from '../../components/domain/FreqBadge';
 import { QUERY_KEYS } from '../../lib/constants';
 import { ipc } from '../../lib/ipc';
-import { cx, formatRelativeDate } from '../../lib/utils';
+import { cx, formatRelativeDate, pluralize } from '../../lib/utils';
 import { WordDetail } from './WordDetail';
+import { VocabularyPager } from './VocabularyPager';
 import { AddWordModal } from './AddWordModal';
 import { BulkAddModal, type BulkAddMode } from './BulkAddModal';
 import type { BulkTranslateProgress, SrsStatus, VocabularyEntryDto } from '../../lib/types';
@@ -158,6 +159,8 @@ export default function VocabularyPage() {
   const filters = useVocabularyStore((s) => s.filters);
   const setSearch = useVocabularyStore((s) => s.setSearch);
   const setStatus = useVocabularyStore((s) => s.setStatus);
+  const setFilters = useVocabularyStore((s) => s.setFilters);
+  const resetFilters = useVocabularyStore((s) => s.resetFilters);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addWordEpoch, setAddWordEpoch] = useState(0);
   const [bulkMode, setBulkMode] = useState<BulkAddMode | null>(null);
@@ -165,12 +168,20 @@ export default function VocabularyPage() {
   const [bulkProgress, setBulkProgress] = useState<BulkTranslateProgress | null>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const lastRefetchAt = useRef(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const { data: entries, isLoading } = useVocabulary({
+  const { data: entries, isLoading, isError, refetch } = useVocabulary({
     ...filters,
     languageId: activeLanguageId,
   });
   const { data: totalCount } = useVocabularyCount(activeLanguageId);
+
+  const hasActiveFilters = filters.search.trim() !== '' || filters.status !== 'all';
+
+  const handlePageChange = (page: number) => {
+    setFilters({ page });
+    if (listRef.current) listRef.current.scrollTop = 0;
+  };
 
   const handleWordClick = (id: number) => {
     void navigate(`/vocabulary/${id}`);
@@ -231,8 +242,8 @@ export default function VocabularyPage() {
         <div className="vocabulary-header-left">
           <h1 className="vocabulary-title">My Vocabulary</h1>
           {totalCount != null && (
-            <span className="vocabulary-count" aria-label={`${totalCount} words total`}>
-              {totalCount.toLocaleString()} words
+            <span className="vocabulary-count" aria-label={`${pluralize(totalCount, 'word')} total`}>
+              {totalCount.toLocaleString()} {totalCount === 1 ? 'word' : 'words'}
             </span>
           )}
         </div>
@@ -242,7 +253,6 @@ export default function VocabularyPage() {
             variant="secondary"
             size="md"
             onClick={() => void navigate('/study')}
-            aria-label="Start study session"
           >
             Study Now
           </Button>
@@ -252,7 +262,6 @@ export default function VocabularyPage() {
               variant="primary"
               size="md"
               onClick={openAddOne}
-              aria-label="Add new word"
             >
               <PlusIcon /> Add Word
             </Button>
@@ -346,6 +355,7 @@ export default function VocabularyPage() {
       </div>
 
       <div
+        ref={listRef}
         className="vocabulary-list"
         role="table"
         aria-label="Vocabulary list"
@@ -356,7 +366,31 @@ export default function VocabularyPage() {
             Loading vocabulary…
           </div>
         )}
-        {!isLoading && entries?.length === 0 && (
+        {isError && !isLoading && (
+          <div className="vocabulary-empty" role="alert">
+            <p className="text-secondary text-sm">Couldn’t load your vocabulary.</p>
+            <Button variant="secondary" size="md" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          </div>
+        )}
+        {!isLoading && !isError && entries?.length === 0 && filters.page > 1 && (
+          <div className="vocabulary-empty">
+            <p className="text-secondary text-sm">No more words on this page.</p>
+            <Button variant="secondary" size="md" onClick={() => handlePageChange(1)}>
+              Back to the first page
+            </Button>
+          </div>
+        )}
+        {!isLoading && !isError && entries?.length === 0 && filters.page <= 1 && hasActiveFilters && (
+          <div className="vocabulary-empty">
+            <p className="text-secondary text-sm">No words match your search or filter.</p>
+            <Button variant="secondary" size="md" onClick={() => resetFilters(activeLanguageId)}>
+              Clear filters
+            </Button>
+          </div>
+        )}
+        {!isLoading && !isError && entries?.length === 0 && filters.page <= 1 && !hasActiveFilters && (
           <div className="vocabulary-empty">
             <p className="text-secondary text-sm">No words yet. Add your first word to start learning.</p>
             <Button variant="secondary" size="md" onClick={openAddOne}>
@@ -368,6 +402,16 @@ export default function VocabularyPage() {
           <WordRow key={entry.id} entry={entry} onClick={handleWordClick} />
         ))}
       </div>
+
+      {!isError && (
+        <VocabularyPager
+          page={filters.page}
+          perPage={filters.perPage}
+          shown={entries?.length ?? 0}
+          total={hasActiveFilters ? null : (totalCount ?? null)}
+          onPageChange={handlePageChange}
+        />
+      )}
 
       <AddWordModal
         key={addWordEpoch}

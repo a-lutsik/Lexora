@@ -144,9 +144,12 @@ pub(crate) fn persist_and_apply_side_effects(
         log::warn!("Failed to apply sticker policy after settings update: {e}");
     }
 
-    if previous.sticker_sources != updated.sticker_sources {
+    // Фильтр стикеров строится из источников и изучаемого языка.
+    if previous.sticker_sources != updated.sticker_sources
+        || previous.primary_language != updated.primary_language
+    {
         crate::stickers::reset_roster(app);
-        let _ = app.emit(crate::stickers::STICKER_SOURCES_CHANGED_EVENT, ());
+        let _ = app.emit(crate::stickers::STICKER_FILTER_CHANGED_EVENT, ());
     }
 
     Ok(updated)

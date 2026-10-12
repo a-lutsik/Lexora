@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
 import { LogoMark } from '../ui/Logo';
 import { useApplyModelPackage } from '../../hooks/useModelRoutes';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useUpdateSettings } from '../../hooks/useSettings';
 import {
     buildPresetSettings,
@@ -153,10 +154,27 @@ export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupW
         ? accountId.trim().length > 0
         : true;
 
-    // Фокус на панель при открытии; автофокус поля ключа.
+    // Фокус на панель при открытии, возврат на прежний элемент при закрытии.
     useEffect(() => {
+        const previouslyFocused =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
         panelRef.current?.focus();
+        return () => previouslyFocused?.focus();
     }, []);
+
+    // aria-modal: фокус не должен уходить на страницу под мастером.
+    useFocusTrap(panelRef);
+
+    // Esc закрывает мастер (без записи настроек: он появится при следующем запуске).
+    // Пока применяется пресет, закрытие блокируем — результат нужно увидеть.
+    const isApplying = applyMutation.isPending;
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && !isApplying) onClose();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isApplying, onClose]);
     useEffect(() => {
         if (phase === 'key') {
             keyInputRef.current?.focus();

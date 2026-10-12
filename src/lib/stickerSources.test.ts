@@ -7,7 +7,6 @@ import {
   isAllStickerSources,
   normalizeStickerSources,
   parseCollectionSourceId,
-  stickerSourcesToQueueFilter,
   toggleStickerSource,
 } from './stickerSources';
 
@@ -50,21 +49,5 @@ describe('stickerSources', () => {
   it('toggles a single collection off an "all" selection', () => {
     const next = toggleStickerSource([STICKER_SOURCE_ALL], collectionSourceToken(2), [1, 2]);
     expect(next).toEqual([STICKER_SOURCE_MINE, 'c:1']);
-  });
-
-  it('maps tokens to study-queue filters', () => {
-    expect(stickerSourcesToQueueFilter([STICKER_SOURCE_ALL])).toEqual({});
-    expect(stickerSourcesToQueueFilter([STICKER_SOURCE_MINE])).toEqual({
-      includeMine: true,
-      collectionIds: [],
-    });
-    expect(stickerSourcesToQueueFilter([STICKER_SOURCE_MINE, 'c:7'])).toEqual({
-      includeMine: true,
-      collectionIds: [7],
-    });
-    expect(stickerSourcesToQueueFilter(['c:7'])).toEqual({
-      includeMine: false,
-      collectionIds: [7],
-    });
   });
 });

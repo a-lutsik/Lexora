@@ -8,7 +8,7 @@ import type { CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
 import { ipc } from '../../lib/ipc';
-import { formatIpcError } from '../../lib/utils';
+import { formatIpcError, pluralize } from '../../lib/utils';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -22,10 +22,12 @@ const PACK_LOAD_EVENT = 'lexora:pack-load-progress';
 export default function CollectionsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [loadProgress, setLoadProgress] = useState<PackLoadProgress | null>(null);
+  const [withImages, setWithImages] = useState(false);
+  const [confirmingDisableId, setConfirmingDisableId] = useState<number | null>(null);
   const activeLanguageId = useSettingsStore((s) => s.activeLanguageId);
   const queryClient = useQueryClient();
 
-  const { data: collections, isLoading } = useQuery({
+  const { data: collections, isLoading, isError, refetch } = useQuery({
     queryKey: ['collections', activeLanguageId],
     queryFn: () => ipc.collections.list(activeLanguageId),
   });
@@ -52,11 +54,14 @@ export default function CollectionsPage() {
       void queryClient.invalidateQueries({ queryKey: ['collections'] });
       void queryClient.invalidateQueries({ queryKey: ['study-queue'] });
       void queryClient.invalidateQueries({ queryKey: ['vocabulary'] });
+      void queryClient.invalidateQueries({ queryKey: ['due-count'] });
     },
+    onSettled: () => setConfirmingDisableId(null),
   });
 
   const loadMutation = useMutation({
-    mutationFn: (id: number) => ipc.collections.loadSystemPack(id, true),
+    mutationFn: ({ id, images }: { id: number; images: boolean }) =>
+      ipc.collections.loadSystemPack(id, images),
     onError: (err) => {
       setLoadProgress({
         collectionId: 0,
@@ -134,6 +139,30 @@ export default function CollectionsPage() {
         </div>
       )}
 
+      <label className="collections-images-option text-secondary text-sm">
+        <input
+          type="checkbox"
+          checked={withImages}
+          onChange={(e) => setWithImages(e.target.checked)}
+        />
+        Also fetch pictures when loading a pack (slower; sends each word to your image provider)
+      </label>
+
+      {toggleMutation.isError && (
+        <p className="collections-error text-sm" role="alert">
+          Couldn’t update this collection. Please try again.
+        </p>
+      )}
+
+      {isError && !isLoading && (
+        <div className="collections-error-block" role="alert">
+          <p className="text-secondary text-sm">Couldn’t load your collections.</p>
+          <Button variant="secondary" size="md" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="text-muted text-sm animate-pulse">Loading collections…</div>
       ) : (
@@ -166,8 +195,8 @@ export default function CollectionsPage() {
                 <div className="collection-card-footer">
                   <span className="text-secondary text-xs">
                     {needsLoad && expected
-                      ? `Not loaded · ~${expected} words`
-                      : `${col.wordCount} words`}
+                      ? `Not loaded · ~${pluralize(expected, 'word')}`
+                      : pluralize(col.wordCount, 'word')}
                   </span>
 
                   {needsLoad ? (
@@ -185,19 +214,54 @@ export default function CollectionsPage() {
                           text: 'Starting…',
                           error: null,
                         });
-                        loadMutation.mutate(col.id);
+                        loadMutation.mutate({ id: col.id, images: withImages });
                       }}
                       aria-label={`Load ${col.name} into database`}
                     >
                       {status === 'error' ? 'Retry Load' : 'Load into database'}
                     </Button>
+                  ) : confirmingDisableId === col.id ? (
+                    <div className="collection-confirm" role="group" aria-label={`Confirm disabling ${col.name}`}>
+                      <p className="collection-confirm-text text-xs">
+                        Disable “{col.name}”? Its words leave your vocabulary and study queue
+                        (unless another active pack has them) and return when you enable it again.
+                      </p>
+                      <div className="collection-confirm-actions">
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          isLoading={toggleMutation.isPending}
+                          onClick={() => toggleMutation.mutate({ id: col.id, active: false })}
+                        >
+                          Disable
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={toggleMutation.isPending}
+                          onClick={() => setConfirmingDisableId(null)}
+                        >
+                          Keep enabled
+                        </Button>
+                      </div>
+                    </div>
                   ) : (
                     <Button
                       variant={col.isActive ? 'primary' : 'secondary'}
                       size="sm"
-                      onClick={() =>
-                        toggleMutation.mutate({ id: col.id, active: !col.isActive })
+                      isLoading={toggleMutation.isPending && toggleMutation.variables?.id === col.id}
+                      aria-label={
+                        col.isActive
+                          ? `Active in SRS, disable ${col.name}`
+                          : `Enable ${col.name} in SRS`
                       }
+                      onClick={() => {
+                        if (col.isActive) {
+                          toggleMutation.reset();
+                          setConfirmingDisableId(col.id);
+                        } else {
+                          toggleMutation.mutate({ id: col.id, active: true });
+                        }
+                      }}
                     >
                       {col.isActive ? '✓ Active in SRS' : 'Enable in SRS'}
                     </Button>

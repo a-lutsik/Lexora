@@ -27,28 +27,44 @@
   min-height: 100%;
   padding: var(--space-8) var(--space-8) var(--space-10);
   gap: var(--space-6);
-  max-width: 720px;
+  --study-setup-max-width: 55rem;
+  max-width: var(--study-setup-max-width);
   margin: 0 auto;
   text-align: center;
 }
 
+/* 8 modes as 4 + 4 so the launcher fits one screen at 1280×800. */
 .study-modes-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
   width: 100%;
   margin-top: var(--space-4);
+}
+
+@media (max-width: 1100px) {
+  .study-modes-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Keeps the primary action reachable when the window is short. */
+.study-start-btn {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 1;
+  box-shadow: var(--shadow-md);
 }
 
 .study-mode-card {
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: var(--space-5);
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   cursor: pointer;
   transition: all var(--transition-fast);
   text-align: center;
@@ -369,6 +385,7 @@
 /* ── Reveal & SM-2 Grade Buttons ─────────────────────────── */
 
 .study-reveal-btn {
+  min-height: var(--touch-target-min);
   padding: 10px 28px;
   background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: #ffffff;
@@ -382,7 +399,8 @@
   transition: all var(--transition-fast);
 }
 
-.study-reveal-btn:hover {
+.study-reveal-btn:hover,
+.study-reveal-btn:focus-visible {
   background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
   box-shadow: 0 6px 20px rgba(99, 102, 241, 0.55);
   transform: translateY(-1px);
@@ -404,8 +422,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 10px 0;
+  justify-content: center;
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) 0;
   border-radius: var(--radius-md);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(28, 28, 39, 0.9);
@@ -420,37 +439,70 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.grade-btn-interval {
-  font-size: 11px;
-  color: var(--color-text-muted);
+.grade-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 
-.grade-btn--blackout:hover {
+.grade-btn--blackout:hover:not(:disabled),
+.grade-btn--blackout:focus-visible {
   background: rgba(239, 68, 68, 0.2);
   border-color: var(--color-danger);
   color: #f87171;
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
 }
 
-.grade-btn--hard:hover {
+.grade-btn--hard:hover:not(:disabled),
+.grade-btn--hard:focus-visible {
   background: rgba(245, 158, 11, 0.2);
   border-color: var(--color-warn);
   color: var(--color-warn);
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
 }
 
-.grade-btn--good:hover {
+.grade-btn--good:hover:not(:disabled),
+.grade-btn--good:focus-visible {
   background: rgba(99, 102, 241, 0.2);
   border-color: var(--color-accent);
   color: var(--color-accent-hover);
   box-shadow: 0 0 14px rgba(99, 102, 241, 0.35);
 }
 
-.grade-btn--easy:hover {
+.grade-btn--easy:hover:not(:disabled),
+.grade-btn--easy:focus-visible {
   background: rgba(16, 185, 129, 0.2);
   border-color: var(--color-success);
   color: #34d399;
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+/* Answer shown on reveal when the card has no multiple-choice options */
+.study-answer-reveal {
+  width: 100%;
+  margin: 0;
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  background: var(--color-accent-dim);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+}
+
+.study-answer-reveal--missing {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border);
+}
+
+.study-save-error {
+  margin: var(--space-3) 0 0;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
 }
 
 /* ── Right AI Explanation Panel ─────────────────────────── */
@@ -798,4 +850,18 @@
   margin-top: var(--space-2);
   font-size: var(--text-xl);
   font-weight: var(--font-weight-bold);
+}
+
+/* ── Setup screen: load error / empty queue ─────────────── */
+
+.study-setup-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.study-setup-empty {
+  margin: 0;
+  text-align: center;
 }

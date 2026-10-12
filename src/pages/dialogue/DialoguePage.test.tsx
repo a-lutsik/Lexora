@@ -287,3 +287,62 @@ describe('DialoguePage — live conversation', () => {
     expect(invokeMock).toHaveBeenCalledWith('realtime_stop', { sessionId: 1 });
   });
 });
+
+describe('DialoguePage — failed auto-start', () => {
+  const startCalls = () =>
+    invokeMock.mock.calls.filter(([cmd]) => cmd === 'start_dialogue_session').length;
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it('tries once, shows the error and does not hammer the backend', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'start_dialogue_session') throw new Error('AI provider is not configured');
+      return baseInvoke(cmd);
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    // Give a runaway effect loop time to show itself (it made thousands of calls per second).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+
+    expect(startCalls()).toBe(1);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
+  it('starts the scenario when the learner presses "Try again"', async () => {
+    const user = userEvent.setup();
+    let failing = true;
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'start_dialogue_session') {
+        if (failing) throw new Error('offline');
+        return openingSession;
+      }
+      return baseInvoke(cmd);
+    });
+
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+    expect(startCalls()).toBe(2);
+
+    failing = false;
+    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+
+    expect(
+      await screen.findByText('What kind of roast would you like with your flat white today?'),
+    ).toBeInTheDocument();
+    expect(startCalls()).toBe(3);
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+
+  it('starts the scenario once on success', async () => {
+    invokeMock.mockImplementation(baseInvoke);
+    renderPage();
+    await screen.findByText('What kind of roast would you like with your flat white today?');
+    expect(startCalls()).toBe(1);
+  });
+});

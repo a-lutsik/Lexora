@@ -5,6 +5,7 @@
 
 import { NavLink } from 'react-router-dom';
 import { useDueCount } from '../../hooks/useStudyQueue';
+import { pluralize } from '../../lib/utils';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { LogoMark } from './Logo';
 import {
@@ -30,6 +31,15 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="app-layout">
+      {/* Кнопка, а не <a href="#…">: при HashRouter хэш-ссылка сменила бы маршрут. */}
+      <button
+        type="button"
+        className="skip-link"
+        onClick={() => document.getElementById('main-content')?.focus()}
+      >
+        Skip to main content
+      </button>
+
       <aside className="sidebar" role="navigation" aria-label="Main navigation">
         <div className="sidebar-logo" data-tauri-drag-region>
           <div className="sidebar-logo-mark" aria-hidden="true">
@@ -60,7 +70,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <IconNavCards />
             <span className="nav-label">Study</span>
             {dueCount != null && dueCount > 0 && (
-              <span className="nav-badge" aria-label={`${dueCount} cards due`}>
+              <span className="nav-badge" aria-label={`${pluralize(dueCount, 'card')} due`}>
                 {dueCount > 99 ? '99+' : dueCount}
               </span>
             )}
@@ -93,7 +103,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="Pronunciation"
+            aria-label="Speak (pronunciation)"
           >
             <IconNavMic />
             <span className="nav-label">Speak</span>
@@ -126,7 +136,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="Statistics"
+            aria-label="Stats (statistics)"
           >
             <IconNavStats />
             <span className="nav-label">Stats</span>
@@ -149,7 +159,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </div>
       </aside>
 
-      <main className="app-content" id="main-content">
+      <main className="app-content" id="main-content" tabIndex={-1}>
         {children}
       </main>
     </div>

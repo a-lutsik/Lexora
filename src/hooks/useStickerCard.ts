@@ -2,45 +2,34 @@
 // LEXORA — useStickerCard hook
 // Each sticker window asks the backend for *its* unique card.
 // Dismiss/grade never returns a word already shown on a peer.
+// Фильтр (язык, источники) бэкенд строит из настроек.
 // ============================================================
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ipc } from '../lib/ipc';
 import { QUERY_KEYS, STALE_TIME } from '../lib/constants';
-import type { StudyQueueFilters, VocabularyEntryDto } from '../lib/types';
+import type { VocabularyEntryDto } from '../lib/types';
 
 const STICKER_REFETCH_MS = 60_000;
 
-export function stickerCardQueryKey(filters: StudyQueueFilters) {
-  return [QUERY_KEYS.STICKER_CARD, filters] as const;
-}
+const STICKER_CARD_QUERY_KEY = [QUERY_KEYS.STICKER_CARD] as const;
 
-export function useStickerCard(
-  filters: StudyQueueFilters,
-  options?: { enabled?: boolean },
-) {
+export function useStickerCard() {
   return useQuery({
-    queryKey: stickerCardQueryKey(filters),
-    queryFn: () => ipc.stickers.getCard(filters),
+    queryKey: STICKER_CARD_QUERY_KEY,
+    queryFn: () => ipc.stickers.getCard(),
     staleTime: STALE_TIME.SHORT,
     refetchInterval: STICKER_REFETCH_MS,
-    enabled: options?.enabled ?? true,
   });
 }
-
-type DismissStickerInput = {
-  entryId: number;
-  filters: StudyQueueFilters;
-};
 
 export function useDismissStickerCard() {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ entryId, filters }: DismissStickerInput) =>
-      ipc.stickers.dismissCard(entryId, filters),
-    onSuccess: (card: VocabularyEntryDto | null, { filters }) => {
-      client.setQueryData(stickerCardQueryKey(filters), card);
+    mutationFn: (entryId: number) => ipc.stickers.dismissCard(entryId),
+    onSuccess: (card: VocabularyEntryDto | null) => {
+      client.setQueryData(STICKER_CARD_QUERY_KEY, card);
     },
   });
 }

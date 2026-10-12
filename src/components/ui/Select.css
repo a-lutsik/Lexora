@@ -69,12 +69,12 @@
 .custom-select-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   padding: 1px 6px;
   border-radius: var(--radius-full);
   background: var(--color-accent-dim);
-  color: var(--color-accent-hover);
+  color: var(--color-accent-text);
   border: 1px solid rgba(99, 102, 241, 0.25);
   margin-left: 6px;
 }

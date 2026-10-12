@@ -79,6 +79,9 @@ export function useRemoveFromVocabulary() {
     mutationFn: (id: number) => ipc.vocabulary.remove(id),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+      // Удалённое слово не должно оставаться в счётчике «к повторению» и очереди.
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.DUE_COUNT] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.STUDY_QUEUE] });
     },
   });
 }

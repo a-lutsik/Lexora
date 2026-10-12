@@ -3,9 +3,10 @@
 // ============================================================
 
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
 import { AppLayout } from './components/ui/AppLayout';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { SetupWizard } from './components/setup/SetupWizard';
 import { OPEN_WRITING_EVENT, peekWritingDraft } from './lib/writingText';
 import { shouldSuggestSetupWizard } from './lib/setupProfile';
@@ -82,28 +83,42 @@ function SetupWizardGate() {
   );
 }
 
+/**
+ * Страницы под собственным ErrorBoundary: сбой одной страницы не роняет сайдбар,
+ * а переход на другой маршрут сбрасывает ошибку.
+ */
+function RoutedPages() {
+  const { pathname } = useLocation();
+
+  return (
+    <ErrorBoundary resetKey={pathname}>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route index element={<Navigate to="/vocabulary" replace />} />
+          <Route path="/vocabulary" element={<VocabularyPage />} />
+          <Route path="/vocabulary/:id" element={<VocabularyPage />} />
+          <Route path="/study" element={<StudyPage />} />
+          <Route path="/writing" element={<WritingPage />} />
+          <Route path="/pronunciation" element={<PronunciationPage />} />
+          <Route path="/dialogue" element={<DialoguePage />} />
+          <Route path="/translate" element={<TranslatePage />} />
+          <Route path="/collections" element={<CollectionsPage />} />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/vocabulary" replace />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
     <>
       <AppLayout>
         <LanguageSync />
         <WritingDraftListener />
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route index element={<Navigate to="/vocabulary" replace />} />
-            <Route path="/vocabulary" element={<VocabularyPage />} />
-            <Route path="/vocabulary/:id" element={<VocabularyPage />} />
-            <Route path="/study" element={<StudyPage />} />
-            <Route path="/writing" element={<WritingPage />} />
-            <Route path="/pronunciation" element={<PronunciationPage />} />
-            <Route path="/dialogue" element={<DialoguePage />} />
-            <Route path="/translate" element={<TranslatePage />} />
-            <Route path="/collections" element={<CollectionsPage />} />
-            <Route path="/stats" element={<StatsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/vocabulary" replace />} />
-          </Routes>
-        </Suspense>
+        <RoutedPages />
       </AppLayout>
       <SetupWizardGate />
     </>

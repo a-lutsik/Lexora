@@ -11,6 +11,14 @@ import { copyToClipboard } from '../../../lib/utils';
 
 type ViewMode = 'overlay' | 'side-by-side' | 'text-only';
 
+/** Enter / Space activate a clickable non-<button> element. */
+function selectOnKey(e: React.KeyboardEvent<HTMLElement>, select: () => void) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    select();
+  }
+}
+
 type ImageOverlayViewerProps = {
   imageUrl: string;
   result: ImageTranslationResult;
@@ -103,7 +111,11 @@ export function ImageOverlayViewer({
                       width: `${width}%`,
                       minHeight: `${Math.max(4, height)}%`,
                     }}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
                     onClick={() => setSelectedBlock(block)}
+                    onKeyDown={(e) => selectOnKey(e, () => setSelectedBlock(block))}
                     title={`Original: ${block.originalText}\nTranslated: ${block.translatedText}`}
                   >
                     <span className="image-bbox-text">

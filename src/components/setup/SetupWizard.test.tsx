@@ -109,4 +109,52 @@ describe('SetupWizard', () => {
       }),
     );
   });
+
+  it('closes with Escape', async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderWizard();
+
+    await user.keyboard('{Escape}');
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not close on Escape while the preset is being applied', async () => {
+    const user = userEvent.setup();
+    let finishApply: (value: unknown) => void = () => undefined;
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'apply_model_package') return new Promise((resolve) => { finishApply = resolve; });
+      return Promise.resolve(null);
+    });
+    const { onClose } = renderWizard();
+
+    await user.click(screen.getByRole('button', { name: 'Выбрать сценарий: Бесплатно' }));
+    const [first] = screen.getAllByRole('button', { name: /:/ });
+    if (!first) throw new Error('no scenario variants rendered');
+    await user.click(first);
+    await user.type(screen.getByLabelText(/API KEY — Gemini/), GEMINI_KEY);
+    await user.click(screen.getByRole('button', { name: 'Продолжить к проверке' }));
+    await user.click(screen.getByRole('button', { name: 'Сохранить ключ и включить сценарий' }));
+
+    await user.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+
+    finishApply({ routes: { package: 'gemini', illustrations: false, roles: [] }, settings: SETTINGS });
+    expect(await screen.findByRole('heading', { name: 'Готово!' })).toBeInTheDocument();
+  });
+
+  it('keeps keyboard focus inside the dialog while tabbing', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    const dialog = screen.getByRole('dialog');
+
+    for (let i = 0; i < 30; i += 1) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+    for (let i = 0; i < 30; i += 1) {
+      await user.tab({ shift: true });
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+  });
 });

@@ -39,6 +39,9 @@ export function useEvaluateAnswer() {
       // Invalidate due count and queue after each review
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.DUE_COUNT] });
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+      // Иначе «Start Session» после завершения берёт устаревшую очередь из кэша
+      // и повторяет только что пройденные карточки вне расписания.
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.STUDY_QUEUE] });
     },
   });
 }

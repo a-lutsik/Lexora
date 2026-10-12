@@ -23,6 +23,8 @@ import type {
   ReviewEventDto,
   RewriteTextInput,
   StudyQueueFilters,
+  SubmitReviewInput,
+  SubmitReviewResult,
   TestConnectionResult,
   TestImageConnectionResult,
   TranslateInput,
@@ -190,6 +192,9 @@ export const ipc = {
     evaluateAnswer: (input: EvaluateAnswerInput) =>
       invoke<EvaluationResult>('evaluate_answer', { input }),
 
+    submitReview: (input: SubmitReviewInput) =>
+      invoke<SubmitReviewResult>('submit_review', { input }),
+
     getHistory: (reviewStateId: number, limit: number) =>
       invoke<ReviewEventDto[]>('get_review_history', { reviewStateId, limit }),
 
@@ -198,11 +203,12 @@ export const ipc = {
   },
 
   stickers: {
-    getCard: (filters: StudyQueueFilters) =>
-      invoke<VocabularyEntryDto | null>('get_sticker_card', { filters }),
+    // Фильтр (язык, источники) бэкенд берёт из настроек — окна его не передают.
+    getCard: () =>
+      invoke<VocabularyEntryDto | null>('get_sticker_card'),
 
-    dismissCard: (entryId: number, filters: StudyQueueFilters) =>
-      invoke<VocabularyEntryDto | null>('dismiss_sticker_card', { entryId, filters }),
+    dismissCard: (entryId: number) =>
+      invoke<VocabularyEntryDto | null>('dismiss_sticker_card', { entryId }),
   },
 
   // ── Collections ───────────────────────────────────────
@@ -323,8 +329,8 @@ export const ipc = {
     getSummary: (languageId: number) =>
       invoke<StatsSummary>('get_stats_summary', { languageId }),
 
-    getDailyActivity: (days: number) =>
-      invoke<DailyActivity[]>('get_daily_activity', { days }),
+    getDailyActivity: (days: number, languageId: number) =>
+      invoke<DailyActivity[]>('get_daily_activity', { days, languageId }),
 
     getErrorBreakdown: (languageId: number) =>
       invoke<ErrorBreakdown[]>('get_error_breakdown', { languageId }),

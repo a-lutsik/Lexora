@@ -524,6 +524,19 @@ export type EvaluateAnswerInput = {
   latencyMs: number;
 };
 
+/** Self-assessed review (Flashcards): the learner rates recall, no answer text. */
+export type SubmitReviewInput = {
+  reviewStateId: number;
+  mode: StudyMode;
+  grade: StudyGrade;
+  latencyMs: number;
+};
+
+export type SubmitReviewResult = {
+  /** Unix seconds of the next scheduled review. */
+  dueAt: number;
+};
+
 export type RewriteMode =
   | 'clearer'
   | 'shorter'

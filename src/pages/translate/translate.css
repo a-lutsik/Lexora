@@ -45,11 +45,28 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-sm);
+  /* Single row down to the 900px minimum window width; below that the
+     controls wrap as whole units instead of being clipped. */
   flex-wrap: wrap;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* The shared select stretches to 100% of its parent, which made every
+   control wrap onto its own row. In the bar they size to their content. */
+.translate-lang-bar .lang-select-wrap {
+  width: auto;
+  flex: 1 1 var(--lang-select-width);
+  min-width: var(--lang-select-width);
 }
 
 .translate-domain-select {
   margin-left: var(--space-1);
+  flex-shrink: 0;
+}
+
+.btn-swap-lang {
+  flex-shrink: 0;
 }
 
 .lang-select {
@@ -104,6 +121,18 @@
   margin-bottom: var(--space-6);
   overflow-x: auto;
   padding-bottom: var(--space-2);
+  /* Scroll-fade indicator: the accent fade is only visible on the side that
+     still has hidden tabs; the page-coloured "local" covers hide it at the
+     scroll ends. */
+  background:
+    linear-gradient(to right, var(--color-bg-primary), var(--color-bg-primary)) left center / var(--scroll-fade-size) 100% no-repeat local,
+    linear-gradient(to left, var(--color-bg-primary), var(--color-bg-primary)) right center / var(--scroll-fade-size) 100% no-repeat local,
+    linear-gradient(to right, var(--color-accent-dim), transparent) left center / var(--scroll-fade-size) 100% no-repeat scroll,
+    linear-gradient(to left, var(--color-accent-dim), transparent) right center / var(--scroll-fade-size) 100% no-repeat scroll;
+}
+
+.translate-mode-tabs > .translate-mode-tab {
+  flex-shrink: 0;
 }
 
 .translate-mode-tab {
@@ -283,7 +312,7 @@
 .lang-indicator-pill.is-target {
   background: var(--color-accent-dim);
   border-color: var(--color-accent);
-  color: var(--color-accent-hover);
+  color: var(--color-accent-text);
 }
 
 .translate-textarea {
@@ -355,7 +384,7 @@
 }
 
 .interactive-word.is-selected {
-  background: var(--color-accent);
+  background: var(--color-accent-solid);
   color: #fff;
   box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
 }
@@ -628,8 +657,9 @@
 }
 
 .image-bbox-chip:hover,
+.image-bbox-chip:focus-visible,
 .image-bbox-chip.is-selected {
-  background: var(--color-accent);
+  background: var(--color-accent-solid);
   color: #fff;
   border-color: #fff;
   z-index: 20;
@@ -1550,7 +1580,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: var(--radius-full);
-  background: var(--color-accent);
+  background: var(--color-accent-solid);
   color: #ffffff;
   font-size: 10px;
   font-weight: var(--font-weight-bold);
@@ -1609,7 +1639,7 @@
 }
 
 .btn-tone-segment.is-active {
-  background: var(--color-accent);
+  background: var(--color-accent-solid);
   color: #ffffff;
   font-weight: var(--font-weight-semibold);
   box-shadow: 0 2px 8px var(--color-accent-glow);
@@ -2160,7 +2190,7 @@
 }
 
 .doc-inspector-chip:hover {
-  background: var(--color-accent);
+  background: var(--color-accent-solid);
   color: #ffffff;
 }
 

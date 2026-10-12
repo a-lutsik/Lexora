@@ -1,77 +1,92 @@
 // ============================================================
 // LEXORA — Flashcard Study Mode
-// Exact match to mockup: 'What does this mean?' pill,
-// large glowing word card, 2x2 option / SM-2 rating grid,
-// and AI Explanation side panel.
+// Классическая карточка: слово → (необязательный выбор перевода) →
+// самооценка Again/Hard/Good/Easy. Оценка сохраняется в SRS через
+// submit_review. Варианты ответа — только из реальных данных сессии.
 // ============================================================
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useStudyContinueHotkey } from '../../../hooks/useStudyContinueHotkey';
+import { useSubmitReview } from '../../../hooks/useSubmitReview';
 import { PosBadge } from '../../../components/ui/Badge';
 import { AudioButton } from '../../../components/domain/AudioButton';
 import { FreqBadge } from '../../../components/domain/FreqBadge';
 import { SafeHtml } from '../../../components/ui/SafeHtml';
+import { buildFlashcardOptions, type FlashcardOption } from '../../../lib/flashcardOptions';
 import { copyToClipboard } from '../../../lib/utils';
 import type { StudyGrade, VocabularyEntryDto } from '../../../lib/types';
 
 type FlashcardModeProps = {
   entry: VocabularyEntryDto;
+  /** Main translations of the other cards in this session (real distractors). */
+  distractorPool: readonly string[];
   onGrade: (grade: StudyGrade) => void;
 };
 
+type GradeButton = { grade: StudyGrade; label: string; className: string };
+
+const GRADE_BUTTONS: readonly GradeButton[] = [
+  { grade: 0, label: 'Again', className: 'grade-btn--blackout' },
+  { grade: 2, label: 'Hard', className: 'grade-btn--hard' },
+  { grade: 3, label: 'Good', className: 'grade-btn--good' },
+  { grade: 4, label: 'Easy', className: 'grade-btn--easy' },
+];
+
 function CopyIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
   );
 }
 
-// Distractor translations for multiple-choice look in mockups
-const DISTRACTORS: Record<string, string[]> = {
-  default: [
-    'хрупкий, нежный',
-    'высокомерный, гордый',
-    'осторожный, внимательный',
-  ],
-};
-
-export function FlashcardMode({ entry, onGrade }: FlashcardModeProps) {
+export function FlashcardMode({ entry, distractorPool, onGrade }: FlashcardModeProps) {
   const [revealed, setRevealed] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const { lexeme, translations, examples } = entry;
-  const mainTranslation = translations[0]?.translatedText ?? 'No translation';
+  const [shownAt] = useState(() => Date.now());
+  const submitReview = useSubmitReview();
+
+  const { lexeme, translations, examples, reviewState } = entry;
+  const mainTranslation = translations[0]?.translatedText ?? null;
   const example = examples[0]?.sentence ?? null;
+  const hasContext = Boolean(entry.notes) || Boolean(example);
 
-  // Generate 4 options (1 correct + 3 distractors) matching mockup 2x2 grid
-  const options = useMemo(() => {
-    const distractors = DISTRACTORS['default'] ?? ['вариант 1', 'вариант 2', 'вариант 3'];
-    const list = [
-      { text: mainTranslation, isCorrect: true },
-      { text: distractors[0] ?? 'хрупкий, нежный', isCorrect: false },
-      { text: distractors[1] ?? 'высокомерный', isCorrect: false },
-      { text: distractors[2] ?? 'осторожный, внимательный', isCorrect: false },
-    ];
-    // Deterministic shuffle based on word length
-    return list.sort((a, b) => a.text.localeCompare(b.text));
-  }, [mainTranslation]);
+  const options = useMemo<FlashcardOption[]>(
+    () => buildFlashcardOptions(entry.id, mainTranslation, distractorPool),
+    [entry.id, mainTranslation, distractorPool],
+  );
 
-  const handleOptionClick = (opt: { text: string; isCorrect: boolean }) => {
+  const handleOptionClick = (opt: FlashcardOption) => {
     setSelectedOption(opt.text);
     setRevealed(true);
+  };
+
+  const handleGrade = (grade: StudyGrade) => {
+    // Карточка без состояния повторений сохранить нечем — просто идём дальше.
+    if (!reviewState) {
+      onGrade(grade);
+      return;
+    }
+    submitReview.mutate(
+      {
+        reviewStateId: reviewState.id,
+        mode: 'flashcard',
+        grade,
+        latencyMs: Math.max(0, Date.now() - shownAt),
+      },
+      { onSuccess: () => onGrade(grade) },
+    );
   };
 
   useStudyContinueHotkey(!revealed, () => setRevealed(true));
 
   return (
     <div className="study-layout">
-      {/* Center study column */}
       <div className="study-main-col">
-        {/* Main glowing card */}
         <div className="study-card">
           <div className="study-card-top-badge">
-            <span>What does this mean?</span>
+            <span>{options.length > 0 ? 'What does this mean?' : 'Do you remember this word?'}</span>
           </div>
 
           <div className="study-card-content">
@@ -82,10 +97,9 @@ export function FlashcardMode({ entry, onGrade }: FlashcardModeProps) {
             </div>
           </div>
 
-          {/* Bottom metadata tags inside card */}
           <div className="study-card-bottom-tags">
             <PosBadge pos={lexeme.partOfSpeech} />
-            <FreqBadge rank={lexeme.frequencyRank ?? 1847} />
+            <FreqBadge rank={lexeme.frequencyRank} />
             <button
               type="button"
               className="study-copy-btn"
@@ -97,33 +111,40 @@ export function FlashcardMode({ entry, onGrade }: FlashcardModeProps) {
           </div>
         </div>
 
-        {/* 2x2 Grid of Answer Options */}
-        <div className="study-options-grid" role="group" aria-label="Select translation">
-          {options.map((opt) => {
-            const isSelected = selectedOption === opt.text;
-            const isCorrect = opt.isCorrect;
-            let className = 'study-option-card';
-            if (revealed && isCorrect) {
-              className += ' selected-correct';
-            } else if (revealed && isSelected && !isCorrect) {
-              className += ' selected-wrong';
-            }
+        {options.length > 0 && (
+          <div className="study-options-grid" role="group" aria-label="Select translation">
+            {options.map((opt) => {
+              let className = 'study-option-card';
+              if (revealed && opt.isCorrect) {
+                className += ' selected-correct';
+              } else if (revealed && selectedOption === opt.text && !opt.isCorrect) {
+                className += ' selected-wrong';
+              }
 
-            return (
-              <button
-                key={opt.text}
-                type="button"
-                className={className}
-                onClick={() => handleOptionClick(opt)}
-                disabled={revealed}
-              >
-                {opt.text}
-              </button>
-            );
-          })}
-        </div>
+              return (
+                <button
+                  key={opt.text}
+                  type="button"
+                  className={className}
+                  onClick={() => handleOptionClick(opt)}
+                  disabled={revealed}
+                >
+                  {opt.text}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-        {/* Action / Reveal bar */}
+        {revealed && options.length === 0 && (
+          <p
+            className={`study-answer-reveal${mainTranslation ? '' : ' study-answer-reveal--missing'}`}
+            aria-live="polite"
+          >
+            {mainTranslation ?? 'No translation saved for this word yet.'}
+          </p>
+        )}
+
         {!revealed ? (
           <button
             type="button"
@@ -136,77 +157,51 @@ export function FlashcardMode({ entry, onGrade }: FlashcardModeProps) {
         ) : (
           <div className="study-revealed-section animate-slide-up">
             <div className="study-grading-row" role="group" aria-label="Rate your recall">
-              <button
-                type="button"
-                className="grade-btn grade-btn--blackout"
-                onClick={() => onGrade(0)}
-                aria-label="Forgot (1 day interval)"
-              >
-                <span className="grade-btn-label">Again</span>
-                <span className="grade-btn-interval">1d</span>
-              </button>
-
-              <button
-                type="button"
-                className="grade-btn grade-btn--hard"
-                onClick={() => onGrade(2)}
-                aria-label="Hard (2 day interval)"
-              >
-                <span className="grade-btn-label">Hard</span>
-                <span className="grade-btn-interval">2d</span>
-              </button>
-
-              <button
-                type="button"
-                className="grade-btn grade-btn--good"
-                onClick={() => onGrade(3)}
-                aria-label="Good (4 day interval)"
-              >
-                <span className="grade-btn-label">Good</span>
-                <span className="grade-btn-interval">4d</span>
-              </button>
-
-              <button
-                type="button"
-                className="grade-btn grade-btn--easy"
-                onClick={() => onGrade(4)}
-                aria-label="Easy (8 day interval)"
-              >
-                <span className="grade-btn-label">Easy</span>
-                <span className="grade-btn-interval">8d</span>
-              </button>
+              {GRADE_BUTTONS.map(({ grade, label, className }) => (
+                <button
+                  key={grade}
+                  type="button"
+                  className={`grade-btn ${className}`}
+                  onClick={() => handleGrade(grade)}
+                  disabled={submitReview.isPending}
+                >
+                  <span className="grade-btn-label">{label}</span>
+                </button>
+              ))}
             </div>
+            {submitReview.isError && (
+              <p className="study-save-error" role="alert">
+                Couldn’t save your rating. Please try again.
+              </p>
+            )}
           </div>
         )}
       </div>
 
-      {/* Right AI Explanation Panel */}
-      <aside className="study-ai-panel" aria-label="AI Explanation">
-        <div className="study-ai-header">
-          <span className="study-ai-icon">✨</span>
-          <span className="study-ai-title">AI Explanation</span>
-        </div>
-        <div className="study-ai-body">
-          <div className="study-ai-tip">
-            <span className="study-ai-bulb">💡</span>
-            <p>
-              <strong>Tip:</strong>{' '}
-              {entry.notes ? (
-                <SafeHtml html={entry.notes} as="span" />
-              ) : (
-                `From Latin roots. A high-frequency expressive word in modern English.`
-              )}
-            </p>
+      {hasContext && (
+        <aside className="study-ai-panel" aria-label="Notes and example">
+          <div className="study-ai-header">
+            <span className="study-ai-icon" aria-hidden="true">📝</span>
+            <span className="study-ai-title">Context</span>
           </div>
-          <div className="study-ai-mnemonic">
-            <p className="study-ai-mnemonic-title">Remember:</p>
-            <p className="study-ai-mnemonic-text">
-              {example || `Focus on context: "${lexeme.text}" appears often in academic & professional speech.`}
-            </p>
+          <div className="study-ai-body">
+            {entry.notes && (
+              <div className="study-ai-tip">
+                <span className="study-ai-bulb" aria-hidden="true">💡</span>
+                <p>
+                  <strong>Notes:</strong> <SafeHtml html={entry.notes} as="span" />
+                </p>
+              </div>
+            )}
+            {example && (
+              <div className="study-ai-mnemonic">
+                <p className="study-ai-mnemonic-title">Example:</p>
+                <p className="study-ai-mnemonic-text">{example}</p>
+              </div>
+            )}
           </div>
-        </div>
-      </aside>
+        </aside>
+      )}
     </div>
   );
 }
-

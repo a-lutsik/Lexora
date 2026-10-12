@@ -44,8 +44,8 @@ export default function StatsPage() {
   });
 
   const { data: activity } = useQuery({
-    queryKey: ['stats', 'daily-activity', ACTIVITY_DAYS],
-    queryFn: () => ipc.stats.getDailyActivity(ACTIVITY_DAYS),
+    queryKey: ['stats', 'daily-activity', ACTIVITY_DAYS, activeLanguageId],
+    queryFn: () => ipc.stats.getDailyActivity(ACTIVITY_DAYS, activeLanguageId),
   });
 
   const { data: errorBreakdown } = useQuery({
@@ -95,7 +95,7 @@ export default function StatsPage() {
         <div className="stats-card">
           <div className="text-muted text-xs font-medium stats-card-label">ACCURACY</div>
           <div className="stats-card-value text-success">
-            {stats?.accuracyPercent ? `${stats.accuracyPercent}%` : '100%'}
+            {stats && stats.accuracyPercent > 0 ? `${stats.accuracyPercent}%` : '—'}
           </div>
           <div className="text-muted text-xs stats-card-hint">Recall rate</div>
         </div>
@@ -111,9 +111,9 @@ export default function StatsPage() {
         <div className="stats-card">
           <div className="text-muted text-xs font-medium stats-card-label">CURRENT STREAK</div>
           <div className="stats-card-value text-warn">
-            🔥 {stats?.streak ?? 1}d
+            🔥 {stats?.streak ?? 0}d
           </div>
-          <div className="text-muted text-xs stats-card-hint">Daily study goal met</div>
+          <div className="text-muted text-xs stats-card-hint">Days in a row with a review</div>
         </div>
       </div>
 
@@ -144,7 +144,7 @@ export default function StatsPage() {
       <div className="stats-section">
         <h3 className="stats-section-title">Activity — Last {ACTIVITY_DAYS} Days</h3>
 
-        {activityDays.length === 0 ? (
+        {totalReviewed + totalAdded === 0 ? (
           <p className="stats-empty text-muted">No activity yet — complete a study session to see the chart.</p>
         ) : (
           <>

@@ -7,7 +7,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
-import { useVocabularyEntry, useToggleFavorite } from '../../hooks/useVocabulary';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useVocabularyEntry, useToggleFavorite, useRemoveFromVocabulary } from '../../hooks/useVocabulary';
 import { useSettings } from '../../hooks/useSettings';
 import { useLanguages, useLanguageOptions } from '../../hooks/useLanguages';
 import { useTranslate } from '../../hooks/useTranslate';
@@ -17,6 +18,8 @@ import { Button, IconButton } from '../../components/ui/Button';
 import { AudioButton } from '../../components/domain/AudioButton';
 import { AssociatedImage } from '../../components/domain/AssociatedImage';
 import { FreqBadge } from '../../components/domain/FreqBadge';
+import { WordDetailRemove } from './WordDetailRemove';
+import { WordDetailUnavailable } from './WordDetailUnavailable';
 import { ipc } from '../../lib/ipc';
 import { STALE_TIME, QUERY_KEYS } from '../../lib/constants';
 import { formatImageProviderError } from '../../lib/inlineAssistant';
@@ -47,13 +50,15 @@ function CloseIcon() {
 export function WordDetail({ id, onClose }: WordDetailProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: entry, isLoading } = useVocabularyEntry(id);
+  const { data: entry, isLoading, isError, refetch } = useVocabularyEntry(id);
   const toggleFavMutation = useToggleFavorite();
+  const removeMutation = useRemoveFromVocabulary();
   const { data: settings } = useSettings();
   const { data: languages } = useLanguages();
   const translateMutation = useTranslate();
   const [notes, setNotes] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
   const [imageRefreshing, setImageRefreshing] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [imageNonce, setImageNonce] = useState(0);
@@ -139,38 +144,63 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
     }
   }, [entry?.notes]);
 
-  // A11y: при открытии фокус на диалог, Esc закрывает,
-  // при закрытии фокус возвращается к прежнему элементу.
+  // `onClose` приходит из родителя новой функцией на каждый рендер — держим
+  // актуальное значение в ref, чтобы эффекты ниже не перезапускались.
+  const onCloseRef = useRef(onClose);
   useEffect(() => {
-    if (!entry) return;
+    onCloseRef.current = onClose;
+  });
+
+  // Esc закрывает окно в любом состоянии: загрузка, ошибка, содержимое.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // A11y: при открытии фокус на диалог, при закрытии возвращается к прежнему элементу.
+  // Зависим от факта наличия слова, а не от самого объекта: обновление данных
+  // (перевод, избранное) не должно красть фокус у поля заметок.
+  const hasEntry = entry != null;
+  useEffect(() => {
+    if (!hasEntry) return;
     const previouslyFocused =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.focus();
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      previouslyFocused?.focus();
-    };
-  }, [onClose, entry]);
+    return () => previouslyFocused?.focus();
+  }, [hasEntry]);
+  useFocusTrap(dialogRef, hasEntry);
 
   const handleSaveNotes = async () => {
     if (!entry) return;
     setIsSavingNotes(true);
+    setNotesError(null);
     try {
       await ipc.vocabulary.updateNotes(entry.id, notes);
+    } catch {
+      setNotesError('Couldn’t save your notes. Please try again.');
     } finally {
       setIsSavingNotes(false);
     }
   };
 
-  if (isLoading || !entry) {
+  if (isLoading) {
     return (
-      <div className="word-detail-overlay word-detail-overlay--loading">
+      <div className="word-detail-overlay word-detail-overlay--loading" role="status">
         <div className="text-muted text-sm animate-pulse">Loading word details…</div>
       </div>
+    );
+  }
+
+  if (!entry) {
+    return (
+      <WordDetailUnavailable
+        failed={isError}
+        onRetry={() => void refetch()}
+        onClose={onClose}
+      />
     );
   }
 
@@ -350,7 +380,19 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
                 Save Notes
               </Button>
             </div>
+            {notesError && (
+              <p className="word-detail-notes-error" role="alert">
+                {notesError}
+              </p>
+            )}
           </div>
+
+          <WordDetailRemove
+            word={lexeme.text}
+            isRemoving={removeMutation.isPending}
+            hasError={removeMutation.isError}
+            onConfirm={() => removeMutation.mutate(entry.id, { onSuccess: onClose })}
+          />
         </div>
       </div>
     </div>

@@ -4,8 +4,21 @@
 // экспортирует только компоненты).
 // ============================================================
 
-export const STICKER_SOURCES_CHANGED_EVENT = 'stickers://sources-changed';
+import type { ReviewStateDto } from '../lib/types';
+
+/** Источники или изучаемый язык изменились (см. stickers.rs). */
+export const STICKER_FILTER_CHANGED_EVENT = 'stickers://filter-changed';
 export const STICKER_SYNC_VISIBILITY_EVENT = 'stickers://sync-visibility';
+
+const MS_PER_SECOND = 1000;
+
+/**
+ * Карточка ещё не к повторению: очередь стикеров подмешивает зрелые слова
+ * «для свежести» (mature refresh). Новые слова к повторению всегда.
+ */
+export function isEarlyStickerReview(reviewState: ReviewStateDto, nowMs: number): boolean {
+  return reviewState.status !== 'new' && reviewState.dueAt * MS_PER_SECOND > nowMs;
+}
 
 // Извлекает индекс слота из label окна ("sticker-2" → 2).
 export function stickerSlotFromLabel(label: string): number {

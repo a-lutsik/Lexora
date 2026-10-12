@@ -4,7 +4,7 @@
 // glowing progress bar, main study canvas, and bottom stats bar.
 // ============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, type KeyboardEvent } from 'react';
 import { useStudyQueue, useDueCount } from '../../hooks/useStudyQueue';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -18,6 +18,7 @@ import { IrregularVerbsMode } from './modes/IrregularVerbsMode';
 import { DefinitionMode } from './modes/DefinitionMode';
 import { SpeakingMode } from './modes/SpeakingMode';
 import type { StudyGrade, StudyMode } from '../../lib/types';
+import { pluralize } from '../../lib/utils';
 import './study.css';
 
 const STUDY_MODES: { mode: StudyMode; icon: string; name: string; desc: string }[] = [
@@ -86,7 +87,7 @@ export default function StudyPage() {
 
   const session = useSessionStore();
   const { data: dueCount } = useDueCount(activeLanguageId);
-  const { data: queue, refetch } = useStudyQueue({
+  const { data: queue, refetch, isLoading: isQueueLoading, isError: isQueueError } = useStudyQueue({
     languageId: activeLanguageId,
     sources: [],
     limit: 20,
@@ -112,12 +113,51 @@ export default function StudyPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Карточка без состояния повторений не может быть запланирована — в сессию
+  // берём только те, что можно оценить и сохранить.
+  const startableQueue = useMemo(
+    () => (queue ?? []).filter((entry) => entry.reviewState != null),
+    [queue],
+  );
+
   const handleStartSession = () => {
-    if (!queue || queue.length === 0) {
-      void refetch();
+    if (startableQueue.length === 0) return;
+    session.startSession(startableQueue, selectedMode);
+  };
+
+  const modeIndex = STUDY_MODES.findIndex((item) => item.mode === selectedMode);
+
+  // Radio-группа: Space/Enter выбирают, стрелки и Home/End двигают выбор и фокус.
+  const handleModeKeyDown = (event: KeyboardEvent<HTMLDivElement>, index: number) => {
+    const last = STUDY_MODES.length - 1;
+    let target: number | null = null;
+    switch (event.key) {
+      case ' ':
+      case 'Enter':
+        target = index;
+        break;
+      case 'ArrowRight':
+      case 'ArrowDown':
+        target = index === last ? 0 : index + 1;
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        target = index === 0 ? last : index - 1;
+        break;
+      case 'Home':
+        target = 0;
+        break;
+      case 'End':
+        target = last;
+        break;
+      default:
+        return;
     }
-    const currentQueue = queue && queue.length > 0 ? queue : [];
-    session.startSession(currentQueue, selectedMode);
+    event.preventDefault();
+    const next = STUDY_MODES[target];
+    if (!next) return;
+    setSelectedMode(next.mode);
+    document.getElementById(`study-mode-${next.mode}`)?.focus();
   };
 
   const handleCardGrade = (grade: StudyGrade) => {
@@ -130,6 +170,17 @@ export default function StudyPage() {
   };
 
   const currentEntry = session.queue[session.currentIndex];
+
+  // Distractors for Flashcards: main translations of the *other* cards in this session.
+  const flashcardDistractorPool = useMemo(
+    () =>
+      session.queue
+        .filter((e) => e.id !== currentEntry?.id)
+        .map((e) => e.translations[0]?.translatedText)
+        .filter((text): text is string => Boolean(text)),
+    [session.queue, currentEntry?.id],
+  );
+
   const progressPercent = session.queue.length > 0
     ? Math.round(((session.currentIndex + 1) / session.queue.length) * 100)
     : 0;
@@ -138,8 +189,8 @@ export default function StudyPage() {
   if (session.isActive && !currentEntry) {
     const { stats } = session;
     const accuracy = stats.total > 0
-      ? Math.round((stats.correct / stats.total) * 100)
-      : 100;
+      ? `${Math.round((stats.correct / stats.total) * 100)}%`
+      : '—';
 
     return (
       <div className="study-page">
@@ -157,7 +208,7 @@ export default function StudyPage() {
             </div>
             <div className="study-mode-card study-summary-stat">
               <div className="study-summary-value text-success">
-                {accuracy}%
+                {accuracy}
               </div>
               <div className="text-muted text-xs">Accuracy</div>
             </div>
@@ -180,20 +231,21 @@ export default function StudyPage() {
           <h1 className="study-setup-title">Study Session</h1>
           <p className="text-secondary study-setup-desc">
             {dueCount && dueCount > 0
-              ? `You have ${dueCount} cards due for review today.`
+              ? `You have ${pluralize(dueCount, 'card')} due for review today.`
               : 'All caught up on scheduled reviews! Ready to learn new words?'}
           </p>
 
           <div className="study-modes-grid" role="radiogroup" aria-label="Select study mode">
-            {STUDY_MODES.map((item) => (
+            {STUDY_MODES.map((item, index) => (
               <div
                 key={item.mode}
+                id={`study-mode-${item.mode}`}
                 className={`study-mode-card${selectedMode === item.mode ? ' selected' : ''}`}
                 onClick={() => setSelectedMode(item.mode)}
                 role="radio"
                 aria-checked={selectedMode === item.mode}
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setSelectedMode(item.mode)}
+                tabIndex={index === modeIndex ? 0 : -1}
+                onKeyDown={(e) => handleModeKeyDown(e, index)}
               >
                 <div className="study-mode-icon">{item.icon}</div>
                 <div className="study-mode-name">{item.name}</div>
@@ -202,13 +254,31 @@ export default function StudyPage() {
             ))}
           </div>
 
+          {isQueueError && !isQueueLoading && (
+            <div className="study-setup-error" role="alert">
+              <p className="text-secondary text-sm">Couldn’t load your cards.</p>
+              <Button variant="secondary" size="md" onClick={() => void refetch()}>
+                Try again
+              </Button>
+            </div>
+          )}
+
+          {!isQueueLoading && !isQueueError && startableQueue.length === 0 && (
+            <p className="study-setup-empty text-secondary text-sm" role="status">
+              Nothing to review right now. Add words in My Vocabulary, or enable a collection.
+            </p>
+          )}
+
           <Button
             variant="primary"
             size="lg"
             onClick={handleStartSession}
-            aria-label="Start study session"
+            disabled={isQueueLoading || startableQueue.length === 0}
+            className="study-start-btn"
           >
-            Start Session ({dueCount ?? 10} words)
+            {isQueueLoading
+              ? 'Loading cards…'
+              : `Start Session (${pluralize(startableQueue.length, 'word')})`}
           </Button>
         </div>
       </div>
@@ -237,7 +307,6 @@ export default function StudyPage() {
                 style={{ '--progress': `${progressPercent}%` } as React.CSSProperties}
               />
             </div>
-            <span className="study-progress-pct">{progressPercent}%</span>
           </div>
         </div>
 
@@ -267,6 +336,7 @@ export default function StudyPage() {
           <FlashcardMode
             key={currentEntry.id}
             entry={currentEntry}
+            distractorPool={flashcardDistractorPool}
             onGrade={handleCardGrade}
           />
         )}

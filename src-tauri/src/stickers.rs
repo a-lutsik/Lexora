@@ -8,17 +8,19 @@
 use crate::commands::study::StudyQueueFilters;
 use crate::commands::vocabulary::VocabularyEntryDto;
 use crate::db::repos::settings::SettingsRepo;
+use crate::db::repos::sticker_window::{StickerWindowRect, StickerWindowRepo};
 use crate::db::DbPool;
-use crate::display::{sticker_stack_positions, LogicalBounds};
+use crate::display::{point_in_bounds, sticker_stack_positions, LogicalBounds};
 use crate::error::AppError;
 use crate::srs::queue::QueueBuilder;
 use chrono::{Local, Timelike};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, Manager, State, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
+    AppHandle, Emitter, LogicalPosition, Manager, PhysicalPosition, State, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
 const STICKER_WIDTH: f64 = 380.0;
@@ -31,19 +33,30 @@ const MAX_STICKER_SLOTS: usize = MAX_STICKERS as usize;
 /// Очередь стикеров длиннее числа окон: после dismiss слот берёт новое
 /// свободное слово, не залезая на карточки соседей.
 const STICKER_QUEUE_LIMIT: i64 = 50;
+/// На сколько закрытое/отложенное/оценённое слово уходит со стикеров.
+const STICKER_DISMISS_COOLDOWN_SECS: i64 = 10 * 60;
+/// Пауза после последнего перемещения окна перед записью позиции в БД:
+/// перетаскивание шлёт Moved на каждый кадр.
+const RECT_SAVE_DELAY_MS: u64 = 500;
 /// Как часто сверять тихие часы, пока приложение запущено.
 const QUIET_HOURS_POLL_SECS: u64 = 30;
 /// Фронтенд показывает окно только если для слота есть карточка.
 const STICKER_SYNC_VISIBILITY_EVENT: &str = "stickers://sync-visibility";
-/// Настройки фильтра источников стикеров изменились — окна перечитывают очередь.
-pub const STICKER_SOURCES_CHANGED_EVENT: &str = "stickers://sources-changed";
+/// Фильтр стикеров (источники или изучаемый язык) изменился — окна перечитывают
+/// настройки и карточку.
+pub const STICKER_FILTER_CHANGED_EVENT: &str = "stickers://filter-changed";
+/// Токены `settings.sticker_sources` (см. src/lib/stickerSources.ts).
+const STICKER_SOURCE_ALL: &str = "all";
+const STICKER_SOURCE_MINE: &str = "mine";
+const STICKER_SOURCE_COLLECTION_PREFIX: &str = "c:";
 
 /// In-process owner of which vocabulary entry each sticker window shows.
 /// Frontend event sync raced and let closed words jump onto the next card.
 pub struct StickerRoster {
     assignments: [Option<i64>; MAX_STICKER_SLOTS],
     had_card: [bool; MAX_STICKER_SLOTS],
-    dismissed: HashSet<i64>,
+    /// entry_id → unix-секунды, до которых слово не показывается ни на одном стикере.
+    dismissed: HashMap<i64, i64>,
     filter_key: Option<String>,
 }
 
@@ -52,7 +65,7 @@ impl Default for StickerRoster {
         Self {
             assignments: [None; MAX_STICKER_SLOTS],
             had_card: [false; MAX_STICKER_SLOTS],
-            dismissed: HashSet::new(),
+            dismissed: HashMap::new(),
             filter_key: None,
         }
     }
@@ -77,6 +90,11 @@ impl StickerRoster {
         }
     }
 
+    /// Истёкшие dismiss снова допускают слово на стикеры.
+    fn expire_dismissed(&mut self, now: i64) {
+        self.dismissed.retain(|_, until| now < *until);
+    }
+
     fn claimed_except(&self, slot: usize) -> HashSet<i64> {
         self.assignments
             .iter()
@@ -86,12 +104,20 @@ impl StickerRoster {
             .collect()
     }
 
+    /// Карточки на позициях очереди, которые ждут ещё не получившие карточку слоты.
+    fn reserved_except(&self, slot: usize, queue_ids: &[i64]) -> HashSet<i64> {
+        (0..MAX_STICKER_SLOTS)
+            .filter(|&other| other != slot && !self.had_card[other])
+            .filter_map(|other| queue_ids.get(other).copied())
+            .collect()
+    }
+
     fn free_ids(&self, slot: usize, queue_ids: &[i64]) -> Vec<i64> {
         let claimed = self.claimed_except(slot);
         queue_ids
             .iter()
             .copied()
-            .filter(|id| !self.dismissed.contains(id) && !claimed.contains(id))
+            .filter(|id| !self.dismissed.contains_key(id) && !claimed.contains(id))
             .collect()
     }
 
@@ -99,7 +125,7 @@ impl StickerRoster {
         let current = self.assignments.get(slot).copied().flatten()?;
         let claimed = self.claimed_except(slot);
         if queue_ids.contains(&current)
-            && !self.dismissed.contains(&current)
+            && !self.dismissed.contains_key(&current)
             && !claimed.contains(&current)
         {
             Some(current)
@@ -109,10 +135,12 @@ impl StickerRoster {
     }
 
     /// Keep this slot's card, or assign a unique one that no other slot owns.
-    pub fn card_for_slot(&mut self, slot: usize, queue_ids: &[i64]) -> Option<i64> {
+    /// `now` — unix-секунды, по ним истекает dismiss.
+    pub fn card_for_slot(&mut self, slot: usize, queue_ids: &[i64], now: i64) -> Option<i64> {
         if slot >= MAX_STICKER_SLOTS {
             return None;
         }
+        self.expire_dismissed(now);
         if let Some(current) = self.current_if_valid(slot, queue_ids) {
             self.assignments[slot] = Some(current);
             self.had_card[slot] = true;
@@ -124,7 +152,17 @@ impl StickerRoster {
         let next = if self.had_card[slot] {
             free.first().copied()
         } else {
-            queue_ids.get(slot).copied().filter(|id| free.contains(id))
+            // Первая карточка слота — его позиция в очереди. Если её уже занял
+            // сосед (например, после dismiss), берём свободную, не отнимая
+            // позиции у слотов, которые ещё не получили карточку.
+            queue_ids
+                .get(slot)
+                .copied()
+                .filter(|id| free.contains(id))
+                .or_else(|| {
+                    let reserved = self.reserved_except(slot, queue_ids);
+                    free.iter().copied().find(|id| !reserved.contains(id))
+                })
         };
         self.assignments[slot] = next;
         if next.is_some() {
@@ -133,17 +171,255 @@ impl StickerRoster {
         next
     }
 
-    /// Retire this word from every sticker and give *this* slot a new unique card.
-    pub fn dismiss(&mut self, slot: usize, entry_id: i64, queue_ids: &[i64]) -> Option<i64> {
+    /// Retire this word from every sticker for a cooldown and give *this* slot
+    /// a new unique card. После cooldown отложенное слово возвращается, а
+    /// оценённое — когда SRS снова поставит его в очередь.
+    pub fn dismiss(
+        &mut self,
+        slot: usize,
+        entry_id: i64,
+        queue_ids: &[i64],
+        now: i64,
+    ) -> Option<i64> {
         if slot >= MAX_STICKER_SLOTS {
             return None;
         }
-        self.dismissed.insert(entry_id);
+        self.dismissed
+            .insert(entry_id, now.saturating_add(STICKER_DISMISS_COOLDOWN_SECS));
         if self.assignments[slot] == Some(entry_id) {
             self.assignments[slot] = None;
         }
         self.had_card[slot] = true;
-        self.card_for_slot(slot, queue_ids)
+        self.card_for_slot(slot, queue_ids, now)
+    }
+}
+
+/// Состояние окон стикеров, которым владеет бэкенд.
+#[derive(Default)]
+pub struct StickerWindows {
+    /// Хоткей/трей скрыли стикеры. Пока флаг стоит, фронтенд не может показать
+    /// окно сам (обновление карточки, backfill перевода) — только следующий toggle.
+    user_hidden: AtomicBool,
+    /// Где окна стоят или стояли перед закрытием (тихие часы, меньше стикеров,
+    /// перезапуск), чтобы пересозданное окно вернулось туда, куда его перетащил
+    /// пользователь. Прямоугольники в физических пикселях; копия — в БД (V026).
+    last_rects: Mutex<[Option<LogicalBounds>; MAX_STICKER_SLOTS]>,
+    /// Поколение отложенной записи позиций: пишет только последний запрос.
+    save_generation: AtomicU64,
+}
+
+impl StickerWindows {
+    fn set_user_hidden(&self, hidden: bool) {
+        self.user_hidden.store(hidden, Ordering::Relaxed);
+    }
+
+    fn may_show(&self) -> bool {
+        !self.user_hidden.load(Ordering::Relaxed)
+    }
+
+    fn remember_rect(&self, slot: usize, rect: LogicalBounds) {
+        if let Ok(mut rects) = self.last_rects.lock() {
+            if let Some(saved) = rects.get_mut(slot) {
+                *saved = Some(rect);
+            }
+        }
+    }
+
+    fn last_rect(&self, slot: usize) -> Option<LogicalBounds> {
+        self.last_rects.lock().ok()?.get(slot).copied().flatten()
+    }
+
+    /// Строки для БД из всех известных позиций.
+    fn rect_rows(&self) -> Vec<StickerWindowRect> {
+        let Ok(rects) = self.last_rects.lock() else {
+            return Vec::new();
+        };
+        rects
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, rect)| rect.map(|rect| rect_to_row(slot, &rect)))
+            .collect()
+    }
+
+    /// Загрузить позиции из БД; строки с чужими слотами пропускаются.
+    fn restore_rows(&self, rows: &[StickerWindowRect]) {
+        for row in rows {
+            if let Some(slot) = usize::try_from(row.slot)
+                .ok()
+                .filter(|&slot| slot < MAX_STICKER_SLOTS)
+            {
+                self.remember_rect(slot, row_to_rect(row));
+            }
+        }
+    }
+}
+
+fn rect_to_row(slot: usize, rect: &LogicalBounds) -> StickerWindowRect {
+    StickerWindowRect {
+        // slot < MAX_STICKER_SLOTS, в i64 помещается всегда.
+        slot: i64::try_from(slot).unwrap_or(i64::MAX),
+        x: rect.x.round() as i32,
+        y: rect.y.round() as i32,
+        width: rect.width.max(0.0).round() as u32,
+        height: rect.height.max(0.0).round() as u32,
+    }
+}
+
+fn row_to_rect(row: &StickerWindowRect) -> LogicalBounds {
+    LogicalBounds::from_physical(row.x, row.y, row.width, row.height, 1.0)
+}
+
+/// Перед созданием окон: вернуть позиции, сохранённые в прошлом запуске.
+pub fn restore_window_rects(app: &AppHandle) {
+    let Some(windows) = app.try_state::<StickerWindows>() else {
+        return;
+    };
+    let pool = app.state::<Arc<DbPool>>();
+    let rows = pool
+        .get()
+        .map_err(AppError::from)
+        .and_then(|conn| StickerWindowRepo::list(&conn));
+    match rows {
+        Ok(rows) => windows.restore_rows(&rows),
+        Err(e) => log::warn!("Failed to load sticker window positions: {e}"),
+    }
+}
+
+/// Пользователь перетащил стикер: запомнить позицию и сохранить её в БД.
+pub fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
+    if !matches!(event, WindowEvent::Moved(_)) {
+        return;
+    }
+    let Some(slot) = sticker_slot_from_label(window.label()) else {
+        return;
+    };
+    let (Ok(position), Ok(size)) = (window.outer_position(), window.outer_size()) else {
+        return;
+    };
+    let app = window.app_handle();
+    if let Some(windows) = app.try_state::<StickerWindows>() {
+        windows.remember_rect(
+            slot,
+            LogicalBounds::from_physical(position.x, position.y, size.width, size.height, 1.0),
+        );
+    }
+    schedule_rect_save(app);
+}
+
+/// Отложенная запись позиций: перетаскивание шлёт Moved на каждый кадр,
+/// в БД попадает только позиция после паузы.
+fn schedule_rect_save(app: &AppHandle) {
+    let Some(windows) = app.try_state::<StickerWindows>() else {
+        return;
+    };
+    let generation = windows.save_generation.fetch_add(1, Ordering::Relaxed) + 1;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(RECT_SAVE_DELAY_MS)).await;
+        let Some(windows) = app.try_state::<StickerWindows>() else {
+            return;
+        };
+        if windows.save_generation.load(Ordering::Relaxed) != generation {
+            return;
+        }
+        let rows = windows.rect_rows();
+        let pool = app.state::<Arc<DbPool>>().inner().clone();
+        let saved = run_blocking(move || {
+            let conn = pool.get()?;
+            StickerWindowRepo::save_all(&conn, &rows)
+        })
+        .await;
+        if let Err(e) = saved {
+            log::warn!("Failed to save sticker window positions: {e}");
+        }
+    });
+}
+
+/// Окно считается видимым, если его центр лежит на одном из мониторов.
+/// Иначе (монитор отключили) стикер остался бы за пределами экранов.
+fn rect_on_screens(rect: &LogicalBounds, screens: &[LogicalBounds]) -> bool {
+    let center_x = rect.x + rect.width / 2.0;
+    let center_y = rect.y + rect.height / 2.0;
+    screens
+        .iter()
+        .any(|screen| point_in_bounds(center_x, center_y, screen))
+}
+
+/// Границы подключённых мониторов в физических пикселях.
+fn physical_screens(app: &AppHandle) -> Vec<LogicalBounds> {
+    app.available_monitors()
+        .map(|monitors| {
+            monitors
+                .iter()
+                .map(|monitor| {
+                    let position = monitor.position();
+                    let size = monitor.size();
+                    LogicalBounds::from_physical(position.x, position.y, size.width, size.height, 1.0)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Внешний прямоугольник окна в физических пикселях.
+fn physical_rect(window: &WebviewWindow) -> Option<LogicalBounds> {
+    let position = window.outer_position().ok()?;
+    let size = window.outer_size().ok()?;
+    Some(LogicalBounds::from_physical(
+        position.x,
+        position.y,
+        size.width,
+        size.height,
+        1.0,
+    ))
+}
+
+fn may_show_stickers(app: &AppHandle) -> bool {
+    app.try_state::<StickerWindows>()
+        .is_none_or(|windows| windows.may_show())
+}
+
+fn set_stickers_user_hidden(app: &AppHandle, hidden: bool) {
+    if let Some(windows) = app.try_state::<StickerWindows>() {
+        windows.set_user_hidden(hidden);
+    }
+}
+
+/// Закрыть окно слота, запомнив, где оно стояло.
+fn close_sticker_window(app: &AppHandle, slot: usize, window: &WebviewWindow) -> Result<(), AppError> {
+    if let (Some(windows), Some(rect)) = (app.try_state::<StickerWindows>(), physical_rect(window)) {
+        windows.remember_rect(slot, rect);
+        schedule_rect_save(app);
+    }
+    window.close()?;
+    Ok(())
+}
+
+/// Фильтр очереди стикеров строится только из настроек: все окна получают один
+/// и тот же фильтр, и окно с устаревшими настройками не сбрасывает ростер.
+fn sticker_queue_filters(sources: &[String], language_id: i64) -> StudyQueueFilters {
+    let restrict = !sources.is_empty() && !sources.iter().any(|s| s == STICKER_SOURCE_ALL);
+    let (include_mine, collection_ids) = if restrict {
+        let collection_ids = sources
+            .iter()
+            .filter_map(|token| token.strip_prefix(STICKER_SOURCE_COLLECTION_PREFIX))
+            .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+            .filter_map(|id| id.parse().ok())
+            .collect();
+        (
+            Some(sources.iter().any(|s| s == STICKER_SOURCE_MINE)),
+            collection_ids,
+        )
+    } else {
+        (None, Vec::new())
+    };
+    StudyQueueFilters {
+        language_id,
+        limit: STICKER_QUEUE_LIMIT,
+        include_new: true,
+        include_mature_refresh: true,
+        include_mine,
+        collection_ids,
     }
 }
 
@@ -174,23 +450,14 @@ fn lock_roster(roster: &Mutex<StickerRoster>) -> Result<MutexGuard<'_, StickerRo
         .map_err(|_| AppError::Io("Sticker roster lock poisoned".into()))
 }
 
-fn load_sticker_queue(
-    db: &DbPool,
-    mut filters: StudyQueueFilters,
-) -> Result<Vec<VocabularyEntryDto>, AppError> {
-    filters.limit = STICKER_QUEUE_LIMIT;
-    let conn = db.get()?;
-    QueueBuilder::build_queue(&conn, &filters)
-}
-
-fn take_entry(queue: Vec<VocabularyEntryDto>, id: Option<i64>) -> Option<VocabularyEntryDto> {
-    let id = id?;
-    queue.into_iter().find(|entry| entry.id == id)
-}
-
 /// Shared roster for sticker windows. Created in lib.rs setup.
 pub fn new_roster_state() -> Arc<Mutex<StickerRoster>> {
     Arc::new(Mutex::new(StickerRoster::default()))
+}
+
+/// Shared window state for sticker windows. Created in lib.rs setup.
+pub fn new_windows_state() -> StickerWindows {
+    StickerWindows::default()
 }
 
 pub fn reset_roster(app: &AppHandle) {
@@ -281,7 +548,7 @@ fn load_settings(app: &AppHandle) -> Result<crate::commands::settings::AppSettin
 fn close_all_stickers(app: &AppHandle) -> Result<(), AppError> {
     for i in 0..MAX_STICKERS {
         if let Some(window) = app.get_webview_window(&sticker_label(i)) {
-            window.close()?;
+            close_sticker_window(app, i as usize, &window)?;
         }
     }
     Ok(())
@@ -346,10 +613,18 @@ pub fn apply_sticker_policy(app: &AppHandle) -> Result<(), AppError> {
         &bounds,
     );
 
+    let screens = physical_screens(app);
     for i in 0..count {
         let label = sticker_label(i);
-        if app.get_webview_window(&label).is_some() {
-            // Уже есть — не трогаем позицию (пользователь мог перетащить на другой монитор).
+        let stack_position = positions.get(i as usize).copied();
+        if let Some(window) = app.get_webview_window(&label) {
+            // Уже есть — позицию не трогаем (пользователь мог перетащить окно),
+            // кроме случая, когда его монитор отключили и окно за экранами.
+            let off_screen = !screens.is_empty()
+                && physical_rect(&window).is_some_and(|rect| !rect_on_screens(&rect, &screens));
+            if let (true, Some((x, y))) = (off_screen, stack_position) {
+                window.set_position(LogicalPosition::new(x, y))?;
+            }
             continue;
         }
 
@@ -366,7 +641,13 @@ pub fn apply_sticker_policy(app: &AppHandle) -> Result<(), AppError> {
             .visible_on_all_workspaces(true)
             .build()?;
 
-        if let Some(&(x, y)) = positions.get(i as usize) {
+        let saved_rect = app
+            .try_state::<StickerWindows>()
+            .and_then(|windows| windows.last_rect(i as usize))
+            .filter(|rect| rect_on_screens(rect, &screens));
+        if let Some(rect) = saved_rect {
+            window.set_position(PhysicalPosition::new(rect.x.round() as i32, rect.y.round() as i32))?;
+        } else if let Some((x, y)) = stack_position {
             window.set_position(LogicalPosition::new(x, y))?;
         }
         configure_sticker_overlay(&window)?;
@@ -376,7 +657,7 @@ pub fn apply_sticker_policy(app: &AppHandle) -> Result<(), AppError> {
 
     for i in count..MAX_STICKERS {
         if let Some(window) = app.get_webview_window(&sticker_label(i)) {
-            window.close()?;
+            close_sticker_window(app, i as usize, &window)?;
         }
     }
 
@@ -433,11 +714,15 @@ pub fn toggle_stickers_inner(app: &AppHandle) -> Result<(), AppError> {
     }
 
     if any_visible {
+        set_stickers_user_hidden(app, true);
         hide_all_stickers(app)?;
-    } else if any_exists {
-        let _ = app.emit(STICKER_SYNC_VISIBILITY_EVENT, ());
     } else {
-        spawn_stickers(app)?;
+        set_stickers_user_hidden(app, false);
+        if any_exists {
+            let _ = app.emit(STICKER_SYNC_VISIBILITY_EVENT, ());
+        } else {
+            spawn_stickers(app)?;
+        }
     }
 
     Ok(())
@@ -450,6 +735,10 @@ pub fn show_sticker_overlay(window: &tauri::WebviewWindow) -> Result<(), AppErro
         return Err(AppError::Validation(
             "show_sticker_window is only valid for sticker windows".into(),
         ));
+    }
+    if !may_show_stickers(window.app_handle()) {
+        // Пользователь скрыл стикеры хоткеем/треем — не возвращаем их сами.
+        return Ok(());
     }
 
     #[cfg(target_os = "macos")]
@@ -499,21 +788,29 @@ fn resolve_sticker_card(
     db: &Arc<DbPool>,
     roster: &Mutex<StickerRoster>,
     slot: usize,
-    filters: StudyQueueFilters,
     dismiss_id: Option<i64>,
 ) -> Result<Option<VocabularyEntryDto>, AppError> {
+    let conn = db.get()?;
+    let settings = SettingsRepo::get(&conn)?;
+    let language_id =
+        crate::db::repos::lexeme::LexemeRepo::language_id_by_code(&conn, &settings.primary_language)?;
+    let filters = sticker_queue_filters(&settings.sticker_sources, language_id);
     let key = filter_fingerprint(&filters);
-    let queue = load_sticker_queue(db, filters)?;
-    let ids: Vec<i64> = queue.iter().map(|entry| entry.id).collect();
+    let ids = QueueBuilder::build_queue_ids(&conn, &filters)?;
     let assigned = {
+        let now = chrono::Utc::now().timestamp();
         let mut roster = lock_roster(roster)?;
         roster.ensure_filter(key);
         match dismiss_id {
-            Some(entry_id) => roster.dismiss(slot, entry_id, &ids),
-            None => roster.card_for_slot(slot, &ids),
+            Some(entry_id) => roster.dismiss(slot, entry_id, &ids, now),
+            None => roster.card_for_slot(slot, &ids, now),
         }
     };
-    let entry = take_entry(queue, assigned);
+    // Полная запись нужна только для карточки этого слота.
+    let entry = assigned
+        .map(|id| crate::commands::vocabulary::get_vocabulary_entry_by_id(&conn, id))
+        .transpose()?;
+    drop(conn);
     if let Some(ref entry) = entry {
         request_missing_translation(app, db, entry);
     }
@@ -551,34 +848,40 @@ pub fn toggle_stickers(app: AppHandle) -> Result<(), AppError> {
 
 #[tauri::command]
 pub async fn get_sticker_card(
-    filters: StudyQueueFilters,
     window: WebviewWindow,
     db: State<'_, Arc<DbPool>>,
     roster: State<'_, Arc<Mutex<StickerRoster>>>,
 ) -> Result<Option<VocabularyEntryDto>, AppError> {
     let slot = slot_from_window(&window)?;
     let app = window.app_handle().clone();
-    resolve_sticker_card(&app, db.inner(), roster.inner(), slot, filters, None)
+    let db = db.inner().clone();
+    let roster = roster.inner().clone();
+    run_blocking(move || resolve_sticker_card(&app, &db, &roster, slot, None)).await
 }
 
 #[tauri::command]
 pub async fn dismiss_sticker_card(
     entry_id: i64,
-    filters: StudyQueueFilters,
     window: WebviewWindow,
     db: State<'_, Arc<DbPool>>,
     roster: State<'_, Arc<Mutex<StickerRoster>>>,
 ) -> Result<Option<VocabularyEntryDto>, AppError> {
     let slot = slot_from_window(&window)?;
     let app = window.app_handle().clone();
-    resolve_sticker_card(
-        &app,
-        db.inner(),
-        roster.inner(),
-        slot,
-        filters,
-        Some(entry_id),
-    )
+    let db = db.inner().clone();
+    let roster = roster.inner().clone();
+    run_blocking(move || resolve_sticker_card(&app, &db, &roster, slot, Some(entry_id))).await
+}
+
+/// rusqlite блокирует поток: не занимаем им воркеры async-рантайма.
+async fn run_blocking<T, F>(task: F) -> Result<T, AppError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|e| AppError::Io(format!("Sticker task failed: {e}")))?
 }
 
 #[tauri::command]
@@ -618,6 +921,119 @@ fn apply_sticker_pin(window: &tauri::WebviewWindow, pinned: bool) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const NOW: i64 = 1_700_000_000;
+
+    fn rect(x: f64, y: f64, width: f64, height: f64) -> LogicalBounds {
+        LogicalBounds {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    fn sources(tokens: &[&str]) -> Vec<String> {
+        tokens.iter().map(|token| token.to_string()).collect()
+    }
+
+    #[test]
+    fn sticker_filters_without_restriction_take_every_word() {
+        for tokens in [&["all"][..], &[], &["all", "c:3"]] {
+            let filters = sticker_queue_filters(&sources(tokens), 2);
+            assert_eq!(filters.include_mine, None, "{tokens:?}");
+            assert!(filters.collection_ids.is_empty(), "{tokens:?}");
+            assert_eq!(filters.language_id, 2);
+            assert_eq!(filters.limit, STICKER_QUEUE_LIMIT);
+            assert!(filters.include_new && filters.include_mature_refresh);
+        }
+    }
+
+    #[test]
+    fn sticker_filters_restrict_to_selected_sources() {
+        let filters = sticker_queue_filters(&sources(&["mine", "c:3", "c:12"]), 1);
+        assert_eq!(filters.include_mine, Some(true));
+        assert_eq!(filters.collection_ids, vec![3, 12]);
+
+        let filters = sticker_queue_filters(&sources(&["c:7", "c:", "c:x", "junk"]), 1);
+        assert_eq!(filters.include_mine, Some(false));
+        assert_eq!(filters.collection_ids, vec![7]);
+    }
+
+    #[test]
+    fn sticker_filter_fingerprint_follows_settings_not_windows() {
+        let en = filter_fingerprint(&sticker_queue_filters(&sources(&["all"]), 1));
+        let en_again = filter_fingerprint(&sticker_queue_filters(&sources(&["all"]), 1));
+        let ru = filter_fingerprint(&sticker_queue_filters(&sources(&["all"]), 2));
+        assert_eq!(en, en_again);
+        assert_ne!(en, ru);
+    }
+
+    #[test]
+    fn user_hidden_stickers_cannot_be_shown_until_revealed() {
+        let windows = StickerWindows::default();
+        assert!(windows.may_show());
+        windows.set_user_hidden(true);
+        assert!(!windows.may_show());
+        windows.set_user_hidden(false);
+        assert!(windows.may_show());
+    }
+
+    #[test]
+    fn closed_window_rect_is_remembered_per_slot() {
+        let windows = StickerWindows::default();
+        assert_eq!(windows.last_rect(1), None);
+        windows.remember_rect(1, rect(3000.0, 200.0, 760.0, 300.0));
+        assert_eq!(windows.last_rect(1), Some(rect(3000.0, 200.0, 760.0, 300.0)));
+        assert_eq!(windows.last_rect(0), None);
+        windows.remember_rect(MAX_STICKER_SLOTS, rect(0.0, 0.0, 1.0, 1.0));
+    }
+
+    #[test]
+    fn window_rects_round_trip_through_db_rows() {
+        let windows = StickerWindows::default();
+        windows.remember_rect(2, rect(-1200.4, 40.6, 760.0, 300.0));
+        let rows = windows.rect_rows();
+        assert_eq!(
+            rows,
+            vec![StickerWindowRect {
+                slot: 2,
+                x: -1200,
+                y: 41,
+                width: 760,
+                height: 300,
+            }]
+        );
+
+        let restored = StickerWindows::default();
+        restored.restore_rows(&rows);
+        assert_eq!(restored.last_rect(2), Some(rect(-1200.0, 41.0, 760.0, 300.0)));
+        assert_eq!(restored.last_rect(0), None);
+    }
+
+    #[test]
+    fn restore_skips_rows_for_unknown_slots() {
+        let windows = StickerWindows::default();
+        let row = |slot| StickerWindowRect {
+            slot,
+            x: 1,
+            y: 2,
+            width: 3,
+            height: 4,
+        };
+        windows.restore_rows(&[row(-1), row(MAX_STICKER_SLOTS as i64), row(0)]);
+        assert_eq!(windows.rect_rows(), vec![row(0)]);
+    }
+
+    #[test]
+    fn rect_on_screens_uses_the_window_center() {
+        let screens = [rect(0.0, 0.0, 1920.0, 1080.0), rect(1920.0, 0.0, 2560.0, 1440.0)];
+        assert!(rect_on_screens(&rect(3000.0, 100.0, 760.0, 300.0), &screens));
+        // Частично за левым краем, но центр на экране — окно оставляем.
+        assert!(rect_on_screens(&rect(-200.0, 100.0, 760.0, 300.0), &screens));
+        // Второй монитор отключили — окно целиком за экранами.
+        assert!(!rect_on_screens(&rect(3000.0, 100.0, 760.0, 300.0), &screens[..1]));
+    }
 
     #[test]
     fn parse_hhmm_accepts_valid_times() {
@@ -705,62 +1121,100 @@ mod tests {
     fn roster_gives_each_slot_its_own_card() {
         let mut roster = StickerRoster::default();
         let queue = [10, 20, 30, 40];
-        assert_eq!(roster.card_for_slot(0, &queue), Some(10));
-        assert_eq!(roster.card_for_slot(1, &queue), Some(20));
-        assert_eq!(roster.card_for_slot(2, &queue), Some(30));
+        assert_eq!(roster.card_for_slot(0, &queue, NOW), Some(10));
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), Some(20));
+        assert_eq!(roster.card_for_slot(2, &queue, NOW), Some(30));
     }
 
     #[test]
     fn roster_keeps_a_slot_on_the_same_card() {
         let mut roster = StickerRoster::default();
         let queue = [10, 20, 30];
-        assert_eq!(roster.card_for_slot(1, &queue), Some(20));
-        assert_eq!(roster.card_for_slot(1, &queue), Some(20));
-        assert_eq!(roster.card_for_slot(0, &queue), Some(10));
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), Some(20));
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), Some(20));
+        assert_eq!(roster.card_for_slot(0, &queue, NOW), Some(10));
     }
 
     #[test]
     fn dismiss_does_not_move_the_word_onto_another_slot() {
         let mut roster = StickerRoster::default();
         let queue = [10, 20, 30, 40];
-        assert_eq!(roster.card_for_slot(0, &queue), Some(10));
-        assert_eq!(roster.card_for_slot(1, &queue), Some(20));
+        assert_eq!(roster.card_for_slot(0, &queue, NOW), Some(10));
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), Some(20));
 
-        assert_eq!(roster.dismiss(0, 10, &queue), Some(30));
-        assert_eq!(roster.card_for_slot(1, &queue), Some(20));
-        assert_eq!(roster.card_for_slot(0, &queue), Some(30));
+        assert_eq!(roster.dismiss(0, 10, &queue, NOW), Some(30));
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), Some(20));
+        assert_eq!(roster.card_for_slot(0, &queue, NOW), Some(30));
     }
 
     #[test]
     fn dismissed_word_is_never_reassigned_to_a_peer() {
         let mut roster = StickerRoster::default();
         let queue = [10, 20, 30];
-        assert_eq!(roster.card_for_slot(0, &queue), Some(10));
-        assert_eq!(roster.card_for_slot(1, &queue), Some(20));
+        assert_eq!(roster.card_for_slot(0, &queue, NOW), Some(10));
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), Some(20));
 
-        assert_eq!(roster.dismiss(1, 20, &queue), Some(30));
-        assert_eq!(roster.card_for_slot(0, &queue), Some(10));
-        assert_eq!(roster.dismiss(0, 10, &queue), None);
-        assert_eq!(roster.card_for_slot(1, &queue), Some(30));
+        assert_eq!(roster.dismiss(1, 20, &queue, NOW), Some(30));
+        assert_eq!(roster.card_for_slot(0, &queue, NOW), Some(10));
+        assert_eq!(roster.dismiss(0, 10, &queue, NOW), None);
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), Some(30));
     }
 
     #[test]
     fn extra_slot_stays_empty_instead_of_stealing() {
         let mut roster = StickerRoster::default();
         let queue = [10];
-        assert_eq!(roster.card_for_slot(1, &queue), None);
-        assert_eq!(roster.card_for_slot(0, &queue), Some(10));
-        assert_eq!(roster.card_for_slot(1, &queue), None);
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), None);
+        assert_eq!(roster.card_for_slot(0, &queue, NOW), Some(10));
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), None);
+    }
+
+    #[test]
+    fn new_slot_takes_a_free_card_when_its_queue_position_is_taken() {
+        let mut roster = StickerRoster::default();
+        let queue = [10, 20, 30, 40];
+        assert_eq!(roster.card_for_slot(0, &queue, NOW), Some(10));
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), Some(20));
+        assert_eq!(roster.dismiss(0, 10, &queue, NOW), Some(30));
+
+        // Пользователь увеличил число стикеров: queue[2] уже занят слотом 0.
+        assert_eq!(roster.card_for_slot(2, &queue, NOW), Some(40));
+    }
+
+    #[test]
+    fn dismissed_word_returns_after_cooldown() {
+        let mut roster = StickerRoster::default();
+        let queue = [10];
+        assert_eq!(roster.card_for_slot(0, &queue, NOW), Some(10));
+        assert_eq!(roster.dismiss(0, 10, &queue, NOW), None);
+
+        let almost = NOW + STICKER_DISMISS_COOLDOWN_SECS - 1;
+        assert_eq!(roster.card_for_slot(0, &queue, almost), None);
+        let expired = NOW + STICKER_DISMISS_COOLDOWN_SECS;
+        assert_eq!(roster.card_for_slot(0, &queue, expired), Some(10));
+    }
+
+    #[test]
+    fn first_card_fallback_does_not_take_a_waiting_slot_position() {
+        let mut roster = StickerRoster::default();
+        assert_eq!(roster.card_for_slot(0, &[10, 30, 20, 40], NOW), Some(10));
+        assert_eq!(roster.dismiss(0, 10, &[10, 30, 20, 40], NOW), Some(30));
+
+        // Порядок очереди сменился: queue[2] = 30 занят слотом 0, а позиция
+        // queue[1] = 20 ждёт слот 1, который ещё не запрашивал карточку.
+        let queue = [10, 20, 30, 40];
+        assert_eq!(roster.card_for_slot(2, &queue, NOW), Some(40));
+        assert_eq!(roster.card_for_slot(1, &queue, NOW), Some(20));
     }
 
     #[test]
     fn filter_change_reassigns_from_the_new_queue() {
         let mut roster = StickerRoster::default();
         roster.ensure_filter("en".into());
-        assert_eq!(roster.card_for_slot(0, &[10, 20]), Some(10));
+        assert_eq!(roster.card_for_slot(0, &[10, 20], NOW), Some(10));
         roster.ensure_filter("ru".into());
-        assert_eq!(roster.card_for_slot(0, &[50, 60]), Some(50));
-        assert_eq!(roster.card_for_slot(1, &[50, 60]), Some(60));
+        assert_eq!(roster.card_for_slot(0, &[50, 60], NOW), Some(50));
+        assert_eq!(roster.card_for_slot(1, &[50, 60], NOW), Some(60));
     }
 }
 

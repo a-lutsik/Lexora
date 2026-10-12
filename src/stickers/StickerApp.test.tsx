@@ -51,6 +51,22 @@ function makeEntry(overrides: Partial<VocabularyEntryDto> = {}): VocabularyEntry
   };
 }
 
+// Зрелое слово, подмешанное очередью «для свежести»: срок повторения через 10 дней.
+function makeNotDueMatureEntry(): VocabularyEntryDto {
+  return makeEntry({
+    reviewState: {
+      id: 40,
+      userVocabularyId: 10,
+      status: 'mature',
+      ease: 2.5,
+      interval: 30,
+      dueAt: Math.floor(Date.now() / 1000) + 10 * 86_400,
+      lapses: 0,
+      repetitions: 6,
+    },
+  });
+}
+
 beforeEach(() => {
   invokeMock.mockResolvedValue(null);
 });
@@ -73,12 +89,8 @@ describe('StickerApp', () => {
     expect(screen.queryByText('Всё повторено 🎉')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Close sticker' })).not.toBeInTheDocument();
     expect(invokeMock).not.toHaveBeenCalledWith('show_sticker_window');
-    expect(invokeMock).toHaveBeenCalledWith(
-      'get_sticker_card',
-      expect.objectContaining({
-        filters: expect.objectContaining({ languageId: 1, limit: 50 }),
-      })
-    );
+    // Фильтр (язык, источники) бэкенд строит из настроек — окно его не передаёт.
+    expect(invokeMock).toHaveBeenCalledWith('get_sticker_card');
   });
 
   it('shows the window only when this sticker slot has a card', async () => {
@@ -140,7 +152,7 @@ describe('StickerApp', () => {
     expect(screen.queryByText('apple')).not.toBeInTheDocument();
   });
 
-  it('hides the translation via the eye button', async () => {
+  it('keeps the translation hidden until the eye button reveals it', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) =>
       Promise.resolve(cmd === 'get_sticker_card' ? makeEntry() : null),
@@ -148,13 +160,20 @@ describe('StickerApp', () => {
     renderWithQueryClient(<StickerApp />);
 
     expect(await screen.findByText('apple')).toBeInTheDocument();
-    expect(screen.getByText('яблоко')).toBeInTheDocument();
+    expect(screen.queryByText('яблоко')).not.toBeInTheDocument();
+    const eye = screen.getByRole('button', { name: 'Toggle translation visibility' });
+    expect(eye).toHaveAttribute('aria-pressed', 'false');
 
-    await user.click(screen.getByRole('button', { name: 'Toggle translation visibility' }));
+    await user.click(eye);
+    expect(screen.getByText('яблоко')).toBeInTheDocument();
+    expect(eye).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(eye);
     expect(screen.queryByText('яблоко')).not.toBeInTheDocument();
   });
 
   it('picks up the gloss once a backfilled translation arrives', async () => {
+    const user = userEvent.setup();
     const handlers = new Map<string, (event: { payload: unknown }) => void>();
     listenMock.mockImplementation(((event: string, cb: (event: { payload: unknown }) => void) => {
       handlers.set(event, cb);
@@ -169,6 +188,7 @@ describe('StickerApp', () => {
     renderWithQueryClient(<StickerApp />);
 
     expect(await screen.findByText('apple')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Toggle translation visibility' }));
     expect(screen.queryByText('яблоко')).not.toBeInTheDocument();
 
     translated = true;
@@ -235,7 +255,9 @@ describe('StickerApp', () => {
     );
     renderWithQueryClient(<StickerApp />);
 
-    expect(await screen.findByText('яблоко')).toBeInTheDocument();
+    expect(await screen.findByText('apple')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Toggle translation visibility' }));
+    expect(screen.getByText('яблоко')).toBeInTheDocument();
     expect(screen.queryByText(/An apple a day/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Show example in context' }));
@@ -260,7 +282,7 @@ describe('StickerApp', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('"Помню" evaluates the answer with the right arguments', async () => {
+  it('"Помню" submits a self-assessed grade 3 without AI evaluation', async () => {
     const user = userEvent.setup();
     const entry = makeEntry();
     invokeMock.mockImplementation((cmd: string) =>
@@ -272,19 +294,19 @@ describe('StickerApp', () => {
     await user.click(screen.getByRole('button', { name: /Помню/ }));
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('evaluate_answer', {
+      expect(invokeMock).toHaveBeenCalledWith('submit_review', {
         input: {
           reviewStateId: 40,
           mode: 'flashcard',
-          userAnswer: 'apple',
-          targetText: 'apple',
+          grade: 3,
           latencyMs: expect.any(Number),
         },
       });
     });
+    expect(invokeMock).not.toHaveBeenCalledWith('evaluate_answer', expect.anything());
   });
 
-  it('"Не помню" sends an empty userAnswer', async () => {
+  it('"Не помню" submits grade 0 without AI evaluation', async () => {
     const user = userEvent.setup();
     const entry = makeEntry();
     invokeMock.mockImplementation((cmd: string) =>
@@ -296,13 +318,131 @@ describe('StickerApp', () => {
     await user.click(screen.getByRole('button', { name: /Не помню/ }));
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('evaluate_answer', {
+      expect(invokeMock).toHaveBeenCalledWith('submit_review', {
         input: expect.objectContaining({
           reviewStateId: 40,
-          userAnswer: '',
+          grade: 0,
         }),
       });
     });
+    expect(invokeMock).not.toHaveBeenCalledWith('evaluate_answer', expect.anything());
+  });
+
+  it('"Помню" on a mature word that is not due yet only dismisses it', async () => {
+    const user = userEvent.setup();
+    const notDue = makeNotDueMatureEntry();
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'get_sticker_card' ? notDue : null),
+    );
+    renderWithQueryClient(<StickerApp />);
+
+    expect(await screen.findByText('apple')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Помню/ }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('dismiss_sticker_card', { entryId: 10 });
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('submit_review', expect.anything());
+  });
+
+  it('"Не помню" on a mature word that is not due yet records a lapse', async () => {
+    const user = userEvent.setup();
+    const notDue = makeNotDueMatureEntry();
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'get_sticker_card' ? notDue : null),
+    );
+    renderWithQueryClient(<StickerApp />);
+
+    expect(await screen.findByText('apple')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Не помню/ }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('submit_review', {
+        input: expect.objectContaining({ reviewStateId: 40, grade: 0 }),
+      });
+    });
+  });
+
+  it('re-reads the card when the sticker filter changes in settings', async () => {
+    const handlers = new Map<string, (event: { payload: unknown }) => void>();
+    listenMock.mockImplementation(((event: string, cb: (event: { payload: unknown }) => void) => {
+      handlers.set(event, cb);
+      return Promise.resolve(() => undefined);
+    }) as typeof listenMock);
+
+    let language = 'en';
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd !== 'get_sticker_card') return Promise.resolve(null);
+      return Promise.resolve(
+        language === 'en'
+          ? makeEntry()
+          : makeEntry({
+              id: 11,
+              lexeme: { ...makeEntry().lexeme, text: 'Apfel', normalizedText: 'apfel' },
+            }),
+      );
+    });
+    renderWithQueryClient(<StickerApp />);
+
+    expect(await screen.findByText('apple')).toBeInTheDocument();
+
+    language = 'de';
+    await act(async () => {
+      handlers.get('stickers://filter-changed')?.({ payload: null });
+    });
+
+    expect(await screen.findByText('Apfel')).toBeInTheDocument();
+  });
+
+  it('lists filter collections for the language from settings', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sticker_card') return Promise.resolve(makeEntry());
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ primaryLanguage: 'de', stickerSources: ['all'] });
+      }
+      if (cmd === 'list_languages') {
+        return Promise.resolve([
+          { id: 1, code: 'en', name: 'English', nativeName: 'English', hasTts: true, hasAsr: true },
+          { id: 3, code: 'de', name: 'German', nativeName: 'Deutsch', hasTts: true, hasAsr: true },
+        ]);
+      }
+      return Promise.resolve(null);
+    });
+    renderWithQueryClient(<StickerApp />);
+
+    expect(await screen.findByText('apple')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('list_collections', { languageId: 3 });
+    });
+  });
+
+  it('keeps the card and reports an error when the grade fails to save', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sticker_card') return Promise.resolve(makeEntry());
+      if (cmd === 'submit_review') return Promise.reject(new Error('db locked'));
+      return Promise.resolve(null);
+    });
+    renderWithQueryClient(<StickerApp />);
+
+    expect(await screen.findByText('apple')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Помню/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Оценка не сохранена');
+    expect(screen.getByText('apple')).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith('dismiss_sticker_card', expect.anything());
+    expect(screen.getByRole('button', { name: /Помню/ })).toBeEnabled();
+  });
+
+  it('announces the word politely and labels "Позже" in Russian like the other actions', async () => {
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'get_sticker_card' ? makeEntry() : null),
+    );
+    renderWithQueryClient(<StickerApp />);
+
+    const word = await screen.findByText('apple');
+    expect(word.closest('[aria-live="polite"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Позже' })).toBeInTheDocument();
   });
 
   it('pin and close buttons talk to the current window', async () => {

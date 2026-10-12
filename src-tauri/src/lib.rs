@@ -66,6 +66,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .on_window_event(|window, event| {
             window_layout::on_window_event(window, event);
+            stickers::on_window_event(window, event);
         })
         // ── Setup ─────────────────────────────────────────
         .setup(|app| {
@@ -148,6 +149,8 @@ pub fn run() {
             app.manage(pool.clone());
             app.manage(providers::realtime::RealtimeSessions::default());
             app.manage(stickers::new_roster_state());
+            app.manage(stickers::new_windows_state());
+            stickers::restore_window_rects(app.handle());
             crate::providers::media::prefetch::spawn_prefetch_stock_images(
                 app.handle().clone(),
                 pool,
@@ -269,6 +272,7 @@ pub fn run() {
             // Study
             commands::study::get_study_queue,
             commands::study::evaluate_answer,
+            commands::study::submit_review,
             commands::study::get_review_history,
             commands::study::get_due_count,
             // Collections

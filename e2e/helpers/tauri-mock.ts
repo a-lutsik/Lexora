@@ -272,6 +272,7 @@ export const DEFAULT_IPC_RESPONSES: Record<string, unknown> = {
   get_sticker_card: MOCK_VOCABULARY_ENTRY,
   dismiss_sticker_card: null,
   evaluate_answer: { isCorrect: true, grade: 3, errorType: null, correctAnswer: 'яблоко', explanation: null, shortRule: null },
+  submit_review: { dueAt: Math.floor(Date.now() / 1000) + 86_400 },
   get_review_history: [],
   get_due_count: 5,
 

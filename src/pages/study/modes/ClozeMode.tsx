@@ -10,6 +10,7 @@ import { PosBadge } from '../../../components/ui/Badge';
 import { SafeHtml } from '../../../components/ui/SafeHtml';
 import { useEvaluateAnswer } from '../../../hooks/useStudyQueue';
 import { useStudyContinueHotkey } from '../../../hooks/useStudyContinueHotkey';
+import { escapeRegExp } from '../../../lib/utils';
 import type { EvaluationResult, StudyGrade, VocabularyEntryDto } from '../../../lib/types';
 
 type ClozeModeProps = {
@@ -17,10 +18,6 @@ type ClozeModeProps = {
   onComplete: (grade: StudyGrade, latencyMs: number) => void;
   onSkip: () => void;
 };
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 type GappedSentence = {
   before: string;

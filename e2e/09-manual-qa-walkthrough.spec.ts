@@ -95,7 +95,7 @@ test.describe('Manual QA walkthrough', () => {
     await expect(page.locator('input#pron-target')).toHaveValue('apple');
 
     await page.getByRole('link', { name: 'Vocabulary' }).click();
-    await page.getByRole('button', { name: 'Start study session' }).click();
+    await page.getByRole('button', { name: 'Study Now' }).click();
     await expect(page.getByRole('heading', { name: 'Study Session' })).toBeVisible();
 
     await page.getByRole('link', { name: 'Vocabulary' }).click();
@@ -141,12 +141,14 @@ test.describe('Manual QA walkthrough', () => {
         'aria-checked',
         'true',
       );
-      await page.getByRole('button', { name: 'Start study session' }).click();
+      await page.getByRole('button', { name: /^Start Session/ }).click();
 
       if (mode === 'Flashcards') {
         await expect(page.locator('.study-card-word')).toHaveText('apple', { timeout: 8000 });
         await page.getByRole('button', { name: 'Copy word' }).click();
-        await page.getByRole('button', { name: 'яблоко' }).click();
+        // A single-card queue has no honest distractors, so the card flips.
+        await page.getByRole('button', { name: 'Show translation' }).click();
+        await expect(page.getByText('яблоко').first()).toBeVisible();
         await expect(page.getByRole('group', { name: 'Rate your recall' })).toBeVisible();
         await page.getByRole('button', { name: /Good/i }).click();
       } else if (mode === 'Speaking') {
@@ -342,8 +344,10 @@ test.describe('Manual QA walkthrough', () => {
     });
     await page.waitForSelector('.collections-page', { timeout: 10_000 });
 
-    await page.getByRole('button', { name: 'Enable in SRS' }).first().click();
+    // System packs start empty: they are loaded first, then enabled for SRS.
+    await page.getByRole('button', { name: 'Load Top 5000 Words into database' }).click();
     await expect(page.getByRole('heading', { name: 'Top 5000 Words' })).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Create new collection' }).click();
     const dialog = page.getByRole('dialog', { name: 'New Collection' });
@@ -430,4 +434,21 @@ test.describe('Manual QA walkthrough', () => {
     await page.reload();
     await page.getByRole('button', { name: 'Close sticker' }).click();
   });
+
+  // Grading dismisses the card (the sticker hides itself), so each answer
+  // needs a fresh card — one test per button.
+  for (const [label, button] of [
+    ['remember', /Помню/],
+    ['forgot', /Не помню/],
+  ] as const) {
+    test(`Desktop sticker: "${label}" grades the card and dismisses it`, async ({ page }) => {
+      await openApp(page, '/sticker.html');
+      const answer = page.getByRole('button', { name: button }).first();
+      await expect(answer).toBeVisible({ timeout: 8000 });
+      await answer.click();
+      await expect(page.getByRole('button', { name: /Помню|Не помню/ })).toHaveCount(0, {
+        timeout: 5000,
+      });
+    });
+  }
 });

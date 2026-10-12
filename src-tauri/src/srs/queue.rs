@@ -56,6 +56,25 @@ impl QueueBuilder {
         conn: &Connection,
         filters: &StudyQueueFilters,
     ) -> Result<Vec<VocabularyEntryDto>, AppError> {
+        let ids = Self::build_queue_ids(conn, filters)?;
+
+        // Fetch full entries for these IDs
+        let mut entries = Vec::new();
+        for id in ids {
+            if let Ok(entry) = crate::commands::vocabulary::get_vocabulary_entry_by_id(conn, id) {
+                entries.push(entry);
+            }
+        }
+
+        Ok(entries)
+    }
+
+    /// Порядок очереди без загрузки карточек: стикерам нужна одна карточка
+    /// из очереди, а не все `limit` полных записей.
+    pub fn build_queue_ids(
+        conn: &Connection,
+        filters: &StudyQueueFilters,
+    ) -> Result<Vec<i64>, AppError> {
         let now_sec = chrono::Utc::now().timestamp();
         let limit = filters.limit.clamp(5, 100);
         let (source_sql, source_params) =
@@ -159,15 +178,7 @@ impl QueueBuilder {
             }
         }
 
-        // Fetch full entries for these IDs
-        let mut entries = Vec::new();
-        for id in all_ids {
-            if let Ok(entry) = crate::commands::vocabulary::get_vocabulary_entry_by_id(conn, id) {
-                entries.push(entry);
-            }
-        }
-
-        Ok(entries)
+        Ok(all_ids)
     }
 }
 

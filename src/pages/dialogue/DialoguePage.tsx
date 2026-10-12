@@ -21,7 +21,13 @@ import { QUERY_KEYS } from '../../lib/constants';
 import { ipc } from '../../lib/ipc';
 import type { RealtimeTurn } from '../../lib/realtimeTranscript';
 import { formatIpcError } from '../../lib/utils';
-import type { DialogueScenarioDto, DialogueSessionDto, DialogueTurnDto } from '../../lib/types';
+import type {
+  DialogueScenarioDto,
+  DialogueSessionDto,
+  DialogueTurnDto,
+  StartDialogueSessionInput,
+} from '../../lib/types';
+import { Button } from '../../components/ui/Button';
 import { IconMic } from '../../components/ui/LuminousIcons';
 import { DialogueBarEqualizer } from './DialogueBarEqualizer';
 import { LiveConversationConsole } from './LiveConversationConsole';
@@ -114,6 +120,7 @@ export default function DialoguePage() {
   const spaceDownAt = useRef<number | null>(null);
   const spaceHoldTimer = useRef<number | null>(null);
   const spaceIsHold = useRef(false);
+  const autoStartAttempted = useRef(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -122,7 +129,24 @@ export default function DialoguePage() {
   const sendMutation = useSendDialogueTurn();
   const endMutation = useEndDialogueSession();
 
-  const isBusy = startMutation.isPending || sendMutation.isPending || endMutation.isPending;
+  // Tracked locally instead of via `startMutation.isPending`: under React
+  // StrictMode's simulated unmount/remount the mutation observer is detached
+  // from the in-flight mutation, so `isPending` never flips back to false.
+  const [isStarting, setIsStarting] = useState(false);
+  const { mutateAsync: mutateStartSession } = startMutation;
+  const startSession = useCallback(
+    async (input: StartDialogueSessionInput): Promise<DialogueSessionDto> => {
+      setIsStarting(true);
+      try {
+        return await mutateStartSession(input);
+      } finally {
+        setIsStarting(false);
+      }
+    },
+    [mutateStartSession],
+  );
+
+  const isBusy = isStarting || sendMutation.isPending || endMutation.isPending;
 
   const recorder = useMicrophoneRecorder();
   const queryClient = useQueryClient();
@@ -161,23 +185,38 @@ export default function DialoguePage() {
       if (session && session.status === 'active' && session.scenarioSlug === slug) {
         return session;
       }
-      const next = await startMutation.mutateAsync({ scenarioSlug: slug, language });
+      const next = await startSession({ scenarioSlug: slug, language });
       setSession(next);
       setError(null);
       return next;
     },
-    [language, session, startMutation],
+    [language, session, startSession],
   );
 
-  // Auto-start Coffee Shop scenario when opening the dialogue tab.
-  useEffect(() => {
-    if (tab !== 'dialogue') return;
-    if (session) return;
-    if (startMutation.isPending) return;
+  const startDefaultScenario = useCallback(() => {
     void ensureSession(DEFAULT_SLUG).catch((err: unknown) => {
       setError(formatIpcError(err, 'Could not start dialogue. Check the AI provider in Settings.'));
     });
-  }, [ensureSession, session, startMutation.isPending, tab]);
+  }, [ensureSession]);
+
+  // Auto-start Coffee Shop scenario when opening the dialogue tab — one attempt
+  // per visit. Without the flag a failed start flipped the mutation state,
+  // which re-created `ensureSession` and re-fired this effect in a tight loop
+  // (thousands of IPC calls per second). Retrying is an explicit user action.
+  useEffect(() => {
+    if (tab !== 'dialogue') {
+      autoStartAttempted.current = false;
+      return;
+    }
+    if (session || autoStartAttempted.current) return;
+    autoStartAttempted.current = true;
+    startDefaultScenario();
+  }, [session, startDefaultScenario, tab]);
+
+  const handleRetryStart = useCallback(() => {
+    setError(null);
+    startDefaultScenario();
+  }, [startDefaultScenario]);
 
   useEffect(() => {
     const el = threadRef.current;
@@ -386,13 +425,13 @@ export default function DialoguePage() {
       if (session && session.status === 'active') {
         await endMutation.mutateAsync(session.id);
       }
-      const next = await startMutation.mutateAsync({ scenarioSlug: slug, language });
+      const next = await startSession({ scenarioSlug: slug, language });
       setSession(next);
       setError(null);
     } catch (err) {
       setError(formatIpcError(err, 'Could not restart this scenario. Try again.'));
     }
-  }, [clearPendingClip, endMutation, language, session, startMutation, stopLive]);
+  }, [clearPendingClip, endMutation, language, session, startSession, stopLive]);
 
   const handleEnd = useCallback(async () => {
     setMenuOpen(false);
@@ -415,7 +454,7 @@ export default function DialoguePage() {
         if (session && session.status === 'active') {
           await endMutation.mutateAsync(session.id);
         }
-        const next = await startMutation.mutateAsync({
+        const next = await startSession({
           scenarioId: scenario.id,
           language,
         });
@@ -426,7 +465,7 @@ export default function DialoguePage() {
         setError(formatIpcError(err, 'Could not start this scenario. Check the AI provider in Settings.'));
       }
     },
-    [clearPendingClip, endMutation, language, session, startMutation, stopLive],
+    [clearPendingClip, endMutation, language, session, startSession, stopLive],
   );
 
   const handlePlay = useCallback(
@@ -608,8 +647,11 @@ export default function DialoguePage() {
                     )}
                   </Fragment>
                 ))}
-                {!session && startMutation.isPending && (
+                {!session && isStarting && (
                   <p className="text-muted text-sm">Starting scenario…</p>
+                )}
+                {!session && !isStarting && error && (
+                  <Button onClick={handleRetryStart}>Try again</Button>
                 )}
               </div>
             </section>

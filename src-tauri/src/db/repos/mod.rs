@@ -7,6 +7,7 @@ pub mod model_route;
 pub mod pronunciation;
 pub mod review;
 pub mod settings;
+pub mod sticker_window;
 pub mod translation_hub;
 pub mod vocabulary;
 pub mod writing;

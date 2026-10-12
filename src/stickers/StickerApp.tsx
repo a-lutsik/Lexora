@@ -6,24 +6,27 @@
 // - Mature word state with emerald aurora glow
 // ============================================================
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEvaluateAnswer } from '../hooks/useStudyQueue';
+import { useSubmitReview } from '../hooks/useSubmitReview';
 import { useDismissStickerCard, useStickerCard } from '../hooks/useStickerCard';
 import { useSettings, useUpdateSettings } from '../hooks/useSettings';
 import { useCollections } from '../hooks/useCollections';
+import { resolveLanguageId, useLanguages } from '../hooks/useLanguages';
 import { useSettingsStore } from '../stores/settingsStore';
 import { AudioButton } from '../components/domain/AudioButton';
 import { StickerSourcePicker } from '../components/domain/StickerSourcePicker';
 import { ipc } from '../lib/ipc';
 import { APP_EVENTS, QUERY_KEYS } from '../lib/constants';
-import { DEFAULT_STICKER_SOURCES, stickerSourcesToQueueFilter } from '../lib/stickerSources';
-import type { StudyQueueFilters, TranslationBackfilledEvent } from '../lib/types';
+import { DEFAULT_STICKER_SOURCES } from '../lib/stickerSources';
+import type { TranslationBackfilledEvent } from '../lib/types';
+import { splitByTerm } from '../lib/utils';
 import {
-  STICKER_SOURCES_CHANGED_EVENT,
+  STICKER_FILTER_CHANGED_EVENT,
   STICKER_SYNC_VISIBILITY_EVENT,
+  isEarlyStickerReview,
 } from './stickerSlots';
 import './sticker.css';
 
@@ -73,17 +76,15 @@ function FilterIcon() {
 }
 
 function ExampleSentence({ sentence, word }: { sentence: string; word: string }) {
-  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const parts = sentence.split(new RegExp(`(${escaped})`, 'gi'));
   return (
     <span className="sticker-example">
-      {parts.map((part, index) =>
-        part.toLowerCase() === word.toLowerCase() ? (
+      {splitByTerm(sentence, word).map((segment, index) =>
+        segment.match ? (
           <span key={index} className="sticker-example-word">
-            {part}
+            {segment.text}
           </span>
         ) : (
-          <span key={index}>{part}</span>
+          <span key={index}>{segment.text}</span>
         ),
       )}
     </span>
@@ -93,30 +94,23 @@ function ExampleSentence({ sentence, word }: { sentence: string; word: string })
 export function StickerApp() {
   const queryClient = useQueryClient();
   const activeLanguageId = useSettingsStore((s) => s.activeLanguageId);
-  const { data: settings, isLoading: settingsLoading } = useSettings();
+  const { data: settings } = useSettings();
+  const { data: languages } = useLanguages();
   const updateSettings = useUpdateSettings();
-  const { data: collections = [] } = useCollections(activeLanguageId);
+  // Язык — из настроек (как у бэкенда): Zustand-стор окна стикера не видит
+  // смену языка в главном окне до перезагрузки.
+  const languageId = resolveLanguageId(languages, settings?.primaryLanguage) ?? activeLanguageId;
+  const { data: collections = [] } = useCollections(languageId);
 
   const stickerSources = settings?.stickerSources ?? DEFAULT_STICKER_SOURCES;
-  const filters = useMemo<StudyQueueFilters>(
-    () => ({
-      languageId: activeLanguageId,
-      sources: [],
-      limit: 50,
-      includeNew: true,
-      includeMatureRefresh: true,
-      ...stickerSourcesToQueueFilter(stickerSources),
-    }),
-    [activeLanguageId, stickerSources],
-  );
-  const { data: entry, isLoading } = useStickerCard(filters, {
-    enabled: !settingsLoading,
-  });
-  const evaluateMutation = useEvaluateAnswer();
+  const { data: entry, isLoading } = useStickerCard();
+  const submitMutation = useSubmitReview();
   const dismissMutation = useDismissStickerCard();
-  const actionPending = evaluateMutation.isPending || dismissMutation.isPending;
+  const actionPending = submitMutation.isPending || dismissMutation.isPending;
 
-  const [revealed, setRevealed] = useState(true);
+  // Перевод скрыт до явного reveal: иначе «Помню» оценивает узнавание
+  // подсказки, а не вспоминание, и SRS завышает интервалы.
+  const [revealed, setRevealed] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [showContext, setShowContext] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
@@ -129,7 +123,7 @@ export function StickerApp() {
   const phonetic = entry?.lexeme.phonetic ?? null;
   const example = entry?.examples[0] ?? null;
   const contextSentence = example?.sentence ?? entry?.translations[0]?.sense ?? null;
-  const queueReady = !isLoading && !settingsLoading;
+  const queueReady = !isLoading;
 
   useEffect(() => {
     void ipc.window.setStickerPinned(false);
@@ -146,7 +140,7 @@ export function StickerApp() {
   }, []);
 
   useEffect(() => {
-    const unlistenPromise = listen(STICKER_SOURCES_CHANGED_EVENT, () => {
+    const unlistenPromise = listen(STICKER_FILTER_CHANGED_EVENT, () => {
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.SETTINGS] });
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.STICKER_CARD] });
     });
@@ -171,7 +165,7 @@ export function StickerApp() {
     const nextId = entry?.id ?? null;
     if (nextId !== lastEntryIdRef.current) {
       lastEntryIdRef.current = nextId;
-      setRevealed(true);
+      setRevealed(false);
       setShowContext(false);
       cardShownAtRef.current = Date.now();
     }
@@ -206,7 +200,7 @@ export function StickerApp() {
     setUserHidden(true);
     void getCurrentWindow().hide();
     if (entry) {
-      dismissMutation.mutate({ entryId: entry.id, filters });
+      dismissMutation.mutate(entry.id);
     }
   };
 
@@ -221,25 +215,38 @@ export function StickerApp() {
 
   const dismissCurrent = () => {
     if (!entry || dismissMutation.isPending) return;
-    dismissMutation.mutate({ entryId: entry.id, filters });
+    dismissMutation.mutate(entry.id);
   };
 
   const handleLater = () => {
     dismissCurrent();
   };
 
-  // remembered=true → grade 3 (good), remembered=false → grade 0 (blackout)
+  // Самооценка без AI: remembered=true → grade 3 (good), false → grade 0 (blackout).
+  // Карточка уходит только после сохранения оценки — иначе ошибка теряется молча.
+  // Зрелое слово, подмешанное «для свежести», ещё не к повторению: «Помню»
+  // не продлевает интервал досрочно (только убирает карточку), а «Не помню» —
+  // настоящий провал и записывается как lapse.
   const handleGrade = (remembered: boolean) => {
     if (!entry?.reviewState || actionPending) return;
-    evaluateMutation.mutate({
-      reviewStateId: entry.reviewState.id,
-      mode: 'flashcard',
-      userAnswer: remembered ? entry.lexeme.text : '',
-      targetText: entry.lexeme.text,
-      latencyMs: Date.now() - cardShownAtRef.current,
-    });
-    dismissCurrent();
+    if (remembered && isEarlyStickerReview(entry.reviewState, Date.now())) {
+      dismissCurrent();
+      return;
+    }
+    submitMutation.mutate(
+      {
+        reviewStateId: entry.reviewState.id,
+        mode: 'flashcard',
+        grade: remembered ? 3 : 0,
+        latencyMs: Date.now() - cardShownAtRef.current,
+      },
+      { onSuccess: dismissCurrent },
+    );
   };
+
+  const gradeFailed =
+    submitMutation.isError &&
+    submitMutation.variables?.reviewStateId === entry?.reviewState?.id;
 
   const handleSourcesChange = (next: string[]) => {
     if (!settings) return;
@@ -284,7 +291,7 @@ export function StickerApp() {
 
         <div className="sticker-top-row" data-tauri-drag-region>
           <div className="sticker-word-block" data-tauri-drag-region>
-            <div className="sticker-word-wrap">
+            <div className="sticker-word-wrap" aria-live="polite">
               <span className="sticker-word">{entry.lexeme.text}</span>
             </div>
             {phonetic && (
@@ -299,6 +306,7 @@ export function StickerApp() {
               className="sticker-icon-btn"
               onClick={handleToggleReveal}
               aria-label="Toggle translation visibility"
+              aria-pressed={revealed}
             >
               <EyeIcon />
             </button>
@@ -348,7 +356,11 @@ export function StickerApp() {
         </div>
 
         <div className={`sticker-sub-row${showContext ? ' sticker-sub-row--context' : ''}`}>
-          {showContext && contextSentence ? (
+          {gradeFailed ? (
+            <span className="sticker-error" role="alert">
+              Оценка не сохранена — попробуйте ещё раз
+            </span>
+          ) : showContext && contextSentence ? (
             <ExampleSentence sentence={contextSentence} word={entry.lexeme.text} />
           ) : revealed && translation ? (
             <span className="sticker-translation">{translation}</span>
@@ -386,7 +398,7 @@ export function StickerApp() {
             onClick={handleLater}
             disabled={actionPending}
           >
-            Later
+            Позже
           </button>
         </div>
       </div>
