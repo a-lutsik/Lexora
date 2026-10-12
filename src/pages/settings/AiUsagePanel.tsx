@@ -31,7 +31,7 @@ export function AiUsagePanel() {
   const estimate = estimateUsageCost(rows, catalog);
 
   return (
-    <section className="settings-section ai-usage" aria-labelledby="ai-usage-title">
+    <section id="settings-ai-usage" className="settings-section ai-usage" aria-labelledby="ai-usage-title">
       <div className="ai-models-head">
         <h2 id="ai-usage-title" className="ai-models-title">
           Расходы AI

@@ -24,6 +24,7 @@ import { SetupWizard } from '../../components/setup/SetupWizard';
 import { AiModelsPanel } from './AiModelsPanel';
 import { AiUsagePanel } from './AiUsagePanel';
 import { GrammarWatchSection } from './GrammarWatchSection';
+import { SettingsNav } from './SettingsNav';
 import './settings.css';
 
 type BackupStatus = {
@@ -272,6 +273,8 @@ export default function SettingsPage() {
           Configure AI translation engines, free tier models, API keys, and test live connections
         </p>
 
+        <SettingsNav />
+
         <AiModelsPanel
           settings={remoteSettings}
           keysStatus={apiKeysStatus ?? {}}
@@ -283,7 +286,7 @@ export default function SettingsPage() {
 
         <form onSubmit={handleSave} className="settings-form">
           {/* Languages Section */}
-          <div className="settings-section">
+          <div id="settings-language" className="settings-section">
             <h3 className="settings-section-title settings-section-title--spaced">
               Language Preferences
             </h3>
@@ -325,7 +328,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Privacy Section */}
-          <div className="settings-section">
+          <div id="settings-privacy" className="settings-section">
             <h3 className="settings-section-title settings-section-title--spaced">
               Privacy
             </h3>
@@ -368,7 +371,7 @@ export default function SettingsPage() {
           <GrammarWatchSection />
 
           {/* Desktop Stickers Section */}
-          <div className="settings-section">
+          <div id="settings-stickers" className="settings-section">
             <h3 className="settings-section-title settings-section-title--spaced">
               Desktop Stickers & Ambient Review
             </h3>
@@ -487,7 +490,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Global Hotkeys Info */}
-          <div className="settings-section">
+          <div id="settings-shortcuts" className="settings-section">
             <div className="settings-section-header">
               <h3 className="settings-section-title">
                 Global Shortcuts (System-wide)
@@ -580,7 +583,7 @@ export default function SettingsPage() {
           </div>
 
           {/* Backup / Export Section */}
-          <div className="settings-section">
+          <div id="settings-backup" className="settings-section">
             <div className="settings-section-header">
               <h3 className="settings-section-title">
                 Backup / Export

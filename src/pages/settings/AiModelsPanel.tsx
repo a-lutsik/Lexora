@@ -224,7 +224,11 @@ export function AiModelsPanel({
   };
 
   return (
-    <section className="settings-section ai-models animate-fade-in" aria-labelledby="ai-models-title">
+    <section
+      id="settings-ai-models"
+      className="settings-section ai-models animate-fade-in"
+      aria-labelledby="ai-models-title"
+    >
       <div className="ai-models-head">
         <div className="ai-models-titles">
           <h2 id="ai-models-title" className="ai-models-title">

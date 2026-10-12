@@ -63,7 +63,7 @@ export function GrammarWatchSection() {
   };
 
   return (
-    <div className="settings-section" aria-labelledby="grammar-watch-title">
+    <div id="settings-writing-check" className="settings-section" aria-labelledby="grammar-watch-title">
       <h3 id="grammar-watch-title" className="settings-section-title settings-section-title--spaced">
         Writing check in other apps
       </h3>
