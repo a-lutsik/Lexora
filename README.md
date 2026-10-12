@@ -47,6 +47,7 @@ src-tauri/      # Rust backend: commands/, db/, providers/, srs/, hotkeys, tray
 npm install
 
 npm run tauri dev     # запуск приложения (frontend + Rust backend)
+bash scripts/install-mac.sh   # собрать и установить Lexora.app в /Applications (macOS, без DMG)
 npm run typecheck     # tsc --noEmit
 npm run lint          # eslint, --max-warnings 0
 npm run test          # vitest
