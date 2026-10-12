@@ -170,4 +170,19 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }} ${{ steps.signing.outputs.args }}
-          uploadWorkflowArtifacts: ${{ github.event_name == 'workflow_dispatch' }}
+
+      # tauri-action без тега пропускает все выгрузки («No releaseId or tagName
+      # provided, skipping all uploads»), поэтому при ручном запуске кладём
+      # инсталляторы в артефакты сами.
+      - name: Upload installers (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lexora-${{ matrix.os }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            src-tauri/target/**/release/bundle/dmg/*.dmg
+            src-tauri/target/**/release/bundle/nsis/*.exe
+            src-tauri/target/**/release/bundle/appimage/*.AppImage
+            src-tauri/target/**/release/bundle/deb/*.deb
