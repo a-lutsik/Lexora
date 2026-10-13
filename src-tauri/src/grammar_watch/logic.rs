@@ -308,6 +308,57 @@ pub fn minimal_edit(old: &str, new: &str) -> Option<TextEdit> {
     })
 }
 
+/// Like `minimal_edit`, but when the replacement would start or end with
+/// whitespace the span is widened to whole words. Rich editors (Teams,
+/// browsers) turn edge spaces of an inserted fragment into non-breaking ones
+/// or drop them, so « to » replacing «to» ends up glued again; a replacement
+/// that begins and ends with a letter is inserted verbatim everywhere.
+pub fn word_aligned_edit(old: &str, new: &str) -> Option<TextEdit> {
+    let edit = minimal_edit(old, new)?;
+    let edge_space = edit.inserted.chars().next().is_some_and(char::is_whitespace)
+        || edit.inserted.chars().next_back().is_some_and(char::is_whitespace);
+    if !edge_space {
+        return Some(edit);
+    }
+    let old_chars: Vec<char> = old.chars().collect();
+    let new_chars: Vec<char> = new.chars().collect();
+    let utf16_len = |chars: &[char]| chars.iter().map(|c| c.len_utf16()).sum::<usize>();
+    // Char index of the edit start / end in `old`.
+    let mut units = 0usize;
+    let mut start = 0usize;
+    while start < old_chars.len() && units < edit.start {
+        units += old_chars[start].len_utf16();
+        start += 1;
+    }
+    let mut end = start;
+    let mut removed = 0usize;
+    while end < old_chars.len() && removed < edit.removed {
+        removed += old_chars[end].len_utf16();
+        end += 1;
+    }
+    let tail = old_chars.len() - end;
+    let mut left = 0usize;
+    while start - left > 0 && !old_chars[start - left - 1].is_whitespace() {
+        left += 1;
+    }
+    let mut right = 0usize;
+    while right < tail && !old_chars[end + right].is_whitespace() {
+        right += 1;
+    }
+    // `new` shares the untouched prefix/suffix with `old`, so the same
+    // widening applies to it.
+    let new_start = start - left;
+    let new_end = new_chars.len() - (tail - right);
+    if new_start > new_end {
+        return Some(edit);
+    }
+    Some(TextEdit {
+        start: utf16_len(&old_chars[..start - left]),
+        removed: utf16_len(&old_chars[start - left..end + right]),
+        inserted: new_chars[new_start..new_end].iter().collect(),
+    })
+}
+
 /// Where the caret/selection (UTF-16 `location`, `length`) ends up after
 /// `edit`: text before the edit keeps it, text after shifts, a selection
 /// touching the edit collapses to the end of the inserted text.
@@ -778,6 +829,29 @@ mod tests {
                 removed: 1,
                 inserted: String::new(),
             })
+        );
+    }
+
+    #[test]
+    fn word_aligned_edit_avoids_edge_whitespace() {
+        // «to» → « to »: widened to the whole glued word.
+        assert_eq!(
+            word_aligned_edit("I wanttocheck those", "I want to check those"),
+            Some(TextEdit {
+                start: 2,
+                removed: 11,
+                inserted: "want to check".to_string(),
+            })
+        );
+        // No edge whitespace: identical to the minimal edit.
+        assert_eq!(
+            word_aligned_edit("She dont like it", "She doesn't like it"),
+            minimal_edit("She dont like it", "She doesn't like it")
+        );
+        // A pure deletion has no inserted edge whitespace: left as is.
+        assert_eq!(
+            word_aligned_edit("the  cat", "the cat"),
+            minimal_edit("the  cat", "the cat")
         );
     }
 

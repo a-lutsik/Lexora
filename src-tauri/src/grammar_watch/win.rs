@@ -24,7 +24,7 @@ use tauri::window::Color;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use windows::core::{BSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, HWND};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
 };
@@ -42,9 +42,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VIRTUAL_KEY, VK_A, VK_CONTROL, VK_DELETE, VK_V,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, SetForegroundWindow,
-    SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-    SWP_SHOWWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, SendMessageTimeoutW,
+    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
+    SMTO_ABORTIFHUNG, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_SHOWWINDOW, WM_GETTEXT,
+    WM_GETTEXTLENGTH, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
@@ -56,6 +57,20 @@ const FOCUS_RETURN_DELAY: Duration = Duration::from_millis(150);
 const PASTE_SETTLE: Duration = Duration::from_millis(200);
 /// Moves smaller than this (physical px) do not re-place the badge.
 const FOLLOW_THRESHOLD: f64 = 1.0;
+
+// Scintilla (Notepad++, SciTE, ...) draws its own text and has no UI
+// Automation provider. Text is read with the standard WM_GETTEXT (the system
+// marshals the buffer between processes); the selection is driven by
+// pointer-free SCI_* messages.
+const SCINTILLA_CLASS: &str = "Scintilla";
+const SCI_TIMEOUT_MS: u32 = 300;
+const SCI_SELECTALL: u32 = 2013;
+const SCI_GETCODEPAGE: u32 = 2137;
+const SCI_GETREADONLY: u32 = 2140;
+const SCI_GETSELECTIONSTART: u32 = 2143;
+const SCI_GETSELECTIONEND: u32 = 2145;
+const SCI_SETSEL: u32 = 2160;
+const SCI_CODEPAGE_UTF8: isize = 65001;
 
 /// Apps that are never checked (password managers, terminals); exact
 /// lowercase executable names, on top of the user's exclusion list.
@@ -102,7 +117,94 @@ fn automation() -> Option<IUIAutomation> {
 }
 
 fn normalize_newlines(text: &str) -> String {
-    text.replace("\r\n", "\n").replace('\r', "\n")
+    text.replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .replace('\u{a0}', " ")
+}
+
+/// Send a message to a window of another process without risking a hang.
+fn sci_send(window: HWND, message: u32, wparam: usize, lparam: isize) -> Option<isize> {
+    let mut result: usize = 0;
+    let reply = unsafe {
+        SendMessageTimeoutW(
+            window,
+            message,
+            WPARAM(wparam),
+            LPARAM(lparam),
+            SMTO_ABORTIFHUNG,
+            SCI_TIMEOUT_MS,
+            Some(&mut result),
+        )
+    };
+    (reply.0 != 0).then_some(result as isize)
+}
+
+/// Document text of a Scintilla control with `\n` newlines; at most
+/// `MAX_CHECK_CHARS + 1` chars. Only UTF-8 documents (or pure ASCII) are
+/// read: other code pages would be decoded wrongly.
+fn scintilla_read(window: HWND) -> Option<String> {
+    let length = usize::try_from(sci_send(window, WM_GETTEXTLENGTH, 0, 0)?).ok()?;
+    let wanted = length.min((logic::MAX_CHECK_CHARS + 1) * 4);
+    let mut buffer = vec![0u8; wanted + 1];
+    let copied = usize::try_from(sci_send(
+        window,
+        WM_GETTEXT,
+        buffer.len(),
+        buffer.as_mut_ptr() as isize,
+    )?)
+    .ok()?;
+    buffer.truncate(copied.min(wanted));
+    if sci_send(window, SCI_GETCODEPAGE, 0, 0)? != SCI_CODEPAGE_UTF8 && !buffer.is_ascii() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&buffer);
+    let limited: String = text.chars().take(logic::MAX_CHECK_CHARS + 1).collect();
+    Some(normalize_newlines(&limited))
+}
+
+/// UTF-16 unit offset in `text` → UTF-8 byte offset (Scintilla counts bytes).
+fn utf16_to_utf8_offset(text: &str, units: usize) -> Option<usize> {
+    let mut seen = 0usize;
+    let mut bytes = 0usize;
+    for ch in text.chars() {
+        if seen == units {
+            return Some(bytes);
+        }
+        seen += ch.len_utf16();
+        bytes += ch.len_utf8();
+    }
+    (seen == units).then_some(bytes)
+}
+
+impl Elem {
+    /// The Scintilla window behind this element, if it is one.
+    fn scintilla(&self) -> Option<HWND> {
+        if !self.class_name().eq_ignore_ascii_case(SCINTILLA_CLASS) {
+            return None;
+        }
+        let window = unsafe { self.0.CurrentNativeWindowHandle() }.ok()?;
+        (!window.0.is_null()).then_some(window)
+    }
+
+    /// Select `removed` UTF-16 units from `start` in a Scintilla document
+    /// with no line breaks and check the selection landed exactly there.
+    fn scintilla_select_span(&self, current: &str, start: usize, removed: usize) -> bool {
+        let Some(window) = self.scintilla() else {
+            return false;
+        };
+        let (Some(from), Some(to)) = (
+            utf16_to_utf8_offset(current, start),
+            utf16_to_utf8_offset(current, start + removed),
+        ) else {
+            return false;
+        };
+        let (Ok(from_arg), Ok(to_arg)) = (isize::try_from(from), isize::try_from(to)) else {
+            return false;
+        };
+        sci_send(window, SCI_SETSEL, from, to_arg).is_some()
+            && sci_send(window, SCI_GETSELECTIONSTART, 0, 0) == Some(from_arg)
+            && sci_send(window, SCI_GETSELECTIONEND, 0, 0) == Some(to_arg)
+    }
 }
 
 impl Elem {
@@ -145,6 +247,9 @@ impl Elem {
     }
 
     fn is_read_only(&self) -> bool {
+        if let Some(window) = self.scintilla() {
+            return sci_send(window, SCI_GETREADONLY, 0, 0).is_none_or(|flag| flag != 0);
+        }
         let value_read_only = self
             .value_pattern()
             .and_then(|pattern| unsafe { pattern.CurrentIsReadOnly() }.ok())
@@ -170,6 +275,9 @@ impl Elem {
 
     /// Field text with `\n` newlines; at most `MAX_CHECK_CHARS + 1` chars.
     fn read_text(&self) -> Option<String> {
+        if let Some(window) = self.scintilla() {
+            return scintilla_read(window);
+        }
         if let Some(pattern) = self.value_pattern() {
             if let Ok(value) = unsafe { pattern.CurrentValue() } {
                 return Some(normalize_newlines(&value.to_string()));
@@ -228,6 +336,9 @@ impl Elem {
     }
 
     fn select_all(&self) -> bool {
+        if let Some(window) = self.scintilla() {
+            return sci_send(window, SCI_SELECTALL, 0, 0).is_some();
+        }
         let Some(pattern) = self.text_pattern() else {
             return false;
         };
@@ -323,6 +434,9 @@ enum Probe {
 fn role_of(element: &Elem) -> Option<&'static str> {
     if element.is_password() {
         return Some(ROLE_SECURE);
+    }
+    if element.scintilla().is_some() {
+        return Some(ROLE_TEXT_AREA);
     }
     let control = unsafe { element.0.CurrentControlType() }.ok()?;
     if control == UIA_EditControlTypeId {
@@ -928,7 +1042,7 @@ fn write_text(
             "The text changed after the check — wait for the new result".to_string(),
         )
     })?;
-    let Some(edit) = logic::minimal_edit(&current, &new_text) else {
+    let Some(edit) = logic::word_aligned_edit(&current, &new_text) else {
         return Ok(new_text);
     };
 
@@ -1020,7 +1134,11 @@ fn paste_fallback(
             let units: Vec<u16> = current.encode_utf16().collect();
             String::from_utf16_lossy(&units[edit.start..edit.start + edit.removed])
         };
-        element.select_span(edit.start, edit.removed, &removed)
+        if element.scintilla().is_some() {
+            element.scintilla_select_span(current, edit.start, edit.removed)
+        } else {
+            element.select_span(edit.start, edit.removed, &removed)
+        }
     };
     let (payload, select_all) = if span_selected {
         (edit.inserted.as_str(), false)

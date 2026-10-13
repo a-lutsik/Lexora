@@ -174,6 +174,13 @@ impl AxElement {
         AxElement::from_owned(self.copy_raw(attr)?)
     }
 
+    /// Field text; non-breaking spaces (browser editors insert them) count as
+    /// plain spaces so they never make the field look changed.
+    fn field_value(&self) -> Option<String> {
+        self.copy_string(ATTR_VALUE)
+            .map(|value| value.replace('\u{a0}', " "))
+    }
+
     fn copy_string(&self, attr: &str) -> Option<String> {
         let value = self.copy_raw(attr)?;
         if unsafe { CFGetTypeID(value) } != CFString::type_id() {
@@ -388,7 +395,7 @@ fn probe(system: &AxElement, own_pid: i32, config: &WatchConfig, cache: &mut App
     {
         return Skipped::new(ActivityCode::FieldTooLong, Some(&app), None);
     }
-    let Some(text) = element.copy_string(ATTR_VALUE) else {
+    let Some(text) = element.field_value() else {
         return Skipped::new(
             ActivityCode::UnsupportedField,
             Some(&app),
@@ -934,7 +941,7 @@ fn set_writing(writing: bool) {
 fn wait_for_value(element: &AxElement, expected: &str) -> bool {
     let started = Instant::now();
     loop {
-        if element.copy_string(ATTR_VALUE).as_deref() == Some(expected) {
+        if element.field_value().as_deref() == Some(expected) {
             return true;
         }
         if started.elapsed() >= VALUE_SETTLE_TIMEOUT {
@@ -965,14 +972,14 @@ fn write_text(
     corrected: &str,
 ) -> Result<String, AppError> {
     let current = element
-        .copy_string(ATTR_VALUE)
+        .field_value()
         .ok_or_else(|| AppError::Validation("Could not read the text field".to_string()))?;
     let new_text = logic::rebuild_field_text(&current, checked, corrected).ok_or_else(|| {
         AppError::Validation(
             "The text changed after the check — wait for the new result".to_string(),
         )
     })?;
-    let Some(edit) = logic::minimal_edit(&current, &new_text) else {
+    let Some(edit) = logic::word_aligned_edit(&current, &new_text) else {
         return Ok(new_text);
     };
     let selection = element.selected_range();
@@ -985,7 +992,7 @@ fn write_text(
         return Ok(new_text);
     }
 
-    match element.copy_string(ATTR_VALUE) {
+    match element.field_value() {
         Some(value) if value == new_text => {
             restore_selection(element, selection, &edit);
             return Ok(new_text);
@@ -1002,7 +1009,7 @@ fn write_text(
     }
 
     // Never paste over a field that already changed in an unknown way.
-    match element.copy_string(ATTR_VALUE) {
+    match element.field_value() {
         Some(value) if value == new_text => return Ok(new_text),
         Some(value) if value == current => {}
         _ => {
