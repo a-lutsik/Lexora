@@ -87,7 +87,9 @@ export function detectProviderByKey(key: string): AIProviderName | null {
     const k = key.trim();
     if (!k) return null;
     if (/^sk-[A-Za-z0-9_-]+$/i.test(k)) return 'openai';
+    // Классические ключи `AIza…` и новые ключи Google AI Studio вида `AQ.…`.
     if (/^AIza[0-9A-Za-z_-]{20,}$/.test(k)) return 'gemini';
+    if (/^AQ\.[0-9A-Za-z_.-]{20,}$/.test(k)) return 'gemini';
     if (/^gsk_[A-Za-z0-9_-]+$/i.test(k)) return 'groq';
     return null;
 }

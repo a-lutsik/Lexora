@@ -23,7 +23,7 @@ pub const TRANSLATE_SHORTCUT: &str = "CmdOrCtrl+Shift+L";
 pub const STICKERS_SHORTCUT: &str = "CmdOrCtrl+Shift+S";
 
 /// Максимальная длина захваченного текста (по символам, не по байтам).
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 const MAX_CAPTURE_CHARS: usize = 8000;
 /// Пауза после скрытия popup, чтобы фокус вернулся в исходное приложение.
 const FOCUS_RETURN_DELAY: Duration = Duration::from_millis(90);
@@ -121,7 +121,7 @@ pub fn register_shortcuts(
 }
 
 /// Trim + отсечение слишком длинного захвата. Пустая строка → None.
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 pub(crate) fn normalize_captured(text: &str) -> Option<String> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -145,7 +145,7 @@ fn hide_popup_for_capture(app: &AppHandle) {
 
 /// Новый захват из буфера только если содержимое реально изменилось.
 /// Старый буфер не выдаём за выделение (частый false-positive Cmd+C).
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 pub(crate) fn capture_from_clipboard_delta(
     before: Option<&str>,
     after: Option<&str>,
@@ -163,8 +163,8 @@ pub fn capture_selected_text() -> Option<String> {
     macos::capture_selected_text()
 }
 
-/// На не-macOS платформах захват выделения пока не поддержан.
-#[cfg(not(target_os = "macos"))]
+/// На остальных платформах (кроме macOS и Windows) захват не поддержан.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn capture_selected_text() -> Option<String> {
     log::warn!("capture_selected_text is only implemented for macOS");
     None
@@ -185,6 +185,9 @@ pub fn translate_selection(app: &AppHandle) {
         #[cfg(target_os = "macos")]
         macos::prompt_accessibility_if_needed(&app);
 
+        #[cfg(target_os = "windows")]
+        let text = win::capture_selected_text(&app);
+        #[cfg(not(target_os = "windows"))]
         let text = capture_selected_text();
         let app_ui = app.clone();
         if let Err(e) = app.run_on_main_thread(move || {
@@ -205,7 +208,10 @@ pub use macos::{
 #[cfg(not(target_os = "macos"))]
 pub fn write_clipboard(_text: Option<&str>) {}
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub use win::{focus_window, foreground_window_handle, simulate_paste};
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn simulate_paste() -> bool {
     false
 }
@@ -220,9 +226,157 @@ pub fn accessibility_trusted() -> bool {
     macos::is_trusted()
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows reads the selection and pastes without a separate permission.
+#[cfg(target_os = "windows")]
+pub fn accessibility_trusted() -> bool {
+    true
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn accessibility_trusted() -> bool {
     false
+}
+
+#[cfg(target_os = "windows")]
+mod win {
+    use super::{capture_from_clipboard_delta, normalize_captured};
+    use std::mem::size_of;
+    use std::thread;
+    use std::time::{Duration, Instant};
+    use tauri::AppHandle;
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
+    };
+    use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation, IUIAutomation, IUIAutomationTextPattern, UIA_TextPatternId,
+    };
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+        KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_C, VK_CONTROL, VK_LWIN, VK_MENU,
+        VK_RWIN, VK_SHIFT, VK_V,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
+
+    const MODIFIER_TIMEOUT: Duration = Duration::from_millis(900);
+    const CLIPBOARD_TIMEOUT: Duration = Duration::from_millis(600);
+
+    /// Active window right now (0 — none). A number, so it fits in a static.
+    pub fn foreground_window_handle() -> isize {
+        let hwnd = unsafe { GetForegroundWindow() };
+        hwnd.0 as isize
+    }
+
+    /// Give the focus back to a window remembered by `foreground_window_handle`.
+    pub fn focus_window(handle: isize) {
+        if handle != 0 {
+            let _ = unsafe { SetForegroundWindow(HWND(handle as *mut _)) };
+        }
+    }
+
+    fn modifier_keys_down() -> bool {
+        [VK_CONTROL, VK_SHIFT, VK_MENU, VK_LWIN, VK_RWIN]
+            .iter()
+            .any(|key| (unsafe { GetAsyncKeyState(i32::from(key.0)) } as u16 & 0x8000) != 0)
+    }
+
+    /// The hotkey (Ctrl+Shift+L) is still held: otherwise Ctrl+C would
+    /// arrive as Ctrl+Shift+C.
+    fn wait_modifiers_released() {
+        let started = Instant::now();
+        while modifier_keys_down() && started.elapsed() < MODIFIER_TIMEOUT {
+            thread::sleep(Duration::from_millis(16));
+        }
+        thread::sleep(Duration::from_millis(40));
+    }
+
+    fn key_event(key: VIRTUAL_KEY, up: bool) -> INPUT {
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: key,
+                    wScan: 0,
+                    dwFlags: if up {
+                        KEYEVENTF_KEYUP
+                    } else {
+                        KEYBD_EVENT_FLAGS(0)
+                    },
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }
+    }
+
+    fn press_ctrl(key: VIRTUAL_KEY) -> bool {
+        let inputs = [
+            key_event(VK_CONTROL, false),
+            key_event(key, false),
+            key_event(key, true),
+            key_event(VK_CONTROL, true),
+        ];
+        let sent = unsafe { SendInput(&inputs, size_of::<INPUT>() as i32) };
+        usize::try_from(sent).is_ok_and(|sent| sent == inputs.len())
+    }
+
+    pub fn simulate_paste() -> bool {
+        press_ctrl(VK_V)
+    }
+
+    /// Selection through UI Automation (TextPattern); passwords are not read.
+    fn uia_selected_text() -> Option<String> {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let automation: IUIAutomation =
+                CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
+            let element = automation.GetFocusedElement().ok()?;
+            if element.CurrentIsPassword().ok()?.as_bool() {
+                return None;
+            }
+            let pattern = element
+                .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+                .ok()?;
+            let selection = pattern.GetSelection().ok()?;
+            if selection.Length().ok()? == 0 {
+                return None;
+            }
+            let text = selection.GetElement(0).ok()?.GetText(8001).ok()?;
+            normalize_captured(&text.to_string())
+        }
+    }
+
+    /// Ctrl+C and read the clipboard; the previous text is put back.
+    fn capture_via_copy(app: &AppHandle) -> Option<String> {
+        wait_modifiers_released();
+        let previous = app.clipboard().read_text().ok();
+        let previous_seq = unsafe { GetClipboardSequenceNumber() };
+        if !press_ctrl(VK_C) {
+            log::warn!("Failed to send Ctrl+C for selection capture");
+            return None;
+        }
+        let started = Instant::now();
+        while unsafe { GetClipboardSequenceNumber() } == previous_seq
+            && started.elapsed() < CLIPBOARD_TIMEOUT
+        {
+            thread::sleep(Duration::from_millis(20));
+        }
+        if unsafe { GetClipboardSequenceNumber() } == previous_seq {
+            return None;
+        }
+        let captured = app.clipboard().read_text().ok();
+        let result = capture_from_clipboard_delta(previous.as_deref(), captured.as_deref());
+        if let Some(previous) = previous {
+            let _ = app.clipboard().write_text(previous);
+        }
+        result
+    }
+
+    pub fn capture_selected_text(app: &AppHandle) -> Option<String> {
+        uia_selected_text().or_else(|| capture_via_copy(app))
+    }
 }
 
 #[cfg(target_os = "macos")]

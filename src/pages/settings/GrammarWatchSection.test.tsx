@@ -45,7 +45,7 @@ describe('GrammarWatchSection', () => {
   it('is disabled where the platform cannot watch other apps', async () => {
     status = { supported: false, accessibilityTrusted: false };
     renderWithQueryClient(<GrammarWatchSection />);
-    expect(await screen.findByText('Available on macOS.')).toBeInTheDocument();
+    expect(await screen.findByText('Available on macOS and Windows.')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: /suggest fixes while i type/i })).toBeDisabled();
   });
 

@@ -71,18 +71,34 @@ fn set_source_app(pid: Option<i32>) {
 pub fn remember_source_app() {
     #[cfg(target_os = "macos")]
     set_source_app(macos::frontmost_app_pid());
+    #[cfg(target_os = "windows")]
+    if let Ok(mut lock) = SOURCE_WINDOW.lock() {
+        *lock = crate::hotkeys::foreground_window_handle();
+    }
 }
+
+/// Window (HWND) active at the hotkey — the Windows counterpart of `SOURCE_APP_PID`.
+#[cfg(target_os = "windows")]
+static SOURCE_WINDOW: Mutex<isize> = Mutex::new(0);
 
 /// Если клик по popup сделал Lexora активной — вернуть фокус исходному
 /// приложению, чтобы вставка попала в его текстовое поле.
 fn return_focus_to_source_app(app: &AppHandle) {
-    let Some(pid) = SOURCE_APP_PID.lock().ok().and_then(|guard| *guard) else {
-        return;
-    };
-    #[cfg(target_os = "macos")]
-    macos::activate_app_dispatch(app, pid);
-    #[cfg(not(target_os = "macos"))]
-    let _ = (app, pid);
+    #[cfg(target_os = "windows")]
+    if let Ok(handle) = SOURCE_WINDOW.lock() {
+        let _ = app;
+        crate::hotkeys::focus_window(*handle);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let Some(pid) = SOURCE_APP_PID.lock().ok().and_then(|guard| *guard) else {
+            return;
+        };
+        #[cfg(target_os = "macos")]
+        macos::activate_app_dispatch(app, pid);
+        #[cfg(not(target_os = "macos"))]
+        let _ = (app, pid);
+    }
 }
 
 /// Hand focus back to `pid` if Lexora took it (writing-check panel).

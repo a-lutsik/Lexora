@@ -128,7 +128,7 @@ function checkPresetKey(meta: SetupPresetMeta, apiKey: string): KeyCheck {
     return {
         ok: false,
         detected: null,
-        message: `Не похоже на ключ ${label}. Скопируйте его целиком (${label === 'OpenAI' ? 'sk-…' : 'AIza…'})`,
+        message: `Не похоже на ключ ${label}. Скопируйте его целиком (${label === 'OpenAI' ? 'sk-…' : 'AIza… / AQ.…'})`,
     };
 }
 

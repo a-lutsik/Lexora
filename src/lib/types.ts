@@ -589,7 +589,7 @@ export type CheckWritingInput = {
 
 export type GrammarWatchSettings = {
   enabled: boolean;
-  /** macOS bundle ids; an entry ending in «*» matches a prefix. */
+  /** macOS bundle ids or Windows exe names; an entry ending in «*» matches a prefix. */
   excludedApps: string[];
 };
 

@@ -46,6 +46,10 @@ describe('detectProviderByKey', () => {
         expect(detectProviderByKey('  sk-1234  ')).toBe('openai');
     });
 
+    it('recognizes new Gemini AQ. keys', () => {
+        expect(detectProviderByKey('AQ.Ab8RN6JdrQNexampleKeyWith.Dots-and_dashes1')).toBe('gemini');
+    });
+
     it('recognizes Gemini AIza keys', () => {
         expect(detectProviderByKey('AIzaSyD_xYZabcdefgh1234567890')).toBe('gemini');
     });

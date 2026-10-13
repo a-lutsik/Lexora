@@ -7,7 +7,7 @@
 use std::time::{Duration, Instant};
 
 /// Typing pause after which the field text is sent for a check.
-pub const SETTLE_DELAY: Duration = Duration::from_millis(1_200);
+pub const SETTLE_DELAY: Duration = Duration::from_millis(700);
 /// Shorter texts are not worth an AI call («ok», «thanks!»).
 pub const MIN_CHECK_CHARS: usize = 12;
 pub const MIN_CHECK_WORDS: usize = 3;

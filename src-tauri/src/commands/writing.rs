@@ -269,7 +269,14 @@ pub async fn check_writing(
         .unwrap_or(&settings.primary_language)
         .to_string();
 
-    let registry = crate::providers::models::router::registry_for_role(&app, &pool, &settings, crate::providers::models::roles::ModelRole::TextQuality)?;
+    // The as-you-type check of other apps (ephemeral) trades some depth for
+    // speed: the fast text model answers sooner than the quality one.
+    let role = if input.ephemeral {
+        crate::providers::models::roles::ModelRole::TextFast
+    } else {
+        crate::providers::models::roles::ModelRole::TextQuality
+    };
+    let registry = crate::providers::models::router::registry_for_role(&app, &pool, &settings, role)?;
     let mut ai = registry
         .check_writing(CheckWritingRequest {
             text: text.clone(),

@@ -12,6 +12,13 @@
 pub mod logic;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "windows")]
+mod win;
+
+#[cfg(target_os = "macos")]
+use macos as platform;
+#[cfg(target_os = "windows")]
+use win as platform;
 
 use crate::db::repos::grammar_watch::{GrammarWatchRepo, GrammarWatchSettings};
 use crate::db::DbPool;
@@ -64,7 +71,7 @@ pub struct WatchConfig {
 /// no badge appears (no access, excluded app, text too short, …).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 pub enum ActivityCode {
     #[default]
     Starting,
@@ -125,7 +132,7 @@ impl Default for GrammarWatchState {
 }
 
 /// Record what the watcher sees (cheap; called on every poll).
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
 pub(crate) fn report(
     app: &AppHandle,
     code: ActivityCode,
@@ -155,14 +162,14 @@ pub(crate) fn report(
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GrammarWatchStatus {
-    /// The platform can watch other apps' text fields (macOS only for now).
+    /// The platform can watch other apps' text fields (macOS and Windows).
     pub supported: bool,
     pub accessibility_trusted: bool,
     pub activity: WatchActivity,
 }
 
 pub fn is_supported() -> bool {
-    cfg!(target_os = "macos")
+    cfg!(any(target_os = "macos", target_os = "windows"))
 }
 
 pub fn status(app: &AppHandle) -> GrammarWatchStatus {
@@ -172,7 +179,8 @@ pub fn status(app: &AppHandle) -> GrammarWatchStatus {
         .unwrap_or_default();
     GrammarWatchStatus {
         supported: is_supported(),
-        accessibility_trusted: crate::hotkeys::accessibility_trusted(),
+        // Windows needs no permission to read other apps' fields.
+        accessibility_trusted: cfg!(target_os = "windows") || crate::hotkeys::accessibility_trusted(),
         activity,
     }
 }
@@ -239,8 +247,8 @@ pub fn start(app: &AppHandle) {
         apply_settings(app, &settings);
     }
     refresh_language(app);
-    #[cfg(target_os = "macos")]
-    macos::spawn_watcher(app.clone());
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    platform::spawn_watcher(app.clone());
 }
 
 /// Apply saved settings to the running watcher. Turning it off hides the badge.
@@ -256,8 +264,8 @@ pub fn apply_settings(app: &AppHandle, settings: &GrammarWatchSettings) {
 
 /// Hide the badge/panel (feature off, app excluded, …).
 pub fn hide(app: &AppHandle) {
-    #[cfg(target_os = "macos")]
-    macos::reset(app);
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    platform::reset(app);
     publish(app, FieldPayload::Hidden);
 }
 
@@ -267,9 +275,9 @@ pub fn config_snapshot(app: &AppHandle) -> WatchConfig {
 
 // ── Platform dispatch for IPC commands ───────────────────
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn unsupported() -> AppError {
-    AppError::Validation("Writing check in other apps is available on macOS only".to_string())
+    AppError::Validation("Writing check in other apps is available on macOS and Windows only".to_string())
 }
 
 /// Write the corrected text into the watched field. `checked` is the text
@@ -284,11 +292,11 @@ pub fn apply_fix(
     if corrected.trim().is_empty() {
         return Err(AppError::Validation("Corrected text is empty".to_string()));
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
-        macos::apply_fix(app, field_id, checked, corrected)
+        platform::apply_fix(app, field_id, checked, corrected)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (app, field_id, checked);
         Err(unsupported())
@@ -296,11 +304,11 @@ pub fn apply_fix(
 }
 
 pub fn set_panel_open(app: &AppHandle, open: bool) -> Result<(), AppError> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
-        macos::set_panel_open(app, open)
+        platform::set_panel_open(app, open)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (app, open);
         Err(unsupported())
@@ -308,9 +316,9 @@ pub fn set_panel_open(app: &AppHandle, open: bool) -> Result<(), AppError> {
 }
 
 pub fn snooze(app: &AppHandle, field_id: u64) {
-    #[cfg(target_os = "macos")]
-    macos::snooze(app, field_id);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    platform::snooze(app, field_id);
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let _ = (app, field_id);
 }
 

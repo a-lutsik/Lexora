@@ -88,7 +88,7 @@ export function GrammarWatchSection() {
           are not saved. Uses your AI provider and may incur API cost.
         </p>
         {!supported && status && (
-          <p className="text-secondary text-xs">Available on macOS.</p>
+          <p className="text-secondary text-xs">Available on macOS and Windows.</p>
         )}
 
         {needsAccess && (
@@ -115,7 +115,7 @@ export function GrammarWatchSection() {
 
         <div>
           <label htmlFor={inputId} className="settings-label text-secondary text-xs font-medium">
-            NEVER CHECK IN THESE APPS (BUNDLE IDS)
+            NEVER CHECK IN THESE APPS (BUNDLE ID OR .EXE NAME)
           </label>
           <ul className="grammar-settings-apps" aria-label="Excluded apps">
             {excluded.map((bundleId) => (
@@ -143,7 +143,7 @@ export function GrammarWatchSection() {
               value={newApp}
               onChange={(event) => setNewApp(event.target.value)}
               onKeyDown={handleAddKey}
-              placeholder="com.example.app or com.example.*"
+              placeholder="com.example.app, notepad.exe or com.example.*"
               disabled={!settings}
             />
             <Button size="sm" onClick={handleAdd} disabled={!newApp.trim() || update.isPending}>
