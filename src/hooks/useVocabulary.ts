@@ -100,3 +100,16 @@ export function useToggleFavorite() {
     },
   });
 }
+
+export function useUpdateVocabularyEntry() {
+  const client = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: number; text: string; translation: string | null }) =>
+      ipc.vocabulary.update(input.id, input.text, input.translation),
+    onSuccess: (updated) => {
+      client.setQueryData([QUERY_KEYS.VOCABULARY_ENTRY, updated.id], updated);
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+    },
+  });
+}

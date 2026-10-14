@@ -18,6 +18,7 @@ import { Button, IconButton } from '../../components/ui/Button';
 import { AudioButton } from '../../components/domain/AudioButton';
 import { AssociatedImage } from '../../components/domain/AssociatedImage';
 import { FreqBadge } from '../../components/domain/FreqBadge';
+import { WordDetailEdit } from './WordDetailEdit';
 import { WordDetailRemove } from './WordDetailRemove';
 import { WordDetailUnavailable } from './WordDetailUnavailable';
 import { ipc } from '../../lib/ipc';
@@ -47,6 +48,15 @@ function CloseIcon() {
   );
 }
 
+function EditIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
 export function WordDetail({ id, onClose }: WordDetailProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -56,6 +66,7 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
   const { data: settings } = useSettings();
   const { data: languages } = useLanguages();
   const translateMutation = useTranslate();
+  const [isEditing, setIsEditing] = useState(false);
   const [notes, setNotes] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
@@ -250,12 +261,26 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
         <div className="word-detail-body">
           {/* Main Word */}
           <div>
-            <div className="word-detail-word-row">
-              <h2 id="word-detail-title" className="word-detail-word">
-                {lexeme.text}
-              </h2>
-              <AudioButton text={lexeme.text} ariaLabel="Pronounce word" />
-            </div>
+            {isEditing ? (
+              <WordDetailEdit
+                entryId={entry.id}
+                text={lexeme.text}
+                translation={entry.translations[0]?.translatedText ?? ''}
+                onDone={() => setIsEditing(false)}
+              />
+            ) : (
+              <div className="word-detail-word-row">
+                <h2 id="word-detail-title" className="word-detail-word">
+                  {lexeme.text}
+                </h2>
+                <AudioButton text={lexeme.text} ariaLabel="Pronounce word" />
+                <IconButton
+                  icon={<EditIcon />}
+                  aria-label="Edit word and translation"
+                  onClick={() => setIsEditing(true)}
+                />
+              </div>
+            )}
             {lexeme.phonetic && (
               <div className="phonetic word-detail-phonetic">
                 {lexeme.phonetic}

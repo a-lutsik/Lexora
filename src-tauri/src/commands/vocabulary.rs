@@ -784,6 +784,181 @@ pub async fn update_vocabulary_notes(
     get_vocabulary_entry(id, db).await
 }
 
+pub const MAX_EDIT_WORD_CHARS: usize = 200;
+
+/// Result of the transactional part of an edit.
+struct EditOutcome {
+    renamed: bool,
+    lexeme_id: i64,
+    text: String,
+    source_lang: String,
+}
+
+/// Fix a typo in a saved card: new spelling and/or main translation.
+/// Review progress stays (the card is the same); everything generated for the
+/// old spelling (phonetic, examples, image, mnemonic) is dropped and rebuilt
+/// in the background. A spelling that already exists in the dictionary is rejected.
+fn apply_entry_edit(
+    conn: &mut rusqlite::Connection,
+    id: i64,
+    new_text: &str,
+    new_translation: Option<&str>,
+) -> Result<EditOutcome, AppError> {
+    let text = new_text.trim();
+    if text.is_empty() {
+        return Err(AppError::Validation("Word is empty".to_string()));
+    }
+    if text.chars().count() > MAX_EDIT_WORD_CHARS {
+        return Err(AppError::Validation(format!(
+            "Word is longer than {MAX_EDIT_WORD_CHARS} characters"
+        )));
+    }
+    let normalized = text.to_lowercase();
+
+    let tx = conn.transaction()?;
+    let (lexeme_id, language_id, old_text, old_normalized, is_system): (i64, i64, String, String, i64) = tx
+        .query_row(
+            "SELECT l.id, l.language_id, l.text, l.normalized_text, l.is_system
+             FROM user_vocabulary uv JOIN lexeme l ON l.id = uv.lexeme_id
+             WHERE uv.id = ?1 AND uv.deleted_at IS NULL",
+            rusqlite::params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        )
+        .map_err(|_| AppError::NotFound(format!("Vocabulary entry {id} not found")))?;
+
+    let respelled = text != old_text;
+    let renamed = normalized != old_normalized;
+    if renamed {
+        if is_system != 0 {
+            return Err(AppError::Validation(
+                "Built-in dictionary words cannot be renamed".to_string(),
+            ));
+        }
+        let taken: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM lexeme WHERE language_id = ?1 AND normalized_text = ?2 AND id != ?3",
+                rusqlite::params![language_id, normalized, lexeme_id],
+                |row| row.get(0),
+            )
+            .ok();
+        if taken.is_some() {
+            return Err(AppError::Validation(
+                "This word already exists in the dictionary".to_string(),
+            ));
+        }
+    }
+    if respelled {
+        tx.execute(
+            "INSERT INTO lexeme_fts (lexeme_fts, rowid, text, normalized_text) VALUES ('delete', ?1, ?2, ?3)",
+            rusqlite::params![lexeme_id, old_text, old_normalized],
+        )?;
+        tx.execute(
+            "UPDATE lexeme SET text = ?1, normalized_text = ?2, updated_at = unixepoch() WHERE id = ?3",
+            rusqlite::params![text, normalized, lexeme_id],
+        )?;
+        tx.execute(
+            "INSERT INTO lexeme_fts (rowid, text, normalized_text) VALUES (?1, ?2, ?3)",
+            rusqlite::params![lexeme_id, text, normalized],
+        )?;
+    }
+    if renamed {
+        // Everything below describes the old spelling — it is rebuilt after commit.
+        tx.execute(
+            "UPDATE lexeme SET phonetic = NULL, enriched_at = NULL,
+                    visual_sense = NULL, visual_association = NULL, visual_memory_hook = NULL,
+                    visual_image_prompt = NULL, visual_photo_query = NULL
+             WHERE id = ?1",
+            rusqlite::params![lexeme_id],
+        )?;
+        tx.execute("DELETE FROM example WHERE lexeme_id = ?1", rusqlite::params![lexeme_id])?;
+        tx.execute("DELETE FROM media WHERE lexeme_id = ?1", rusqlite::params![lexeme_id])?;
+    }
+
+    if let Some(translation) = new_translation.map(str::trim).filter(|t| !t.is_empty()) {
+        let current: Option<(i64, String)> = tx
+            .query_row(
+                "SELECT id, translated_text FROM translation WHERE lexeme_id = ?1 ORDER BY id LIMIT 1",
+                rusqlite::params![lexeme_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .ok();
+        match current {
+            Some((tid, old)) if old != translation => {
+                tx.execute(
+                    "UPDATE translation SET translated_text = ?1, source = 'manual' WHERE id = ?2",
+                    rusqlite::params![translation, tid],
+                )?;
+            }
+            Some(_) => {}
+            None => {
+                let target: i64 = tx
+                    .query_row("SELECT id FROM language WHERE code = 'ru'", [], |row| row.get(0))
+                    .unwrap_or(language_id);
+                tx.execute(
+                    "INSERT INTO translation (lexeme_id, target_language_id, translated_text, source)
+                     VALUES (?1, ?2, ?3, 'manual')",
+                    rusqlite::params![lexeme_id, target, translation],
+                )?;
+            }
+        }
+    }
+
+    let source_lang = tx
+        .query_row(
+            "SELECT code FROM language WHERE id = ?1",
+            rusqlite::params![language_id],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_else(|_| "en".to_string());
+    tx.commit()?;
+    Ok(EditOutcome {
+        renamed,
+        lexeme_id,
+        text: text.to_string(),
+        source_lang,
+    })
+}
+
+#[tauri::command]
+pub async fn update_vocabulary_entry(
+    id: i64,
+    text: String,
+    translation: Option<String>,
+    db: State<'_, Arc<DbPool>>,
+    app: AppHandle,
+) -> Result<VocabularyEntryDto, AppError> {
+    let pool = db.inner().clone();
+    let (outcome, target_lang, main_translation) = {
+        let mut conn = pool.get()?;
+        let outcome = apply_entry_edit(&mut conn, id, &text, translation.as_deref())?;
+        let settings = SettingsRepo::get(&conn).unwrap_or_default();
+        let target_lang = resolve_target_language(&settings.interface_language, &outcome.source_lang);
+        let main_translation = crate::db::repos::lexeme::LexemeRepo::get_translations(
+            &conn,
+            outcome.lexeme_id,
+            None,
+        )?
+        .into_iter()
+        .next()
+        .map(|t| t.translated_text)
+        .unwrap_or_default();
+        (outcome, target_lang, main_translation)
+    };
+
+    if outcome.renamed {
+        crate::commands::translate::spawn_enrich(
+            app,
+            pool.clone(),
+            outcome.lexeme_id,
+            outcome.text,
+            outcome.source_lang,
+            target_lang,
+            main_translation,
+        );
+    }
+    get_vocabulary_entry(id, db).await
+}
+
 #[tauri::command]
 pub async fn count_vocabulary(
     language_id: Option<i64>,
@@ -900,6 +1075,97 @@ mod tests {
             .join("\n");
         let capped = parse_word_list(&many).expect("capped");
         assert_eq!(capped.len(), MAX_BULK_WORDS);
+    }
+
+    fn seeded_entry(pool: &DbPool, text: &str) -> i64 {
+        let conn = pool.get().expect("conn");
+        let input = AddVocabularyInput {
+            lexeme_id: None,
+            text: text.to_string(),
+            source_language: "en".to_string(),
+            notes: None,
+            source: Some("manual".to_string()),
+        };
+        VocabularyRepo::add(&conn, &input).expect("add")
+    }
+
+    #[test]
+    fn edit_entry_renames_and_resets_generated_data() {
+        let pool = create_pool_test_memory().expect("pool");
+        run_migrations(&pool).expect("migrate");
+        let id = seeded_entry(&pool, "recieve");
+        let mut conn = pool.get().expect("conn");
+        let lexeme_id: i64 = conn
+            .query_row("SELECT lexeme_id FROM user_vocabulary WHERE id = ?1", [id], |r| r.get(0))
+            .expect("lexeme");
+        conn.execute(
+            "INSERT INTO example (lexeme_id, sentence) VALUES (?1, 'I recieve mail.')",
+            [lexeme_id],
+        )
+        .expect("example");
+        conn.execute("UPDATE lexeme SET enriched_at = 1, phonetic = '/x/' WHERE id = ?1", [lexeme_id])
+            .expect("enrich");
+
+        let outcome = apply_entry_edit(&mut conn, id, "  Receive ", None).expect("edit");
+        assert!(outcome.renamed);
+        let (text, normalized, phonetic, enriched): (String, String, Option<String>, Option<i64>) = conn
+            .query_row(
+                "SELECT text, normalized_text, phonetic, enriched_at FROM lexeme WHERE id = ?1",
+                [lexeme_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .expect("row");
+        assert_eq!((text.as_str(), normalized.as_str()), ("Receive", "receive"));
+        assert!(phonetic.is_none() && enriched.is_none());
+        let examples: i64 = conn
+            .query_row("SELECT COUNT(*) FROM example WHERE lexeme_id = ?1", [lexeme_id], |r| r.get(0))
+            .expect("count");
+        assert_eq!(examples, 0);
+        // Same card, same SRS row.
+        let reviews: i64 = conn
+            .query_row("SELECT COUNT(*) FROM review_state WHERE user_vocabulary_id = ?1", [id], |r| r.get(0))
+            .expect("reviews");
+        assert_eq!(reviews, 1);
+    }
+
+    #[test]
+    fn edit_entry_rejects_existing_word_and_empty_text() {
+        let pool = create_pool_test_memory().expect("pool");
+        run_migrations(&pool).expect("migrate");
+        let typo = seeded_entry(&pool, "recieve");
+        seeded_entry(&pool, "receive");
+        let mut conn = pool.get().expect("conn");
+        assert!(matches!(
+            apply_entry_edit(&mut conn, typo, "Receive", None),
+            Err(AppError::Validation(_))
+        ));
+        assert!(matches!(
+            apply_entry_edit(&mut conn, typo, "   ", None),
+            Err(AppError::Validation(_))
+        ));
+        let text: String = conn
+            .query_row(
+                "SELECT l.text FROM user_vocabulary uv JOIN lexeme l ON l.id = uv.lexeme_id WHERE uv.id = ?1",
+                [typo],
+                |r| r.get(0),
+            )
+            .expect("text");
+        assert_eq!(text, "recieve");
+    }
+
+    #[test]
+    fn edit_entry_case_only_change_keeps_generated_data() {
+        let pool = create_pool_test_memory().expect("pool");
+        run_migrations(&pool).expect("migrate");
+        let id = seeded_entry(&pool, "paris");
+        let mut conn = pool.get().expect("conn");
+        conn.execute("UPDATE lexeme SET enriched_at = 1", []).expect("enrich");
+        let outcome = apply_entry_edit(&mut conn, id, "Paris", None).expect("edit");
+        assert!(!outcome.renamed);
+        let enriched: Option<i64> = conn
+            .query_row("SELECT enriched_at FROM lexeme WHERE id = ?1", [outcome.lexeme_id], |r| r.get(0))
+            .expect("row");
+        assert!(enriched.is_some());
     }
 
     #[test]

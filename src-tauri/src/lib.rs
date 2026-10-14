@@ -229,6 +229,7 @@ pub fn run() {
             commands::vocabulary::remove_from_vocabulary,
             commands::vocabulary::toggle_favorite,
             commands::vocabulary::update_vocabulary_notes,
+            commands::vocabulary::update_vocabulary_entry,
             commands::vocabulary::count_vocabulary,
             // Export / Import
             commands::export_import::export_vocabulary,

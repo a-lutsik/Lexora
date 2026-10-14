@@ -98,6 +98,9 @@ export const ipc = {
     updateNotes: (id: number, notes: string) =>
       invoke<VocabularyEntryDto>('update_vocabulary_notes', { id, notes }),
 
+    update: (id: number, text: string, translation: string | null) =>
+      invoke<VocabularyEntryDto>('update_vocabulary_entry', { id, text, translation }),
+
     count: (languageId: number | null) =>
       invoke<number>('count_vocabulary', { languageId }),
 
