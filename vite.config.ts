@@ -49,7 +49,7 @@ export default defineConfig(() => ({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
-    // e2e/ содержит Playwright-спеки — они запускаются через playwright, не vitest
-    exclude: [...configDefaults.exclude, 'e2e/**'],
+    // e2e/ и docs/ содержат Playwright-спеки — они запускаются через playwright, не vitest
+    exclude: [...configDefaults.exclude, 'e2e/**', 'docs/**'],
   },
 }));
