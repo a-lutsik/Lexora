@@ -64,6 +64,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(popup::panel_plugin())
         .on_window_event(|window, event| {
             window_layout::on_window_event(window, event);
             stickers::on_window_event(window, event);

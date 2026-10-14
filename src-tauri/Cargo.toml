@@ -72,6 +72,9 @@ objc2-app-kit    = { version = "0.3.2", features = ["NSApplication", "NSPasteboa
 objc2-quartz-core = { version = "0.3.2", features = ["CALayer"] }
 core-foundation  = "0.10"
 core-graphics    = "0.25"
+# Non-activating NSPanel: a popup that appears on the current Space (also over
+# full-screen apps) without activating Lexora and pulling the user to its Space.
+tauri-nspanel    = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "ef6e3090a6083c653955ca0b6e7f6c6ae1453d40" }
 
 # ── Windows UI Automation (writing check in other apps) ────
 [target.'cfg(target_os = "windows")'.dependencies]

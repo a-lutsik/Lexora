@@ -349,6 +349,9 @@ pub fn show_popup_anchored(
             .build()?,
     };
 
+    #[cfg(target_os = "macos")]
+    make_panel(app, &window);
+
     // Hide first so AppKit will not constrain the frame to the current screen.
     // Do NOT call Tauri show()/set_focus() on macOS: those map to
     // makeKeyAndOrderFront + activateIgnoringOtherApps, which teleports the
@@ -540,6 +543,55 @@ pub fn accept_and_replace(app: AppHandle, text: String) -> Result<(), AppError> 
     });
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+tauri_nspanel::tauri_panel! {
+    panel!(PopupPanel {
+        config: {
+            can_become_key_window: true,
+            can_become_main_window: false,
+            is_floating_panel: true
+        }
+    })
+}
+
+/// Plugin that keeps the panel registry; a no-op on other platforms.
+pub fn panel_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    #[cfg(target_os = "macos")]
+    {
+        tauri_nspanel::init()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        tauri::plugin::Builder::new("lexora-panel").build()
+    }
+}
+
+/// Turn the popup into a non-activating panel (once). Showing it then never
+/// activates Lexora, so macOS does not jump to the Space of Lexora's main window.
+#[cfg(target_os = "macos")]
+fn make_panel(app: &AppHandle, window: &tauri::WebviewWindow) {
+    use tauri_nspanel::{CollectionBehavior, ManagerExt, StyleMask, WebviewWindowExt};
+    if app.get_webview_panel(POPUP_LABEL).is_ok() {
+        return;
+    }
+    let panel = match window.to_panel::<PopupPanel>() {
+        Ok(panel) => panel,
+        Err(e) => {
+            log::warn!("Popup could not become a panel: {e}");
+            return;
+        }
+    };
+    if let Err(e) = panel.add_style_mask(StyleMask::empty().nonactivating_panel().into()) {
+        log::warn!("Popup panel is still activating: {e}");
+    }
+    panel.set_collection_behavior(
+        CollectionBehavior::new()
+            .full_screen_auxiliary()
+            .can_join_all_spaces()
+            .into(),
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -735,10 +787,10 @@ mod macos {
             return Err(AppError::Io("Popup NSWindow is unavailable".to_string()));
         };
 
-        // MoveToActiveSpace: ordering the window front pulls it onto the Space the
-        // user is on now, instead of switching to the Space it was last shown on.
+        // The window is a non-activating NSPanel (see `make_panel`): CanJoinAllSpaces
+        // shows it on the current Space, FullScreenAuxiliary over full-screen apps.
         ns_window.setCollectionBehavior(
-            NSWindowCollectionBehavior::MoveToActiveSpace
+            NSWindowCollectionBehavior::CanJoinAllSpaces
                 | NSWindowCollectionBehavior::Transient
                 | NSWindowCollectionBehavior::IgnoresCycle
                 | NSWindowCollectionBehavior::FullScreenAuxiliary,
