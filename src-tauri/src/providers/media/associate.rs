@@ -258,6 +258,18 @@ fn is_non_concrete_headword(word: &str) -> bool {
     NON_CONCRETE_HEADWORDS.binary_search(&word).is_ok()
 }
 
+/// Endings of participles, adverbs, abstract nouns and adjectives. A raw search for
+/// «intended» or «happiness» returns random Commons files (a plaque, a crowd).
+const ABSTRACT_SUFFIXES: &[&str] = &[
+    "ed", "ly", "ness", "tion", "sion", "ment", "ity", "ive", "ful", "less", "ous", "able", "ible",
+];
+
+fn has_abstract_suffix(lower: &str) -> bool {
+    ABSTRACT_SUFFIXES
+        .iter()
+        .any(|suffix| lower.len() > suffix.len() + 2 && lower.ends_with(suffix))
+}
+
 /// Single-token concrete headword (apple), not a phrase or function word.
 pub fn looks_like_concrete_headword(text: &str) -> bool {
     let t = text.trim();
@@ -265,7 +277,7 @@ pub fn looks_like_concrete_headword(text: &str) -> bool {
         return false;
     }
     let lower = t.to_ascii_lowercase();
-    if is_non_concrete_headword(&lower) {
+    if is_non_concrete_headword(&lower) || has_abstract_suffix(&lower) {
         return false;
     }
     t.chars()
@@ -569,6 +581,9 @@ mod tests {
         assert!(!looks_like_concrete_headword("Some"));
         assert!(!looks_like_concrete_headword("various"));
         assert!(looks_like_concrete_headword("apple"));
+        assert!(!looks_like_concrete_headword("intended"));
+        assert!(!looks_like_concrete_headword("happiness"));
+        assert!(looks_like_concrete_headword("bed"));
         assert!(looks_like_concrete_headword("sheep"));
     }
 
