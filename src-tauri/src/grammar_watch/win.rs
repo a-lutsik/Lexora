@@ -16,6 +16,7 @@ use super::{
 };
 use crate::display::{pick_bounds_for_point, LogicalBounds};
 use crate::error::AppError;
+use std::collections::HashMap;
 use std::mem::size_of;
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
@@ -27,6 +28,9 @@ use windows::core::{BSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
+};
+use windows::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -42,9 +46,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VIRTUAL_KEY, VK_A, VK_CONTROL, VK_DELETE, VK_V,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, SendMessageTimeoutW,
-    SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
-    SMTO_ABORTIFHUNG, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_SHOWWINDOW, WM_GETTEXT,
+    GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongPtrW,
+    GetWindowThreadProcessId, SendMessageTimeoutW, SetForegroundWindow, SetWindowLongPtrW,
+    SetWindowPos, GUITHREADINFO, GWL_EXSTYLE, HWND_TOPMOST, SMTO_ABORTIFHUNG, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_SHOWWINDOW, WM_GETTEXT,
     WM_GETTEXTLENGTH, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
@@ -464,6 +468,71 @@ fn looks_like_search(name: &str) -> bool {
     name.contains("search") || name.contains("поиск") || name.contains("find")
 }
 
+/// Parent process of every running process (one snapshot).
+fn parent_processes() -> Option<HashMap<u32, u32>> {
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).ok()?;
+        let mut entry = PROCESSENTRY32W {
+            dwSize: size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut parents = HashMap::new();
+        if Process32FirstW(snapshot, &mut entry).is_ok() {
+            loop {
+                parents.insert(entry.th32ProcessID, entry.th32ParentProcessID);
+                if Process32NextW(snapshot, &mut entry).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = CloseHandle(snapshot);
+        Some(parents)
+    }
+}
+
+/// The focused element belongs to the foreground app: same process, or a
+/// descendant of it. WebView2 apps (Teams, new Outlook, ...) own the window
+/// in one process and render their text fields in a child `msedgewebview2`.
+fn is_same_app(element_pid: u32, foreground_pid: u32) -> bool {
+    if element_pid == foreground_pid {
+        return true;
+    }
+    let Some(parents) = parent_processes() else {
+        return false;
+    };
+    let mut current = element_pid;
+    for _ in 0..6 {
+        match parents.get(&current) {
+            Some(&parent) if parent == foreground_pid => return true,
+            Some(&parent) if parent != 0 && parent != current => current = parent,
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// The focused Scintilla control of the foreground window (Notepad++, SciTE).
+/// UI Automation shows it as an unfocusable pane and never reports it as the
+/// focused element, so ask the window's GUI thread which child has the focus.
+fn focused_scintilla(automation: &IUIAutomation, window: HWND) -> Option<Elem> {
+    let thread = unsafe { GetWindowThreadProcessId(window, None) };
+    let mut info = GUITHREADINFO {
+        cbSize: size_of::<GUITHREADINFO>() as u32,
+        ..Default::default()
+    };
+    unsafe { GetGUIThreadInfo(thread, &mut info) }.ok()?;
+    let focus = info.hwndFocus;
+    if focus.0.is_null() {
+        return None;
+    }
+    let mut class = [0u16; 32];
+    let length = usize::try_from(unsafe { GetClassNameW(focus, &mut class) }).ok()?;
+    if !String::from_utf16_lossy(&class[..length]).eq_ignore_ascii_case(SCINTILLA_CLASS) {
+        return None;
+    }
+    unsafe { automation.ElementFromHandle(focus) }.ok().map(Elem)
+}
+
 fn probe(automation: &IUIAutomation, own_pid: u32, config: &WatchConfig) -> Probe {
     let Some((window, pid)) = foreground_window() else {
         return Skipped::probe(ActivityCode::NoField, None, None);
@@ -478,11 +547,14 @@ fn probe(automation: &IUIAutomation, own_pid: u32, config: &WatchConfig) -> Prob
     {
         return Skipped::probe(ActivityCode::ExcludedApp, Some(&app), app.bundle_id.clone());
     }
-    let Ok(focused) = (unsafe { automation.GetFocusedElement() }) else {
-        return Skipped::probe(ActivityCode::NoField, Some(&app), None);
+    let element = match focused_scintilla(automation, window) {
+        Some(element) => element,
+        None => match unsafe { automation.GetFocusedElement() } {
+            Ok(focused) => Elem(focused),
+            Err(_) => return Skipped::probe(ActivityCode::NoField, Some(&app), None),
+        },
     };
-    let element = Elem(focused);
-    if element.pid() != Some(pid) {
+    if !element.pid().is_some_and(|element_pid| is_same_app(element_pid, pid)) {
         return Skipped::probe(ActivityCode::NoField, Some(&app), None);
     }
     let role = role_of(&element);
