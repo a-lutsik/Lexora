@@ -7,7 +7,8 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 
 export default [
-  { ignores: ['dist', 'src-tauri'] },
+  // docs/ — tooling для PDF-гайда (Playwright-скрипты), не app-код
+  { ignores: ['dist', 'src-tauri', 'docs'] },
   js.configs.recommended,
   {
     // Node-скрипты (tooling, не app-код)
