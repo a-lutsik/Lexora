@@ -5,7 +5,10 @@
 //                 speechConfig}, systemInstruction, input/output
 //                 AudioTranscription, contextWindowCompression}
 //   interpreter → setup{model, generationConfig{responseModalities,
-//                 input/outputAudioTranscription, translationConfig}}
+//                 translationConfig}, input/outputAudioTranscription}
+//                 (the server rejects the transcription fields inside
+//                 generationConfig: «Unknown name inputAudioTranscription
+//                 at setup.generation_config»)
 // Audio in: PCM16 LE mono 16 kHz; audio out: PCM16 LE mono 24 kHz.
 // ============================================================
 
@@ -55,13 +58,13 @@ pub fn interpreter_setup(model: &str, target_language: &str, echo_target_languag
             "model": model_path(model),
             "generationConfig": {
                 "responseModalities": ["AUDIO"],
-                "inputAudioTranscription": {},
-                "outputAudioTranscription": {},
                 "translationConfig": {
                     "targetLanguageCode": target_language,
                     "echoTargetLanguage": echo_target_language
                 }
-            }
+            },
+            "inputAudioTranscription": {},
+            "outputAudioTranscription": {}
         }
     })
 }
@@ -187,7 +190,9 @@ mod tests {
         assert_eq!(setup["setup"]["model"], "models/gemini-3.5-live-translate-preview");
         assert_eq!(g["translationConfig"]["targetLanguageCode"], "ru");
         assert_eq!(g["translationConfig"]["echoTargetLanguage"], false);
-        assert!(g["inputAudioTranscription"].is_object());
+        assert!(g.get("inputAudioTranscription").is_none());
+        assert!(setup["setup"]["inputAudioTranscription"].is_object());
+        assert!(setup["setup"]["outputAudioTranscription"].is_object());
         assert!(setup["setup"].get("systemInstruction").is_none(), "translate model takes no instructions");
     }
 

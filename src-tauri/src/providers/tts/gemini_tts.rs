@@ -118,7 +118,7 @@ impl TTSProvider for GeminiTTSProvider {
         std::fs::create_dir_all(cache_dir)?;
 
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1/models/{}:generateContent",
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
             self.model
         );
         let resp = self
