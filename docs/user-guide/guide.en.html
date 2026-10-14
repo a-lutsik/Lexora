@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lexora — User Guide</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  @page :first { margin: 0; }
+  :root { --accent:#5b5ef0; --ink:#1d2030; --muted:#5b6275; --line:#dfe2ee; --soft:#f3f4fb; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; color: var(--ink); font-size: 10.4pt; line-height: 1.5; margin: 0; }
+  h1,h2,h3 { line-height: 1.2; margin: 0; }
+  h1 { font-size: 22pt; color: var(--accent); margin: 0 0 6mm; padding-bottom: 3mm; border-bottom: 2px solid var(--accent); break-before: page; }
+  h2 { font-size: 14.5pt; margin: 8mm 0 3mm; break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 5mm 0 2mm; color: #2f3350; break-after: avoid; }
+  p { margin: 0 0 3mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  code, kbd { font-family: "SF Mono", Menlo, monospace; font-size: 9pt; background: var(--soft); border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; }
+  kbd { box-shadow: 0 1px 0 var(--line); }
+  figure { margin: 4mm 0 5mm; break-inside: avoid; text-align: center; }
+  figure img { max-width: 88%; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 2px 8px rgba(30,32,60,.12); }
+  figure.narrow img { max-width: 62%; }
+  figure.tall img { max-height: 232mm; max-width: auto; width: auto; }
+  figure.small img { max-width: 45%; }
+  figcaption { font-size: 8.8pt; color: var(--muted); margin-top: 2mm; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9.6pt; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 1.6mm 2.4mm; text-align: left; vertical-align: top; }
+  th { background: var(--soft); }
+  .note { background: #eef0ff; border-left: 3px solid var(--accent); padding: 2.5mm 3.5mm; border-radius: 3px; margin: 3mm 0; break-inside: avoid; }
+  .warn { background: #fff6e5; border-left: 3px solid #f59e0b; padding: 2.5mm 3.5mm; border-radius: 3px; margin: 3mm 0; break-inside: avoid; }
+  .cover { height: 297mm; width: 210mm; background: linear-gradient(155deg,#0f0f13 0%,#1d1d3d 55%,#3b3ec4 100%); color: #fff; padding: 60mm 22mm 20mm; page-break-after: always; position: relative; }
+  .cover img { width: 30mm; height: 30mm; border-radius: 7mm; }
+  .cover h1 { color:#fff; border: none; font-size: 40pt; letter-spacing: 3px; margin: 10mm 0 3mm; break-before: auto; }
+  .cover .sub { font-size: 16pt; color: #c9cbff; margin-bottom: 14mm; }
+  .cover .meta { position: absolute; bottom: 20mm; left: 22mm; right: 22mm; font-size: 10pt; color: #a8abe8; }
+  .toc h2 { margin-top: 0; }
+  .toc ol { list-style: none; padding: 0; counter-reset: c; }
+  .toc li { padding: 1.4mm 0; border-bottom: 1px dotted var(--line); font-size: 11pt; counter-increment: c; }
+  .toc li::before { content: counter(c) ". "; color: var(--accent); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 5mm; }
+  .card { border: 1px solid var(--line); border-radius: 6px; padding: 3mm 4mm; background: var(--soft); break-inside: avoid; }
+  .card b { color: var(--accent); }
+  .badge-tile { display:inline-block; background:#1c1f35; padding:6mm; border-radius:6px; }
+  .badge-tile img { width: 22mm; image-rendering: -webkit-optimize-contrast; border: none; box-shadow: none; }
+  .row { display:flex; gap:4mm; break-inside: avoid; margin: 3mm 0 4mm; }
+  .row figure { flex:1; margin:0; min-width:0; }
+  .row figure img { max-width:100%; }
+  .page-intro { margin-top: -2mm; }
+</style>
+</head>
+<body>
+<section class="cover">
+  <img src="img/logo.png" alt="Lexora">
+  <h1>LEXORA</h1>
+  <div class="sub">User Guide<br>Features, how it works and how to set it up</div>
+  <p style="max-width:120mm;color:#d6d8ff">A desktop app for learning foreign languages with an AI assistant: vocabulary, spaced repetition, writing, translation, pronunciation and dialogue.</p>
+  <div class="meta">App version 0.1.0 · Document dated 2026-10-14<br>Screenshots were taken with demo data (the vocabulary and statistics are for illustration).</div>
+</section>
+
+<section class="toc">
+  <h2 style="font-size:20pt;color:var(--accent)">Contents</h2>
+  <ol>
+    <li>About the app and core principles</li>
+    <li>Installation and first launch</li>
+    <li>Quick start in 5 steps</li>
+    <li>Interface: navigation</li>
+    <li>Vocabulary — your personal word list</li>
+    <li>Study — spaced repetition (SRS) and 8 modes</li>
+    <li>Writing — writing assistant</li>
+    <li>Translate — translation hub</li>
+    <li>Speak — pronunciation coach</li>
+    <li>Dialogue — AI conversation</li>
+    <li>Collections — word packs</li>
+    <li>Stats — statistics</li>
+    <li>Outside the main window: popup, stickers, tray, writing check in other apps</li>
+    <li>Configuring the app (Settings)</li>
+    <li>Data, backups and privacy</li>
+    <li>Keyboard shortcuts</li>
+    <li>Troubleshooting</li>
+  </ol>
+</section>
+
+<h1>1. About the app and core principles</h1>
+<p><b>Lexora</b> is a desktop application (Tauri 2 + React + Rust, SQLite database) for learning foreign languages. You build a personal vocabulary, review words with the SM-2 spaced-repetition algorithm, write and translate texts with AI, practice pronunciation and talk to an AI conversation partner.</p>
+<div class="grid">
+  <div class="card"><b>Local-first.</b> Vocabulary, reviews and statistics work fully offline. The internet is needed only for AI features (translation, text checking, voice).</div>
+  <div class="card"><b>Privacy by design.</b> No analytics or telemetry. Data is stored only on your computer; AI usage counters are local too.</div>
+  <div class="card"><b>Deterministic repetition.</b> The same answers always produce the same next review date (SM-2).</div>
+  <div class="card"><b>No data loss.</b> All database writes are transactional, integrity is checked at startup, and there are automatic copies and JSON export.</div>
+</div>
+<h2>What is in the app</h2>
+<table>
+<tr><th style="width:26%">Section</th><th>Purpose</th></tr>
+<tr><td>Vocabulary</td><td>Personal word list: search, status filters, adding words one by one, as a list or from a file, a word card with notes and pronunciation.</td></tr>
+<tr><td>Study</td><td>Reviews with SM-2 intervals. 8 modes: flashcards, typing, listening, fill the gap, image association, irregular verbs, definitions, speaking.</td></tr>
+<tr><td>Writing</td><td>Grammar / spelling / style check with explanations, rewriting in the tone you need, exercises based on your typical mistakes.</td></tr>
+<tr><td>Translate</td><td>Translation of text, photos, documents and PDF, speech; live interpreter; translation history.</td></tr>
+<tr><td>Speak</td><td>Phoneme-level pronunciation scoring, Shadowing, minimal pairs, history.</td></tr>
+<tr><td>Dialogue</td><td>Conversation scenarios with AI (coffee shop, travel, etc.) by voice or text, with scoring of your replies.</td></tr>
+<tr><td>Collections</td><td>Ready-made packs (Top 5000, phrasal and irregular verbs, Business/Academic/Travel) and your own collections.</td></tr>
+<tr><td>Stats</td><td>Vocabulary growth, accuracy, streak, 30-day activity, hardest words.</td></tr>
+<tr><td>Popup translator</td><td>Translate selected text in any app with a global hotkey.</td></tr>
+<tr><td>Stickers</td><td>Small cards over your desktop for ambient review.</td></tr>
+<tr><td>Writing check in other apps</td><td>"Grammarly-style": a badge with suggestions in a text field of any app.</td></tr>
+</table>
+
+<h1>2. Installation and first launch</h1>
+<h2>Installation</h2>
+<table>
+<tr><th style="width:20%">OS</th><th>How to install</th></tr>
+<tr><td>macOS</td><td>Open <code>Lexora_&lt;version&gt;_universal.dmg</code> (Intel + Apple Silicon; separate aarch64 / x64 builds exist too) and drag Lexora to Applications. Until the build is notarized by Apple, Gatekeeper may refuse to open the app — run the file <code>Разрешить Lexora.command</code> from the DMG: it removes the quarantine flag.</td></tr>
+<tr><td>Windows</td><td>Installer <code>Lexora_&lt;version&gt;_x64-setup.exe</code> (NSIS). Installs per user; no administrator rights needed.</td></tr>
+<tr><td>Linux</td><td>AppImage / deb — experimental.</td></tr>
+<tr><td>From source (macOS)</td><td><code>npm install</code>, then <code>bash scripts/install-mac.sh</code> — builds and installs <code>Lexora.app</code> into Applications without a DMG. For development: <code>npm run tauri dev</code>. Requires Node.js 18+, Rust stable, Xcode Command Line Tools.</td></tr>
+</table>
+
+<h2>First-run wizard</h2>
+<p>On first launch, while AI is not configured, the "Как настроить Lexora?" (How to set up Lexora) wizard opens automatically. It picks a model package for you — no need to configure each role by hand. The wizard is in Russian.</p>
+<figure><img src="img/onboarding-1.jpg"><figcaption>Setup wizard: two scenarios — "Бесплатно" (Free) and "Платно" (Paid). The link "Пропустить — настроить вручную" (Skip — configure manually) is at the bottom.</figcaption></figure>
+<ul>
+  <li><b>Free</b> — no card needed. One free Google Gemini key (get it at aistudio.google.com → Get API key) enables AI translation, photo and voice translation, live dialogue and live interpreting. You can also go with no keys at all: built-in dictionary, free photos (Wikimedia) and the system voice. A free Cloudflare Workers AI option is also available.</li>
+  <li><b>Paid</b> — one OpenAI or Gemini key billed by usage: everything from the free scenario plus AI illustrations for words.</li>
+</ul>
+<figure><img src="img/onboarding-2.jpg"><figcaption>Step 2 ("Free scenario"): Google Gemini (recommended), "No keys" or Cloudflare. Then paste the key and confirm.</figcaption></figure>
+<p>You can change the scenario later: <i>Settings → AI models → "Сменить сценарий" (Change scenario)</i>.</p>
+
+<h2>Operating-system permissions</h2>
+<table>
+<tr><th style="width:24%">Permission</th><th>Why</th></tr>
+<tr><td>Accessibility (macOS)</td><td>Capturing selected text for the popup translator and running "writing check in other apps". System Settings → Privacy &amp; Security → Accessibility → enable Lexora. Without it the hotkey opens the popup but the selected text may not be filled in. When running via <code>npm run tauri dev</code>, grant it to the binary <code>src-tauri/target/debug/lexora</code>.</td></tr>
+<tr><td>Microphone</td><td>Speak, the "Speaking" study mode, Dialogue, speech recording and live interpreting.</td></tr>
+</table>
+
+<h1>3. Quick start in 5 steps</h1>
+<ol>
+  <li><b>Choose an AI scenario</b> in the wizard (Google Gemini with a free key is recommended) and paste the key.</li>
+  <li><b>Set your learning language and translation language</b>: Settings → Language Preferences.</li>
+  <li><b>Add words</b>: Vocabulary → <i>Add Word</i> (one by one), <i>Paste list</i> (as a list), or load a ready-made pack in Collections.</li>
+  <li><b>Study</b>: Study → choose a mode → <i>Start Session</i>. Rate yourself with Again / Hard / Good / Easy — the app schedules the next review itself.</li>
+  <li><b>Turn on the background tools</b>: hotkey <kbd>⌘⇧L</kbd> to translate selected text and <kbd>⌘⇧S</kbd> for stickers (Windows/Linux: <kbd>Ctrl+Shift+L</kbd> / <kbd>Ctrl+Shift+S</kbd>).</li>
+</ol>
+<div class="note">If you do not want to configure AI at all, the app still works: vocabulary, reviews and statistics are fully offline.</div>
+
+<h1>4. Interface: navigation</h1>
+<p>On the left is the sidebar with the main sections. The <b>Study</b> item has a red counter showing how many cards are due today. <b>Settings</b> is at the bottom. You can hide the window: the app stays in the system tray / menu bar.</p>
+<figure><img src="img/vocabulary.jpg"><figcaption>Main screen: sidebar (Vocabulary, Study, Writing, Translate, Speak, Dialogue, Collections, Stats, Settings) and section content.</figcaption></figure>
+<p>The interface is dark and works with mouse and keyboard (there is a "Skip to main content" link, visible focus and ARIA labels).</p>
+
+<h1>5. Vocabulary — your personal word list</h1>
+<p>A table of words with columns: <b>Word</b> (word and transcription), <b>Translation</b>, <b>Type</b> (part of speech), <b>Frequency</b> (frequency rank), <b>Status</b> and <b>Due</b> (next review). The list is virtualized — large vocabularies (thousands of words) scroll smoothly.</p>
+<ul>
+  <li><b>Search</b> by word and translation — the "Search words…" box.</li>
+  <li><b>Status filters</b>: All · New · Learning · Review · Mature.</li>
+  <li><b>Study Now</b> — go straight to review.</li>
+  <li><b>▶ sound</b> next to a word — text-to-speech (TTS is cached locally).</li>
+</ul>
+<figure><img src="img/vocabulary-filter.jpg"><figcaption>The "Learning" filter keeps only words currently being learned.</figcaption></figure>
+<h3>Word statuses</h3>
+<table>
+<tr><th style="width:18%">Status</th><th>Meaning</th></tr>
+<tr><td>New</td><td>Word added, not reviewed yet.</td></tr>
+<tr><td>Learning</td><td>Interval 1–4 days.</td></tr>
+<tr><td>Review</td><td>Interval 4–21 days.</td></tr>
+<tr><td>Mature</td><td>Interval over 21 days — the word has stuck.</td></tr>
+</table>
+
+<h2>Adding words</h2>
+<p>The <b>Add Word</b> button and the arrow next to it open a menu with three ways:</p>
+<figure><img src="img/vocabulary-add-menu.jpg"><figcaption>Add menu: Add one / Paste list / Upload file.</figcaption></figure>
+<ol>
+  <li><b>Add one</b> — type a word or phrase and press <i>Translate</i>: Lexora finds the translation, transcription, part of speech, examples and (if enabled) a picture. The "Personal notes" field lets you write context or a mnemonic. <i>Add to Vocabulary</i> saves the word. The translation language is chosen in the window (a per-session setting; it does not change the global one).</li>
+  <li><b>Paste list</b> — paste words one per line (up to 100 entries at a time). They are translated in the background.</li>
+  <li><b>Upload file</b> — load a word list from a file.</li>
+</ol>
+<div class="row"><figure><img src="img/vocabulary-add-word.jpg"><figcaption>"Add Word to Vocabulary" window: translation language, word field, notes.</figcaption></figure><figure><img src="img/vocabulary-bulk.jpg"><figcaption>"Paste list": the "4 words ready" counter and the "Add 4 words" button.</figcaption></figure></div>
+
+<h2>Word card</h2>
+<p>Clicking a row opens a panel on the right: word, transcription, part of speech, frequency, status, translation and alternatives, illustration, SRS data (<i>Interval</i>, <i>Ease Factor</i>, <i>Repetitions</i>) and personal notes (<i>Save Notes</i>). Also here: favorite (star), <b>Practice pronunciation</b> (jumps to Speak with this word), picture refresh and <b>Remove from vocabulary</b>.</p>
+<figure><img src="img/vocabulary-detail.jpg"><figcaption>Word card for "apple".</figcaption></figure>
+
+<h1>6. Study — spaced repetition (SRS)</h1>
+<p>The "Study Session" screen shows how many cards are due and offers 8 modes. Choose a mode and press <b>Start Session</b>. At the top is session progress ("Card 1 of 5"); at the bottom — "Due today", "Accuracy" and "Time".</p>
+<figure><img src="img/study-overview.jpg"><figcaption>Choosing a mode and starting a session.</figcaption></figure>
+
+<h2>The algorithm</h2>
+<p>Lexora uses SM-2 — a pure, deterministic function. After each answer a grade is recorded (0 — total blackout … 4 — easy) and the interval, ease factor and next review date are recalculated. A mistake returns the word to a short interval and increases the "lapses" counter, which feeds the "hardest words" list in the statistics.</p>
+
+<h2>The 8 modes</h2>
+<table>
+<tr><th style="width:21%">Mode</th><th>How it works</th></tr>
+<tr><td>Flashcards</td><td>Classic cards: word → choose a translation from several (or "Show Answer", <kbd>Space</kbd>) → self-rating <b>Again / Hard / Good / Easy</b>. A "Context" panel on the right shows an example.</td></tr>
+<tr><td>Typing Mode</td><td>You see the translation and type the word. Check with <kbd>Enter</kbd>; spelling mistakes are explained.</td></tr>
+<tr><td>Listening</td><td>You hear the word and type what you heard.</td></tr>
+<tr><td>Fill the Gap</td><td>A sentence with a gap; AI can explain the mistake.</td></tr>
+<tr><td>Image Association</td><td>Recall the word from a picture.</td></tr>
+<tr><td>Irregular Verbs</td><td>Practice Past Simple and Past Participle forms.</td></tr>
+<tr><td>Definition</td><td>Definition and synonyms → recall the word.</td></tr>
+<tr><td>Speaking</td><td>Say the word aloud; phoneme-level feedback.</td></tr>
+</table>
+<div class="row"><figure><img src="img/study-flashcard.jpg"><figcaption>Flashcards: a question with answer options and a context panel.</figcaption></figure><figure><img src="img/study-flashcard-back.jpg"><figcaption>After answering — rate Again / Hard / Good / Easy.</figcaption></figure></div>
+<div class="row"><figure><img src="img/study-typing.jpg"><figcaption>Typing Mode.</figcaption></figure><figure><img src="img/study-cloze.jpg"><figcaption>Fill the Gap.</figcaption></figure></div>
+<div class="row"><figure><img src="img/study-listening.jpg"><figcaption>Listening.</figcaption></figure><figure><img src="img/study-definition.jpg"><figcaption>Definition.</figcaption></figure></div>
+<div class="row"><figure><img src="img/study-speaking.jpg"><figcaption>Speaking: "Record pronunciation" — recording and phoneme breakdown.</figcaption></figure><figure><img src="img/study-image.jpg"><figcaption>Image Association: if a word has no picture, a translation hint is shown.</figcaption></figure></div>
+<p>At the end of a session a summary appears; <b>Back to Study Overview</b> returns to mode selection. "Irregular Verbs" and "Image Association" work with suitable words from your vocabulary (verbs and words with pictures).</p>
+
+<h1>7. Writing — writing assistant</h1>
+<p>Paste a text (up to 8000 characters) and press <b>Check writing</b>. Lexora scores the text (0–100), highlights mistakes, shows a corrected version and explains each issue (category, rule).</p>
+<div class="row"><figure><img src="img/writing-result.jpg"><figcaption>Check result: score 70, source text with highlights, corrected version and the issue list.</figcaption></figure><figure><img src="img/writing-rewrite.jpg"><figcaption>Rewriting in Formal mode: original and suggested version side by side.</figcaption></figure></div>
+<ul>
+  <li><b>Apply / Accept all</b> — accept one fix or all. <b>Copy</b> copies the corrected text, <b>Use as input</b> puts it back as the new input.</li>
+  <li><b>Auto-check</b> (toggle at the top) — check automatically after you stop typing. Uses AI requests.</li>
+  <li><b>Rewrite</b> — rewrite the text: <i>Clearer, Shorter, More formal, Friendlier, Professional, Simpler</i>.</li>
+  <li><b>Your Error Patterns</b> — your typical mistakes (e.g. "she go → she goes ×3"). <b>Generate Exercises</b> builds exercises on exactly these.</li>
+</ul>
+<div class="note"><b>Writing privacy mode</b> (Settings → Privacy) does not store checked texts and does not collect error patterns.</div>
+
+<h1>8. Translate — translation hub</h1>
+<p>At the top: source language (Auto-Detect by default), the ⇄ swap button, target language and the "Smart" mode. Six tabs:</p>
+<table>
+<tr><th style="width:24%">Tab</th><th>What it does</th></tr>
+<tr><td>Text</td><td>Text translation. Tone: Standard / Formal / Casual / Academic. Source and translation playback, copy, <b>Save to Vocabulary</b> (save as a word/card), alternative phrasings.</td></tr>
+<tr><td>Image &amp; Photo</td><td>Translate pictures and screenshots: drag a file (PNG, JPG, WebP), choose via a dialog or paste from the clipboard with <kbd>⌘V</kbd>. View modes: In-Place Overlay (translation over the image), Side-by-Side, Extracted Text.</td></tr>
+<tr><td>Document</td><td>Documents and PDF: <code>.pdf .docx .md .txt .srt .vtt</code>. Two-pane "original / translation" editor, term glossary, tone. The result can be downloaded.</td></tr>
+<tr><td>Speech &amp; Audio</td><td>Record from the microphone (Record) or upload an audio file (File Upload): speech recognition and translation; phrases can be added to the vocabulary.</td></tr>
+<tr><td>Live Interpreter</td><td>Simultaneous interpreting: speak in any language — the translation is spoken back. Option "Speak the translation aloud". A session lasts up to 15 minutes and the transcript is saved to History. Requires a provider with live voice (Gemini).</td></tr>
+<tr><td>History</td><td>Translation history with filters All / Text / Image / Document / Audio, favorites, copy, delete entry and "Clear History".</td></tr>
+</table>
+<figure><img src="img/translate-text.jpg"><figcaption>Text: source on the left, translation on the right with tone selection and alternatives.</figcaption></figure>
+<div class="row"><figure><img src="img/translate-image.jpg"><figcaption>Image &amp; Photo: upload area.</figcaption></figure><figure><img src="img/translate-image-result.jpg"><figcaption>Result: translated text over the image ("No Parking" → "Парковка запрещена").</figcaption></figure></div>
+<div class="row"><figure><img src="img/translate-document.jpg"><figcaption>Document &amp; PDF Translation.</figcaption></figure><figure><img src="img/translate-audio.jpg"><figcaption>Speech &amp; Audio: Microphone / Record / File Upload; below — original and translation.</figcaption></figure></div>
+<div class="row"><figure><img src="img/translate-live.jpg"><figcaption>Live Interpreter. If the AI role is not configured, the reason is shown at the bottom ("API key needed").</figcaption></figure><figure><img src="img/translate-history.jpg"><figcaption>History.</figcaption></figure></div>
+
+<h1>9. Speak — pronunciation coach</h1>
+<p>Four tabs: <b>Practice</b>, <b>Shadowing</b>, <b>Minimal pairs</b>, <b>History</b>. Results are scored 0–100 and per phoneme; the pass mark is 90%.</p>
+<h2>Practice</h2>
+<p>Enter a word or phrase (you can set a target IPA transcription). <b>Listen to Model</b> plays the reference pronunciation, <b>Voice</b> selects the voice, <b>Say / Record</b> records (or hold <kbd>Space</kbd>). After recording you see "Current Score" and the session total "Total Session Score". Click a problem phoneme to get an articulation tip (e.g. "Close both lips…"). <b>Next Phrase</b> moves on.</p>
+<div class="row"><figure><img src="img/pron-practice.jpg"><figcaption>Practice: reference waveform, Listen to Model / Voice / Say-Record buttons, score rings and the "Problem sounds" block.</figcaption></figure><figure><img src="img/pron-shadowing.jpg"><figcaption>Shadowing Drill.</figcaption></figure></div>
+<h2>Shadowing</h2>
+<p>The phrase comes from your review queue. Listen to the sample and repeat right after it (<i>Say phrase</i> → "Speak now" → <i>Stop recording</i>); speech waveforms are compared and the result is "Passed" or not.</p>
+<h2>Minimal pairs</h2>
+<p>Word pairs that differ by one sound (ship / sheep, /ɪ/ vs /iː/). Listen to both (<i>Listen</i>), then say the target word — you get a match score. The contrast can be chosen in the list at the top right.</p>
+<h2>History</h2>
+<p>A list of past attempts with scores; the "Problem sounds" block (your most problematic sounds) is built from them and is also visible in Stats.</p>
+<div class="row"><figure><img src="img/pron-pairs.jpg"><figcaption>Minimal Pairs.</figcaption></figure><figure><img src="img/pron-history.jpg"><figcaption>Attempt history.</figcaption></figure></div>
+
+<h1>10. Dialogue — AI conversation</h1>
+<p>At the top left are the <b>AI Dialogue</b> and <b>Practice Scenarios</b> tabs. Choose a scenario with a level (e.g. "Coffee Shop in London (B2 Level)"). The AI partner opens the conversation with a first line and plays a role (barista, shop assistant, etc.).</p>
+<ul>
+  <li><b>Record &amp; send</b> — record a reply by voice: hold <kbd>Space</kbd>, release and the reply is sent (<i>Say / Send</i>).</li>
+  <li><b>Live conversation</b> — live voice dialogue mode (needs a provider with realtime voice — Gemini Live).</li>
+  <li><b>Type a reply instead</b> — answer in text.</li>
+  <li>On the right — <b>Current Turn Score</b> (score of the reply), <b>Total Session Score</b> (Fluency &amp; Clarity) and <b>Live vocabulary suggestions</b> — useful expressions for the scenario.</li>
+</ul>
+<figure><img src="img/dialogue.jpg"><figcaption>Dialogue: the AI line, recording panel and score counters.</figcaption></figure>
+
+<h1>11. Collections — word packs</h1>
+<p>Ready-made ("system") packs for the learning language: <b>Top 5000 Words</b>, <b>Phrasal Verbs</b>, <b>Irregular Verbs</b>, <b>Business English</b>, <b>Academic English</b>, <b>Travel English</b>. A pack must first be loaded into the database, then enabled in SRS:</p>
+<ol>
+  <li><b>Load into database</b> — loads the pack's words (about 5000 for Top 5000). The checkbox "Also fetch pictures when loading a pack" additionally fetches pictures (slower; uses the image provider).</li>
+  <li><b>Enable in SRS</b> / "Active in SRS" — enable or disable the pack in reviews.</li>
+</ol>
+<p><b>+ New Collection</b> creates your own collection (name and description).</p>
+<div class="row"><figure><img src="img/collections.jpg"><figcaption>Collections: loaded packs show "Active in SRS" / "Enable in SRS", others show "Load into database".</figcaption></figure><figure><img src="img/collections-new.jpg"><figcaption>Creating a collection.</figcaption></figure></div>
+<p>Packs can also be used as a source for desktop stickers (Settings → Stickers).</p>
+
+<h1>12. Stats — statistics</h1>
+<ul>
+  <li><b>Total Vocabulary</b> — all words; <b>Accuracy</b> — percentage of correct answers; <b>Mature Words</b> — words with an interval &gt; 21 days; <b>Current Streak</b> — consecutive days with a review.</li>
+  <li><b>Words Added</b> — added today / this week / this month / total.</li>
+  <li><b>Activity — Last 30 Days</b> — chart: reviews (blue) and added words (green) per day.</li>
+  <li><b>Accuracy by Error Type</b> — accuracy by error type (grammar, spelling…).</li>
+  <li><b>Hardest Words</b> — words with the most mistakes and low accuracy.</li>
+  <li><b>SRS Mastery Stages</b> — New / Learning / Review / Mature.</li>
+  <li><b>Writing Mistake Patterns</b> and <b>Pronunciation</b> — typical writing mistakes and problem sounds.</li>
+</ul>
+<figure><img src="img/stats.jpg"><figcaption>Learning Statistics.</figcaption></figure>
+
+<h1>13. Outside the main window</h1>
+<h2>Popup translator</h2>
+<p>Select text in any app (browser, PDF, notes) and press <kbd>⌘⇧L</kbd> (Windows: <kbd>Ctrl+Shift+L</kbd>). A popup opens with the translation, transcription, synonyms, frequency, picture and examples. Text is taken only from the selection, never from the clipboard. The window closes with <kbd>Esc</kbd>.</p>
+<ul>
+  <li><b>+ Add Word</b> — save the word to your vocabulary (the button becomes "✓ Added to Vocabulary").</li>
+  <li>🔊 — playback, bookmark — save to history, <b>Translate</b>/<kbd>Enter</kbd> — translate manually entered text.</li>
+  <li>Source/target language and mode ("Auto" / "Smart") can be chosen right in the window.</li>
+  <li>For longer selected text the window works as a built-in AI assistant: you can accept and replace the text in the app (<i>accept and replace</i>).</li>
+</ul>
+<figure class="narrow"><img src="img/popup.jpg"><figcaption>Popup translator: "apple" → "яблоко", alternatives, examples and "+ Add Word".</figcaption></figure>
+
+<h2>Desktop stickers</h2>
+<p>Small translucent cards over your desktop for ambient review. A card shows the word and transcription; the translation is hidden (the eye button reveals it). Rate yourself:</p>
+<ul><li><b>Помню ✓</b> (I remember) — the word is retained; <b>Не помню ✕</b> (I don't remember) — it comes back sooner; <b>Позже</b> (Later) — postpone. After you answer, the card disappears and is replaced by the next one.</li>
+<li>Top buttons: playback, show translation, example quote, word-source filter, pin on top, close.</li></ul>
+<p>Show/hide all stickers: <kbd>⌘⇧S</kbd> or "Toggle Stickers" in the tray menu. Count, opacity, word sources and quiet hours — Settings → Stickers.</p>
+<div class="row"><figure><img src="img/sticker.jpg"><figcaption>Sticker with the translation hidden.</figcaption></figure><figure><img src="img/sticker-open.jpg"><figcaption>Sticker with the translation shown.</figcaption></figure></div>
+
+<h2>Tray menu</h2>
+<p>The Lexora icon in the menu bar (macOS) / system tray: <b>Open Lexora</b>, <b>Open Translator</b> (an empty translator window; nothing is taken from the clipboard), <b>Translate Selection</b>, <b>Toggle Stickers</b>, <b>Quit</b>. On macOS, translating selected text is also available via right-click → Services → Lexora.</p>
+
+<h2>Writing check in other apps ("like Grammarly")</h2>
+<p>Enabled in Settings → "Writing check in other apps" (off by default; macOS and Windows; requires the same Accessibility permission).</p>
+<ul>
+  <li>Lexora watches the text field you are typing in. After a ~0.7 s pause the text is sent to the AI provider for a check in the learning language.</li>
+  <li>A <b>badge</b> with the number of suggestions appears at the corner of the field.</li>
+  <li>Clicking the badge opens a panel with fix cards; <b>Apply</b> changes the text right in the field (first just the fragment via Accessibility — formatting and undo are preserved; if the app refuses writes, via the clipboard). If you changed the text after the check, the fix is not applied. <b>Dismiss</b> rejects a suggestion, <kbd>Esc</kbd> closes the panel.</li>
+  <li>Not read: password fields, search fields, apps on the exclusion list (password managers, terminals, IDEs — editable in settings), text not in the learning language. Checks are not saved to the database.</li>
+</ul>
+<div style="display:flex;gap:6mm;align-items:flex-start;justify-content:center;margin:4mm 0">
+  <figure style="margin:0"><div class="badge-tile"><img src="img/grammar-badge.jpg"></div><figcaption>Badge with the suggestion count</figcaption></figure>
+  <figure style="margin:0"><img src="img/grammar-panel.jpg" style="max-width:78mm"><figcaption>Fix panel in the Mail app</figcaption></figure>
+</div>
+
+<h1>14. Configuring the app (Settings)</h1>
+<p>The settings page is one long screen with a quick-jump bar at the top: <i>AI models · AI usage · Language · Privacy · Writing check · Stickers · Shortcuts · Backup</i>. Changes in most sections are applied after pressing <b>Save Settings</b> at the bottom ("Settings saved successfully").</p>
+<figure><img src="img/settings-top.jpg"><figcaption>Top of Settings: jump bar and the "AI-модели" (AI models) section. Note: this part of the UI is in Russian.</figcaption></figure>
+
+<h2>14.1. AI models</h2>
+<p>Lexora splits AI work into <b>roles</b>, and a model is chosen for each. Roles are grouped:</p>
+<table>
+<tr><th style="width:20%">Group</th><th>Roles</th></tr>
+<tr><td>Text</td><td>Fast translation; Quality text (writing, explanations).</td></tr>
+<tr><td>Images</td><td>Image translation (vision).</td></tr>
+<tr><td>Voice</td><td>Speech recognition; Live dialogue; Live interpreting; Text-to-speech.</td></tr>
+<tr><td>Illustrations</td><td>AI pictures for words (paid, ≈ $0.03 per picture; off by default — free photos are used instead).</td></tr>
+</table>
+<p>The state of each role is shown by a label: "Работает" (Working), "Нужен ключ" (Key needed), "Выключено" (Off), "Не настроено в этом пакете" (Not set up in this package). The <b>Проверить</b> (Check) button sends a test request.</p>
+<figure class="tall"><img src="img/settings-ai-models.jpg"><figcaption>"AI models" section: roles by group, model packages and the API key field.</figcaption></figure>
+<h3>Model packages</h3>
+<p>A package is a ready-made set of routes for all roles: one key covers everything.</p>
+<table>
+<tr><th style="width:24%">Package</th><th>What it gives</th></tr>
+<tr><td>Google Gemini (recommended)</td><td>Free tier. One key for everything: translation, photos, voice, live dialogue and live interpreting.</td></tr>
+<tr><td>OpenAI</td><td>Pay per use. Strong text, recognition, neural voice. Live voice is currently Gemini-only.</td></tr>
+<tr><td>Cloudflare</td><td>Free. Free text (Llama) and FLUX pictures. No photo or speech recognition.</td></tr>
+<tr><td>Local (Ollama)</td><td>Models on your computer: text and photo without the cloud. Voice is the system one.</td></tr>
+<tr><td>No AI</td><td>Built-in dictionary, free photos and system voice. No keys.</td></tr>
+</table>
+<h3>API keys</h3>
+<p>Paste the key in the package's "API key" field and press <b>Сохранить</b> (Save). Keys are stored via <code>tauri-plugin-store</code>, not in plain-text files. Alternatively use environment variables:</p>
+<table>
+<tr><th>Provider</th><th>Environment variables</th><th>Audio</th></tr>
+<tr><td>OpenAI</td><td><code>OPENAI_API_KEY</code></td><td>yes (Whisper)</td></tr>
+<tr><td>Google Gemini</td><td><code>GEMINI_API_KEY</code></td><td>yes (native)</td></tr>
+<tr><td>Anthropic Claude</td><td><code>ANTHROPIC_API_KEY</code></td><td>no (text only)</td></tr>
+<tr><td>Cloudflare Workers AI</td><td><code>CLOUDFLARE_API_KEY</code>, <code>CLOUDFLARE_ACCOUNT_ID</code></td><td>no</td></tr>
+<tr><td>OpenRouter</td><td><code>OPENROUTER_API_KEY</code></td><td>model-dependent</td></tr>
+<tr><td>Groq</td><td><code>GROQ_API_KEY</code></td><td>model-dependent</td></tr>
+<tr><td>Custom / Ollama</td><td><code>CUSTOM_API_KEY</code> (not needed for local models)</td><td>model-dependent</td></tr>
+</table>
+<div class="note"><b>Local models.</b> For Ollama / LM Studio choose the <code>custom</code> provider and set an OpenAI-compatible base URL, e.g. <code>http://localhost:11434/v1</code>.</div>
+<h3>Advanced: a model for each role</h3>
+<p>The collapsible block "Расширенные: модель для каждой роли" (Advanced: model per role) lets you set a model for each role and a chain of fallbacks: if the primary is unavailable or rate-limited, Lexora switches to the next one.</p>
+<figure><img src="img/settings-wizard.jpg"><figcaption>"Сменить сценарий" (Change scenario) reopens the setup wizard.</figcaption></figure>
+
+<h2>14.2. AI usage</h2>
+<p>A table for 7 or 30 days: role, model, volume (requests or live-voice minutes), errors and a cost estimate. Counters are stored only on this computer. The estimate uses published prices of paid features (AI pictures, live-voice minutes); text, photo and voice within the Gemini free tier are not billed. Speech playback is cached and not counted.</p>
+<figure class="narrow"><img src="img/settings-ai-usage.jpg"><figcaption>AI usage.</figcaption></figure>
+
+<h2>14.3. Language Preferences</h2>
+<ul>
+  <li><b>Learning language (source)</b> — the language you study. TTS, pronunciation, writing check and word packs use it.</li>
+  <li><b>Translation language (target)</b> — the language words are translated into (your native one).</li>
+</ul>
+<figure class="narrow"><img src="img/settings-language.jpg"><figcaption>Language settings.</figcaption></figure>
+
+<h2>14.4. Privacy</h2>
+<ul>
+  <li><b>Writing privacy mode</b> — texts from the Writing Assistant are not stored; no history or error patterns are collected.</li>
+  <li><b>Writing auto-check</b> — auto-check after you pause typing (uses AI and may cost money).</li>
+</ul>
+<figure class="narrow"><img src="img/settings-privacy.jpg"><figcaption>Privacy.</figcaption></figure>
+
+<h2>14.5. Writing check in other apps</h2>
+<ul>
+  <li>The <b>Suggest fixes while I type in any app</b> toggle enables background checking (see section 13). On first enable, grant the Accessibility permission.</li>
+  <li><b>Never check in these apps</b> — an exclusion list (bundle ID on macOS or the <code>.exe</code> name on Windows); <i>Add</i> adds an app. An app can also be excluded in one click from the fix panel.</li>
+</ul>
+<figure class="narrow"><img src="img/settings-writing-check.jpg"><figcaption>Writing check in other apps.</figcaption></figure>
+
+<h2>14.6. Desktop Stickers &amp; Ambient Review</h2>
+<table>
+<tr><th style="width:30%">Setting</th><th>Description</th></tr>
+<tr><td>Max concurrent stickers</td><td>How many stickers are shown at once.</td></tr>
+<tr><td>Sticker opacity</td><td>Opacity (90% by default).</td></tr>
+<tr><td>Words on stickers</td><td>Word sources: "All vocabulary", "My words" and/or individual collections (Top 5000, Phrasal Verbs, Irregular Verbs, Business, Academic, Travel) — several can be selected.</td></tr>
+<tr><td>Quiet hours</td><td>During the set interval (e.g. 21:00–08:00) stickers are hidden.</td></tr>
+</table>
+<figure class="narrow"><img src="img/settings-stickers.jpg"><figcaption>Sticker settings.</figcaption></figure>
+
+<h2>14.7. Global Shortcuts</h2>
+<p>They work system-wide, even when the Lexora window is hidden. To change a shortcut, click the field and press the desired combination; duplicates and invalid combinations are flagged. Remember to press <b>Save Settings</b>.</p>
+<table>
+<tr><th style="width:36%">Action</th><th>macOS (default)</th><th>Windows/Linux</th></tr>
+<tr><td>Quick Translate Selected Text</td><td><kbd>⌘⇧L</kbd></td><td><kbd>Ctrl+Shift+L</kbd></td></tr>
+<tr><td>Toggle Stickers</td><td><kbd>⌘⇧S</kbd></td><td><kbd>Ctrl+Shift+S</kbd></td></tr>
+<tr><td>Open Translator (empty window)</td><td colspan="2">button in settings / tray item</td></tr>
+<tr><td>Open Main Window</td><td colspan="2">tray item "Open Lexora"</td></tr>
+</table>
+<figure class="narrow"><img src="img/settings-shortcuts.jpg"><figcaption>Global Shortcuts.</figcaption></figure>
+
+<h2>14.8. Backup / Export</h2>
+<p><b>Export vocabulary</b> saves your vocabulary (words, translations, notes and SRS progress) to a JSON file. <b>Import vocabulary</b> restores it on another computer; existing words are not overwritten on import.</p>
+<figure class="narrow"><img src="img/settings-backup.jpg"><figcaption>Backup / Export.</figcaption></figure>
+
+<h1>15. Data, backups and privacy</h1>
+<ul>
+  <li><b>Where data is stored.</b> In the SQLite file <code>lexora.db</code> in the app data directory (WAL mode). All writes are transactional.</li>
+  <li><b>Integrity check.</b> On every launch. If the database is corrupt, the file is not deleted but renamed to <code>lexora.db.corrupt-&lt;time&gt;</code>, and the app recovers from the most recent automatic copy.</li>
+  <li><b>Automatic copies.</b> Stored in the <code>backups/</code> subfolder of the data directory (<code>lexora-backup-…</code>); several recent ones are kept and older ones are deleted automatically.</li>
+  <li><b>Manual export.</b> Settings → Backup → Export vocabulary (JSON).</li>
+  <li><b>Caches.</b> Word pictures and speech audio are cached locally and not requested again.</li>
+  <li><b>What goes over the network.</b> Only requests to the AI provider you chose (text for translation/checking, audio for recognition, pictures) and requests for free photos. No analytics or telemetry. In "No AI" mode the network is not used.</li>
+  <li><b>API keys.</b> Stored via <code>tauri-plugin-store</code> (not in plain text), or taken from environment variables.</li>
+  <li><b>Window security.</b> A CSP without <code>unsafe-eval</code> is configured, external HTML is sanitized with DOMPurify, and SQL uses parameterized queries only.</li>
+</ul>
+
+<h1>16. Keyboard shortcuts</h1>
+<table>
+<tr><th style="width:36%">Keys</th><th>Where</th><th>Action</th></tr>
+<tr><td><kbd>⌘⇧L</kbd> / <kbd>Ctrl+Shift+L</kbd></td><td>Everywhere</td><td>Translate selected text (popup)</td></tr>
+<tr><td><kbd>⌘⇧S</kbd> / <kbd>Ctrl+Shift+S</kbd></td><td>Everywhere</td><td>Show/hide stickers</td></tr>
+<tr><td><kbd>Space</kbd></td><td>Flashcards</td><td>Show answer</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>Input modes, popup</td><td>Check answer / translate</td></tr>
+<tr><td><kbd>Space</kbd> (hold)</td><td>Speak, Dialogue</td><td>Record voice</td></tr>
+<tr><td><kbd>⌘V</kbd></td><td>Translate → Image</td><td>Paste a screenshot from the clipboard</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Popup, dialogs, fix panel</td><td>Close</td></tr>
+</table>
+
+<h1>17. Troubleshooting</h1>
+<table>
+<tr><th style="width:32%">Problem</th><th>What to do</th></tr>
+<tr><td>macOS won't open the app ("unidentified developer")</td><td>Run <code>Разрешить Lexora.command</code> from the DMG, or System Settings → Privacy &amp; Security → "Open Anyway".</td></tr>
+<tr><td>The hotkey opens the popup but the selected text is not filled in</td><td>Grant Lexora the Accessibility permission and restart the app.</td></tr>
+<tr><td>AI models show "Нужен ключ" (Key needed)</td><td>Paste the package key and press Save, then "Check" on the role. Free Gemini key: aistudio.google.com → Get API key.</td></tr>
+<tr><td>Live Interpreter / live dialogue does not work</td><td>These roles are available only with providers that offer realtime voice (currently Gemini). With OpenAI/Cloudflare/Ollama use recorded speech or text.</td></tr>
+<tr><td>Photo or speech translation unavailable</td><td>Anthropic and Cloudflare do not support audio/vision in this configuration — choose the Gemini or OpenAI package.</td></tr>
+<tr><td>Stickers do not appear</td><td>Check "Quiet hours", the sticker count and word source (there must be words due); toggle with <kbd>⌘⇧S</kbd>.</td></tr>
+<tr><td>The badge for the writing check in other apps does not appear</td><td>Enable the feature in Settings and grant Accessibility; the field must not be a password/search field and the app must not be excluded; the text language must match the learning language.</td></tr>
+<tr><td>"I want to work offline"</td><td>Choose the "No AI" package: vocabulary, reviews, statistics and system speech work offline.</td></tr>
+<tr><td>The database is corrupt</td><td>Lexora recovers from an automatic copy on its own. The corrupt file is kept as <code>lexora.db.corrupt-…</code>. You can also import a previously exported JSON.</td></tr>
+</table>
+</body>
+</html>
