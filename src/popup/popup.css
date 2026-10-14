@@ -119,6 +119,12 @@ html body {
   flex-shrink: 0;
 }
 
+.popup-domain-wrap .custom-select-trigger {
+  padding: 6px 10px;
+  font-size: var(--text-xs);
+  min-height: 32px;
+}
+
 .popup-toolbar .language-select-dropdown {
   min-width: 240px;
   width: max(100%, 240px);
