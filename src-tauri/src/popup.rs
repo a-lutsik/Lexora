@@ -735,8 +735,10 @@ mod macos {
             return Err(AppError::Io("Popup NSWindow is unavailable".to_string()));
         };
 
+        // MoveToActiveSpace: ordering the window front pulls it onto the Space the
+        // user is on now, instead of switching to the Space it was last shown on.
         ns_window.setCollectionBehavior(
-            NSWindowCollectionBehavior::CanJoinAllSpaces
+            NSWindowCollectionBehavior::MoveToActiveSpace
                 | NSWindowCollectionBehavior::Transient
                 | NSWindowCollectionBehavior::IgnoresCycle
                 | NSWindowCollectionBehavior::FullScreenAuxiliary,
