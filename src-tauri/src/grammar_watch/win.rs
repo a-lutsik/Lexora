@@ -171,11 +171,16 @@ fn sci_send(window: HWND, message: u32, wparam: usize, lparam: isize) -> Option<
 fn scintilla_read(window: HWND) -> Option<String> {
     let length = usize::try_from(sci_send(window, WM_GETTEXTLENGTH, 0, 0)?).ok()?;
     let wanted = length.min((logic::MAX_CHECK_CHARS + 1) * 4);
-    let mut buffer = vec![0u8; wanted + 1];
+    // Scintilla windows are Unicode, so Windows marshals WM_GETTEXT across
+    // processes as `wparam` UTF-16 units and copies `(copied + 1) * 2` bytes
+    // back into this buffer. A buffer sized in bytes would be overrun (heap
+    // corruption, crash later in ntdll): size it in UTF-16 units, with slack.
+    let units = wanted + 1;
+    let mut buffer = vec![0u8; units * size_of::<u16>() + 16];
     let copied = usize::try_from(sci_send(
         window,
         WM_GETTEXT,
-        buffer.len(),
+        units,
         buffer.as_mut_ptr() as isize,
     )?)
     .ok()?;
