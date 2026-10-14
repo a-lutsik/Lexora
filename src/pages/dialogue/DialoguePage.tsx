@@ -7,8 +7,10 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  useDeleteDialogueScenario,
   useDialogueScenarios,
   useEndDialogueSession,
+  useGenerateDialogueScenarios,
   useSendDialogueTurn,
   useStartDialogueSession,
 } from '../../hooks/useDialogue';
@@ -19,6 +21,7 @@ import { useSettings } from '../../hooks/useSettings';
 import { blobToBase64, revokeObjectUrl } from '../../lib/audioRecorder';
 import { QUERY_KEYS } from '../../lib/constants';
 import { ipc } from '../../lib/ipc';
+import { languageLabel } from '../../lib/languages';
 import type { RealtimeTurn } from '../../lib/realtimeTranscript';
 import { formatIpcError } from '../../lib/utils';
 import type {
@@ -29,6 +32,7 @@ import type {
 } from '../../lib/types';
 import { Button } from '../../components/ui/Button';
 import { IconMic } from '../../components/ui/LuminousIcons';
+import { CreateScenarioModal } from './CreateScenarioModal';
 import { DialogueBarEqualizer } from './DialogueBarEqualizer';
 import { LiveConversationConsole } from './LiveConversationConsole';
 import { TurnScoreRing } from './TurnScoreRing';
@@ -38,7 +42,10 @@ type DialogueTab = 'dialogue' | 'scenarios';
 type VoiceMode = 'record' | 'live';
 
 const SPACE_HOLD_MS = 250;
-const DEFAULT_SLUG = 'coffee-shop-london-b2';
+/** Built-in scenarios are written in English; other languages are generated from them. */
+const BASE_LANGUAGE = 'en';
+/** Stable reference while the scenario list is loading (keeps hook deps steady). */
+const NO_SCENARIOS: DialogueScenarioDto[] = [];
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -116,6 +123,9 @@ export default function DialoguePage() {
   const [voiceMode, setVoiceMode] = useState<VoiceMode>('record');
   const [headphones, setHeadphones] = useState(false);
   const [savedExchanges, setSavedExchanges] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const spaceDownAt = useRef<number | null>(null);
   const spaceHoldTimer = useRef<number | null>(null);
@@ -124,7 +134,10 @@ export default function DialoguePage() {
   const threadRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const { data: scenarios = [], isLoading: scenariosLoading } = useDialogueScenarios(language);
+  const { data: scenarioData, isLoading: scenariosLoading } = useDialogueScenarios(language);
+  const scenarios = scenarioData ?? NO_SCENARIOS;
+  const generateMutation = useGenerateDialogueScenarios();
+  const deleteMutation = useDeleteDialogueScenario();
   const startMutation = useStartDialogueSession();
   const sendMutation = useSendDialogueTurn();
   const endMutation = useEndDialogueSession();
@@ -180,26 +193,42 @@ export default function DialoguePage() {
   );
   const liveTextLength = liveTurns.reduce((n, t) => n + t.heard.length + t.spoken.length, 0);
 
+  // A named scenario, else the first one of the learner's language.
+  const startInputFor = useCallback(
+    (slug?: string): StartDialogueSessionInput | null => {
+      if (slug) return { scenarioSlug: slug, language };
+      const first = scenarios[0];
+      return first ? { scenarioId: first.id, language } : null;
+    },
+    [language, scenarios],
+  );
+
   const ensureSession = useCallback(
-    async (slug = DEFAULT_SLUG): Promise<DialogueSessionDto> => {
-      if (session && session.status === 'active' && session.scenarioSlug === slug) {
+    async (slug?: string): Promise<DialogueSessionDto> => {
+      if (session && session.status === 'active' && (!slug || session.scenarioSlug === slug)) {
         return session;
       }
-      const next = await startSession({ scenarioSlug: slug, language });
+      const input = startInputFor(slug);
+      if (!input) {
+        throw new Error(
+          'There are no scenarios in this language yet. Add or generate one in Practice Scenarios.',
+        );
+      }
+      const next = await startSession(input);
       setSession(next);
       setError(null);
       return next;
     },
-    [language, session, startSession],
+    [session, startInputFor, startSession],
   );
 
   const startDefaultScenario = useCallback(() => {
-    void ensureSession(DEFAULT_SLUG).catch((err: unknown) => {
+    void ensureSession().catch((err: unknown) => {
       setError(formatIpcError(err, 'Could not start dialogue. Check the AI provider in Settings.'));
     });
   }, [ensureSession]);
 
-  // Auto-start Coffee Shop scenario when opening the dialogue tab — one attempt
+  // Auto-start the first scenario when opening the dialogue tab — one attempt
   // per visit. Without the flag a failed start flipped the mutation state,
   // which re-created `ensureSession` and re-fired this effect in a tight loop
   // (thousands of IPC calls per second). Retrying is an explicit user action.
@@ -209,9 +238,10 @@ export default function DialoguePage() {
       return;
     }
     if (session || autoStartAttempted.current) return;
+    if (scenariosLoading || scenarios.length === 0) return;
     autoStartAttempted.current = true;
     startDefaultScenario();
-  }, [session, startDefaultScenario, tab]);
+  }, [scenarios.length, scenariosLoading, session, startDefaultScenario, tab]);
 
   const handleRetryStart = useCallback(() => {
     setError(null);
@@ -247,7 +277,7 @@ export default function DialoguePage() {
       const trimmed = text.trim();
       if (!trimmed || isBusy) return;
       try {
-        const active = await ensureSession(session?.scenarioSlug ?? DEFAULT_SLUG);
+        const active = await ensureSession(session?.scenarioSlug);
         const next = await sendMutation.mutateAsync({
           sessionId: active.id,
           text: trimmed,
@@ -267,7 +297,7 @@ export default function DialoguePage() {
     async (clip: RecordedClip) => {
       if (isBusy) return;
       try {
-        const active = await ensureSession(session?.scenarioSlug ?? DEFAULT_SLUG);
+        const active = await ensureSession(session?.scenarioSlug);
         const audioBase64 = await blobToBase64(clip.blob);
         const next = await sendMutation.mutateAsync({
           sessionId: active.id,
@@ -395,7 +425,7 @@ export default function DialoguePage() {
       void startLive({ mode: 'dialogue', dialogueSessionId: session.id });
       return;
     }
-    void ensureSession(session?.scenarioSlug ?? DEFAULT_SLUG)
+    void ensureSession(session?.scenarioSlug)
       .then((active) => startLive({ mode: 'dialogue', dialogueSessionId: active.id }))
       .catch((err: unknown) => {
         setError(formatIpcError(err, 'Could not start dialogue. Check the AI provider in Settings.'));
@@ -420,18 +450,22 @@ export default function DialoguePage() {
     setMenuOpen(false);
     clearPendingClip();
     await stopLive();
-    const slug = session?.scenarioSlug ?? DEFAULT_SLUG;
     try {
+      const input = startInputFor(session?.scenarioSlug);
+      if (!input) {
+        setError('There are no scenarios in this language yet. Add or generate one in Practice Scenarios.');
+        return;
+      }
       if (session && session.status === 'active') {
         await endMutation.mutateAsync(session.id);
       }
-      const next = await startSession({ scenarioSlug: slug, language });
+      const next = await startSession(input);
       setSession(next);
       setError(null);
     } catch (err) {
       setError(formatIpcError(err, 'Could not restart this scenario. Try again.'));
     }
-  }, [clearPendingClip, endMutation, language, session, startSession, stopLive]);
+  }, [clearPendingClip, endMutation, session, startInputFor, startSession, stopLive]);
 
   const handleEnd = useCallback(async () => {
     setMenuOpen(false);
@@ -466,6 +500,43 @@ export default function DialoguePage() {
       }
     },
     [clearPendingClip, endMutation, language, session, startSession, stopLive],
+  );
+
+  const handleGenerate = useCallback(async () => {
+    setNotice(null);
+    setError(null);
+    try {
+      const result = await generateMutation.mutateAsync(language);
+      if (result.created === 0) {
+        setNotice('All built-in scenarios are already available in this language.');
+      } else if (result.remaining > 0) {
+        setNotice(
+          `Generated ${result.created} scenarios, ${result.remaining} left. Press the button again to continue.`,
+        );
+      } else {
+        setNotice(`Generated ${result.created} scenarios.`);
+      }
+    } catch (err) {
+      setError(formatIpcError(err, 'Could not generate scenarios. Check the AI provider in Settings.'));
+    }
+  }, [generateMutation, language]);
+
+  const handleDeleteScenario = useCallback(
+    async (scenario: DialogueScenarioDto) => {
+      // First press arms the button, second press deletes.
+      if (pendingDeleteId !== scenario.id) {
+        setPendingDeleteId(scenario.id);
+        return;
+      }
+      setPendingDeleteId(null);
+      try {
+        await deleteMutation.mutateAsync(scenario.id);
+        setNotice(null);
+      } catch (err) {
+        setError(formatIpcError(err, 'Could not delete this scenario. Try again.'));
+      }
+    },
+    [deleteMutation, pendingDeleteId],
   );
 
   const handlePlay = useCallback(
@@ -530,16 +601,51 @@ export default function DialoguePage() {
           aria-labelledby="dialogue-tab-scenarios"
           className="dialogue-scenarios"
         >
-          <h1 className="dialogue-scenarios-title">Practice Scenarios</h1>
-          <p className="dialogue-scenarios-sub text-secondary text-sm">
-            Pick a situation and level to practice speaking with an AI tutor.
-          </p>
+          <div className="dialogue-scenarios-head">
+            <div>
+              <h1 className="dialogue-scenarios-title">Practice Scenarios</h1>
+              <p className="dialogue-scenarios-sub text-secondary text-sm">
+                Pick a situation and level to practice speaking with an AI tutor.
+              </p>
+            </div>
+            <div className="dialogue-scenarios-actions">
+              {language !== BASE_LANGUAGE && (
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleGenerate()}
+                  isLoading={generateMutation.isPending}
+                  disabled={isBusy}
+                  aria-label={`Generate scenarios in ${languageLabel(language)}`}
+                >
+                  {generateMutation.isPending ? 'Generating…' : 'Generate scenarios'}
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                onClick={() => setCreateOpen(true)}
+                disabled={isBusy || generateMutation.isPending}
+              >
+                Add scenario
+              </Button>
+            </div>
+          </div>
+          {notice && (
+            <p className="dialogue-notice text-sm text-secondary" role="status">
+              {notice}
+            </p>
+          )}
           {scenariosLoading ? (
             <p className="text-muted text-sm">Loading scenarios…</p>
+          ) : scenarios.length === 0 ? (
+            <p className="dialogue-scenarios-empty text-secondary text-sm">
+              {language === BASE_LANGUAGE
+                ? 'No scenarios yet. Add your own.'
+                : `There are no scenarios in ${languageLabel(language)} yet. Generate them from the built-in English ones, or add your own.`}
+            </p>
           ) : (
             <ul className="dialogue-scenario-list">
               {scenarios.map((scenario) => (
-                <li key={scenario.id}>
+                <li key={scenario.id} className="dialogue-scenario-item">
                   <button
                     type="button"
                     className={`dialogue-scenario-card${
@@ -548,12 +654,35 @@ export default function DialoguePage() {
                     onClick={() => void handleSelectScenario(scenario)}
                     disabled={isBusy}
                   >
-                    <span className="dialogue-scenario-level">{scenario.level}</span>
+                    <span className="dialogue-scenario-badges">
+                      <span className="dialogue-scenario-level">{scenario.level}</span>
+                      {scenario.kind === 'free' && (
+                        <span className="dialogue-scenario-kind">Free talk</span>
+                      )}
+                    </span>
                     <span className="dialogue-scenario-name">{scenario.title}</span>
                     {scenario.description && (
                       <span className="dialogue-scenario-desc">{scenario.description}</span>
                     )}
                   </button>
+                  {scenario.origin !== 'builtin' && (
+                    <button
+                      type="button"
+                      className={`dialogue-scenario-delete${
+                        pendingDeleteId === scenario.id ? ' is-armed' : ''
+                      }`}
+                      aria-label={
+                        pendingDeleteId === scenario.id
+                          ? `Confirm deleting ${scenario.title}`
+                          : `Delete ${scenario.title}`
+                      }
+                      onClick={() => void handleDeleteScenario(scenario)}
+                      onBlur={() => setPendingDeleteId(null)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      {pendingDeleteId === scenario.id ? 'Delete?' : '×'}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -570,7 +699,7 @@ export default function DialoguePage() {
             <section className="dialogue-thread-panel glass" aria-label="Scenario conversation">
               <header className="dialogue-thread-header">
                 <h1 className="dialogue-thread-title">
-                  {session?.scenarioTitle ?? 'Coffee Shop in London (B2 Level)'}
+                  {session?.scenarioTitle ?? scenarios[0]?.title ?? 'AI Dialogue'}
                 </h1>
                 <div className="dialogue-menu" ref={menuRef}>
                   <button
@@ -652,6 +781,16 @@ export default function DialoguePage() {
                 )}
                 {!session && !isStarting && error && (
                   <Button onClick={handleRetryStart}>Try again</Button>
+                )}
+                {!session && !isStarting && !error && !scenariosLoading && scenarios.length === 0 && (
+                  <div className="dialogue-empty">
+                    <p className="text-secondary text-sm">
+                      There are no scenarios in {languageLabel(language)} yet.
+                    </p>
+                    <Button variant="primary" onClick={() => setTab('scenarios')}>
+                      Open Practice Scenarios
+                    </Button>
+                  </div>
                 )}
               </div>
             </section>
@@ -820,6 +959,11 @@ export default function DialoguePage() {
           </aside>
         </div>
       )}
+      <CreateScenarioModal
+        isOpen={createOpen}
+        language={language}
+        onClose={() => setCreateOpen(false)}
+      />
     </div>
   );
 }

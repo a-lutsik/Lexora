@@ -1154,6 +1154,89 @@ pub fn dialogue_turn_from_json(parsed: &serde_json::Value) -> DialogueTurnResult
     }
 }
 
+// ── Dialogue scenario generation ──────────────────────────
+
+/// Source of a scenario: an English builtin to localize, or the learner's
+/// own title/description (empty `tutor_role` / `opening_line` = "write them").
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScenarioSeed {
+    pub title: String,
+    pub level: String,
+    /// `guided` or `free`.
+    pub kind: String,
+    pub description: String,
+    pub tutor_role: String,
+    pub opening_line: String,
+    pub suggested_vocab: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenerateScenarioRequest {
+    /// English name of the target language ("German").
+    pub language_name: String,
+    pub seed: ScenarioSeed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GeneratedScenario {
+    pub title: String,
+    pub description: String,
+    pub tutor_role: String,
+    pub opening_line: String,
+    pub suggested_vocab: Vec<String>,
+}
+
+pub fn render_generate_scenario_prompt(req: &GenerateScenarioRequest) -> String {
+    let seed = &req.seed;
+    let vocab = if seed.suggested_vocab.is_empty() {
+        String::new()
+    } else {
+        seed.suggested_vocab.join(", ")
+    };
+    include_str!("prompts/generate_scenario.txt")
+        .replace("{language}", &req.language_name)
+        .replace("{level}", &seed.level)
+        .replace("{kind}", &seed.kind)
+        .replace("{title}", &seed.title)
+        .replace("{description}", &seed.description)
+        .replace("{tutor_role}", &seed.tutor_role)
+        .replace("{opening_line}", &seed.opening_line)
+        .replace("{suggested_vocab}", &vocab)
+}
+
+/// Parse a model answer. The scenario is only usable with a title, a tutor
+/// role and an opening line, so a partial answer is an error, not a default.
+pub fn generated_scenario_from_json(
+    parsed: &serde_json::Value,
+) -> Result<GeneratedScenario, AppError> {
+    let text = |key: &str| parsed[key].as_str().map(|s| s.trim().to_string()).unwrap_or_default();
+    let title = text("title");
+    let tutor_role = text("tutor_role");
+    let opening_line = text("opening_line");
+    if title.is_empty() || tutor_role.is_empty() || opening_line.is_empty() {
+        return Err(AppError::Provider(
+            "The model returned an incomplete scenario. Try again.".to_string(),
+        ));
+    }
+    let suggested_vocab = parsed["suggested_vocab"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
+                .filter(|s| !s.is_empty())
+                .take(6)
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(GeneratedScenario {
+        title,
+        description: text("description"),
+        tutor_role,
+        opening_line,
+        suggested_vocab,
+    })
+}
+
 pub fn image_translation_from_json(
     parsed: &serde_json::Value,
     req: &TranslateImageRequest,
@@ -1387,6 +1470,11 @@ pub trait AIProvider: Send + Sync {
     /// AI Dialogue: score learner reply and continue the scenario as tutor.
     async fn dialogue_turn(&self, req: DialogueTurnRequest)
         -> Result<DialogueTurnResult, AppError>;
+    /// AI Dialogue: localize a builtin scenario or compose a learner's own one.
+    async fn generate_scenario(
+        &self,
+        req: GenerateScenarioRequest,
+    ) -> Result<GeneratedScenario, AppError>;
     fn provider_name(&self) -> &'static str;
 }
 
@@ -1638,6 +1726,13 @@ impl ProviderRegistry {
     ) -> Result<DialogueTurnResult, AppError> {
         chain_call!(self, dialogue_turn, req)
     }
+
+    pub async fn generate_scenario(
+        &self,
+        req: GenerateScenarioRequest,
+    ) -> Result<GeneratedScenario, AppError> {
+        chain_call!(self, generate_scenario, req)
+    }
 }
 
 pub fn create_provider(
@@ -1805,6 +1900,60 @@ pub fn build_registry(
 
 #[cfg(test)]
 mod tests {
+    fn scenario_seed() -> ScenarioSeed {
+        ScenarioSeed {
+            title: "Airport Check-in (B1 Level)".into(),
+            level: "B1".into(),
+            kind: "guided".into(),
+            description: "Check in for a flight.".into(),
+            tutor_role: "You are an airport check-in agent.".into(),
+            opening_line: "Good morning!".into(),
+            suggested_vocab: vec!["boarding pass".into(), "window seat".into()],
+        }
+    }
+
+    #[test]
+    fn scenario_prompt_names_language_and_embeds_seed() {
+        let prompt = render_generate_scenario_prompt(&GenerateScenarioRequest {
+            language_name: "German".into(),
+            seed: scenario_seed(),
+        });
+        assert!(prompt.contains("TARGET LANGUAGE: German"));
+        assert!(prompt.contains("CEFR LEVEL: B1"));
+        assert!(prompt.contains("title: Airport Check-in (B1 Level)"));
+        assert!(prompt.contains("suggested_vocab: boarding pass, window seat"));
+        assert!(!prompt.contains("{language}") && !prompt.contains("{title}"));
+    }
+
+    #[test]
+    fn generated_scenario_is_parsed_and_trimmed() {
+        let parsed = serde_json::json!({
+            "title": " Check-in am Flughafen (B1) ",
+            "description": "Einchecken.",
+            "tutor_role": "You are an agent. Speak only German.",
+            "opening_line": "Guten Morgen!",
+            "suggested_vocab": ["Bordkarte", " ", "Fensterplatz"]
+        });
+        let scenario = generated_scenario_from_json(&parsed).expect("valid");
+        assert_eq!(scenario.title, "Check-in am Flughafen (B1)");
+        assert_eq!(scenario.suggested_vocab, vec!["Bordkarte", "Fensterplatz"]);
+    }
+
+    #[test]
+    fn incomplete_generated_scenario_is_rejected() {
+        for missing in ["title", "tutor_role", "opening_line"] {
+            let mut parsed = serde_json::json!({
+                "title": "t", "description": "d", "tutor_role": "r",
+                "opening_line": "o", "suggested_vocab": []
+            });
+            parsed[missing] = serde_json::json!("  ");
+            assert!(
+                matches!(generated_scenario_from_json(&parsed), Err(AppError::Provider(_))),
+                "{missing} must be required"
+            );
+        }
+    }
+
     use super::*;
     use crate::commands::study::EvaluationResult;
     use crate::commands::translate::TranslationResult;
@@ -3139,6 +3288,24 @@ mod tests {
                     segments: vec![],
                     detected_lexical_domain: None,
                     requested_lexical_domain: None,
+                })
+            }
+        }
+
+        async fn generate_scenario(
+            &self,
+            req: GenerateScenarioRequest,
+        ) -> Result<GeneratedScenario, AppError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            if self.fail {
+                Err(self.fail_err())
+            } else {
+                Ok(GeneratedScenario {
+                    title: format!("{} ({})", req.seed.title, req.language_name),
+                    description: req.seed.description,
+                    tutor_role: format!("{} tutor", self.name),
+                    opening_line: "Hello!".into(),
+                    suggested_vocab: vec!["hello".into()],
                 })
             }
         }

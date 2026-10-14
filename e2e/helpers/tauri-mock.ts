@@ -565,6 +565,9 @@ export const DEFAULT_IPC_RESPONSES: Record<string, unknown> = {
       openingLine: 'What kind of roast would you like with your flat white today?',
       suggestedVocab: ['medium roast', 'dark roast', 'Arabica', 'single origin'],
       sortOrder: 1,
+      kind: 'guided',
+      origin: 'builtin',
+      baseSlug: null,
     },
     {
       id: 2,
@@ -577,8 +580,13 @@ export const DEFAULT_IPC_RESPONSES: Record<string, unknown> = {
       openingLine: 'Good morning! May I see your passport and booking confirmation, please?',
       suggestedVocab: ['boarding pass', 'window seat'],
       sortOrder: 2,
+      kind: 'guided',
+      origin: 'builtin',
+      baseSlug: null,
     },
   ],
+  generate_dialogue_scenarios: { created: 0, remaining: 0 },
+  delete_dialogue_scenario: null,
   start_dialogue_session: {
     id: 10,
     scenarioId: 1,

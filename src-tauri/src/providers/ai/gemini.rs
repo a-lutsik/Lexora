@@ -4,6 +4,8 @@
 // ============================================================
 
 use super::{
+    generated_scenario_from_json, render_generate_scenario_prompt, GenerateScenarioRequest,
+    GeneratedScenario,
     articulation_tip_from_json, audio_translation_from_json, check_writing_from_json,
     dialogue_turn_from_json, doc_chunk_from_json, enrich_from_json, evaluation_from_json,
     exercises_from_json, extract_json, gloss_from_json, image_translation_from_json,
@@ -403,6 +405,15 @@ impl AIProvider for GeminiProvider {
         let content = self.send_content(&prompt).await?;
         let parsed = extract_json(&content)?;
         Ok(dialogue_turn_from_json(&parsed))
+    }
+
+    async fn generate_scenario(
+        &self,
+        req: GenerateScenarioRequest,
+    ) -> Result<GeneratedScenario, AppError> {
+        let prompt = render_generate_scenario_prompt(&req);
+        let content = self.send_content(&prompt).await?;
+        generated_scenario_from_json(&extract_json(&content)?)
     }
 }
 

@@ -745,6 +745,29 @@ export type DialogueScenarioDto = {
   openingLine: string;
   suggestedVocab: string[];
   sortOrder: number;
+  /** `guided` = a concrete situation, `free` = talk about anything. */
+  kind: DialogueScenarioKind;
+  /** `builtin` = English seed, `generated` = AI localization, `custom` = the learner's own. */
+  origin: DialogueScenarioOrigin;
+  baseSlug: string | null;
+};
+
+export type DialogueScenarioKind = 'guided' | 'free';
+export type DialogueScenarioOrigin = 'builtin' | 'generated' | 'custom';
+
+export type CreateDialogueScenarioInput = {
+  language?: string;
+  title?: string;
+  description?: string;
+  level: string;
+  kind: DialogueScenarioKind;
+};
+
+export type GenerateDialogueScenariosResult = {
+  /** Localizations created by this call. */
+  created: number;
+  /** Builtin scenarios still without a localization. */
+  remaining: number;
 };
 
 export type DialogueTurnDto = {

@@ -4,21 +4,30 @@
 // ============================================================
 
 use crate::db::repos::dialogue::{
-    DialogueRepo, DialogueScenarioDto, DialogueSessionDto, InsertTurnInput,
+    DialogueRepo, DialogueScenarioDto, DialogueSessionDto, InsertTurnInput, NewScenario,
+    BASE_LANGUAGE, KIND_FREE, KIND_GUIDED, ORIGIN_CUSTOM, ORIGIN_GENERATED,
 };
 use crate::db::repos::settings::SettingsRepo;
 use crate::db::DbPool;
 use crate::error::AppError;
 use crate::pronunciation::audio_cache;
-use crate::providers::ai::{DialogueHistoryMessage, DialogueTurnRequest, TranscribeAudioRequest};
+use crate::providers::ai::{
+    DialogueHistoryMessage, DialogueTurnRequest, GenerateScenarioRequest, GeneratedScenario,
+    ScenarioSeed, TranscribeAudioRequest,
+};
 use crate::providers::models::roles::ModelRole;
 use crate::providers::models::router::registry_for_role;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 
 const MAX_USER_CHARS: usize = 2_000;
 const DEFAULT_SCENARIO_SLUG: &str = "coffee-shop-london-b2";
+const LEVELS: [&str; 6] = ["A1", "A2", "B1", "B2", "C1", "C2"];
+const MAX_TITLE_CHARS: usize = 80;
+const MAX_DESCRIPTION_CHARS: usize = 500;
+const FREE_TALK_TITLE: &str = "Free conversation";
+const FREE_TALK_DESCRIPTION: &str = "Talk about anything you like.";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,6 +76,233 @@ pub async fn list_dialogue_scenarios(
     DialogueRepo::list_scenarios(&conn, lang)
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDialogueScenarioInput {
+    pub language: Option<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub level: String,
+    /// `guided` or `free`.
+    pub kind: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateScenariosResult {
+    /// Localizations created by this call.
+    pub created: i64,
+    /// Builtin scenarios still without a localization (a later call continues).
+    pub remaining: i64,
+}
+
+fn trimmed(raw: Option<&str>) -> String {
+    raw.map(str::trim).unwrap_or_default().to_string()
+}
+
+fn check_len(label: &str, value: &str, max: usize) -> Result<(), AppError> {
+    if value.chars().count() > max {
+        return Err(AppError::Validation(format!(
+            "{label} is too long (max {max} characters)"
+        )));
+    }
+    Ok(())
+}
+
+/// Validated learner input → the seed the model composes a scenario from.
+fn custom_scenario_seed(input: &CreateDialogueScenarioInput) -> Result<ScenarioSeed, AppError> {
+    let level = input.level.trim().to_uppercase();
+    if !LEVELS.contains(&level.as_str()) {
+        return Err(AppError::Validation(format!("Unknown level '{}'", input.level)));
+    }
+    let kind = input.kind.trim();
+    if kind != KIND_GUIDED && kind != KIND_FREE {
+        return Err(AppError::Validation(format!("Unknown scenario type '{kind}'")));
+    }
+    let mut title = trimmed(input.title.as_deref());
+    let mut description = trimmed(input.description.as_deref());
+    check_len("Title", &title, MAX_TITLE_CHARS)?;
+    check_len("Description", &description, MAX_DESCRIPTION_CHARS)?;
+
+    if kind == KIND_GUIDED {
+        if title.is_empty() {
+            return Err(AppError::Validation("Give the scenario a title".to_string()));
+        }
+        if description.is_empty() {
+            return Err(AppError::Validation(
+                "Describe the situation to practice".to_string(),
+            ));
+        }
+    } else {
+        if title.is_empty() {
+            title = FREE_TALK_TITLE.to_string();
+        }
+        if description.is_empty() {
+            description = FREE_TALK_DESCRIPTION.to_string();
+        }
+    }
+    Ok(ScenarioSeed {
+        title,
+        level,
+        kind: kind.to_string(),
+        description,
+        tutor_role: String::new(),
+        opening_line: String::new(),
+        suggested_vocab: vec![],
+    })
+}
+
+/// A builtin English scenario as the source of its localization.
+fn localization_seed(base: &DialogueScenarioDto) -> ScenarioSeed {
+    ScenarioSeed {
+        title: base.title.clone(),
+        level: base.level.clone(),
+        kind: base.kind.clone(),
+        description: base.description.clone().unwrap_or_default(),
+        tutor_role: base.tutor_role.clone(),
+        opening_line: base.opening_line.clone(),
+        suggested_vocab: base.suggested_vocab.clone(),
+    }
+}
+
+fn localized_scenario(
+    base: &DialogueScenarioDto,
+    language: &str,
+    generated: GeneratedScenario,
+) -> NewScenario {
+    NewScenario {
+        slug: format!("{}-{language}", base.slug),
+        title: generated.title,
+        level: base.level.clone(),
+        language: language.to_string(),
+        description: Some(generated.description).filter(|d| !d.is_empty()),
+        tutor_role: generated.tutor_role,
+        opening_line: generated.opening_line,
+        suggested_vocab: generated.suggested_vocab,
+        kind: base.kind.clone(),
+        origin: ORIGIN_GENERATED.to_string(),
+        base_slug: Some(base.slug.clone()),
+        sort_order: Some(base.sort_order),
+    }
+}
+
+fn custom_scenario(seed: ScenarioSeed, language: &str, generated: GeneratedScenario) -> NewScenario {
+    NewScenario {
+        slug: format!("custom-{}", uuid::Uuid::new_v4().simple()),
+        title: generated.title,
+        level: seed.level,
+        language: language.to_string(),
+        description: Some(generated.description).filter(|d| !d.is_empty()),
+        tutor_role: generated.tutor_role,
+        opening_line: generated.opening_line,
+        suggested_vocab: generated.suggested_vocab,
+        kind: seed.kind,
+        origin: ORIGIN_CUSTOM.to_string(),
+        base_slug: None,
+        sort_order: None,
+    }
+}
+
+/// Localize the builtin English scenarios into `language` with the AI.
+/// Idempotent: only scenarios without a localization are generated, one model
+/// call each, so a failure midway keeps what was already created.
+#[tauri::command]
+pub async fn generate_dialogue_scenarios(
+    language: String,
+    db: State<'_, Arc<DbPool>>,
+    app: AppHandle,
+) -> Result<GenerateScenariosResult, AppError> {
+    let pool = db.inner().clone();
+    let language = language.trim().to_string();
+    if language.is_empty() || language == BASE_LANGUAGE {
+        return Err(AppError::Validation(
+            "Built-in scenarios are already available in English".to_string(),
+        ));
+    }
+    let (settings, language_name, missing) = {
+        let conn = pool.get()?;
+        let name = DialogueRepo::language_name(&conn, &language)?
+            .ok_or_else(|| AppError::Validation(format!("Unknown language '{language}'")))?;
+        (
+            SettingsRepo::get(&conn)?,
+            name,
+            DialogueRepo::missing_base_scenarios(&conn, &language)?,
+        )
+    };
+    if missing.is_empty() {
+        return Ok(GenerateScenariosResult { created: 0, remaining: 0 });
+    }
+    if settings.offline_mode || settings.ai_provider == "offline" {
+        return Err(AppError::ai_not_connected("Dialogue"));
+    }
+
+    let registry = registry_for_role(&app, &pool, &settings, ModelRole::TextQuality)?;
+    let mut created = 0i64;
+    for base in &missing {
+        let generated = registry
+            .generate_scenario(GenerateScenarioRequest {
+                language_name: language_name.clone(),
+                seed: localization_seed(base),
+            })
+            .await;
+        let generated = match generated {
+            Ok(g) => g,
+            // Keep the localizations already saved; the next call continues.
+            Err(_) if created > 0 => break,
+            Err(e) => return Err(e),
+        };
+        let mut conn = pool.get()?;
+        DialogueRepo::insert_scenario(&mut conn, &localized_scenario(base, &language, generated))?;
+        created += 1;
+    }
+    Ok(GenerateScenariosResult {
+        created,
+        remaining: missing.len() as i64 - created,
+    })
+}
+
+/// Create the learner's own scenario: the AI writes the tutor role, opening
+/// line and vocabulary from the title and description, in the learner's language.
+#[tauri::command]
+pub async fn create_dialogue_scenario(
+    input: CreateDialogueScenarioInput,
+    db: State<'_, Arc<DbPool>>,
+    app: AppHandle,
+) -> Result<DialogueScenarioDto, AppError> {
+    let pool = db.inner().clone();
+    let seed = custom_scenario_seed(&input)?;
+    let (settings, language, language_name) = {
+        let conn = pool.get()?;
+        let settings = SettingsRepo::get(&conn)?;
+        let language = normalize_language(input.language.as_deref(), &settings.primary_language);
+        let name = DialogueRepo::language_name(&conn, &language)?
+            .ok_or_else(|| AppError::Validation(format!("Unknown language '{language}'")))?;
+        (settings, language, name)
+    };
+    if settings.offline_mode || settings.ai_provider == "offline" {
+        return Err(AppError::ai_not_connected("Dialogue"));
+    }
+
+    let registry = registry_for_role(&app, &pool, &settings, ModelRole::TextQuality)?;
+    let generated = registry
+        .generate_scenario(GenerateScenarioRequest {
+            language_name,
+            seed: seed.clone(),
+        })
+        .await?;
+    let mut conn = pool.get()?;
+    DialogueRepo::insert_scenario(&mut conn, &custom_scenario(seed, &language, generated))
+}
+
+#[tauri::command]
+pub async fn delete_dialogue_scenario(
+    id: i64,
+    db: State<'_, Arc<DbPool>>,
+) -> Result<(), AppError> {
+    let conn = db.get()?;
+    DialogueRepo::delete_scenario(&conn, id)
+}
+
 #[tauri::command]
 pub async fn start_dialogue_session(
     input: StartDialogueSessionInput,
@@ -93,7 +329,12 @@ pub async fn start_dialogue_session(
     {
         DialogueRepo::get_scenario_by_slug(&conn, slug)?
     } else {
-        DialogueRepo::get_scenario_by_slug(&conn, DEFAULT_SCENARIO_SLUG)?
+        // A fresh page opens the first scenario of the learner's language;
+        // the English coffee shop only when that language has none yet.
+        match DialogueRepo::first_scenario(&conn, &language)? {
+            Some(first) => first,
+            None => DialogueRepo::get_scenario_by_slug(&conn, DEFAULT_SCENARIO_SLUG)?,
+        }
     };
 
     DialogueRepo::start_session(&mut conn, scenario.id, &language)
@@ -256,4 +497,47 @@ pub async fn send_dialogue_turn(
             suggestions,
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn input(kind: &str, title: &str, description: &str, level: &str) -> CreateDialogueScenarioInput {
+        CreateDialogueScenarioInput {
+            language: None,
+            title: Some(title.into()),
+            description: Some(description.into()),
+            level: level.into(),
+            kind: kind.into(),
+        }
+    }
+
+    #[test]
+    fn guided_scenario_needs_title_and_description() {
+        assert!(custom_scenario_seed(&input("guided", "", "At the bank", "B1")).is_err());
+        assert!(custom_scenario_seed(&input("guided", "Bank", "  ", "B1")).is_err());
+        let seed = custom_scenario_seed(&input("guided", " Bank ", " Open an account ", "b1"))
+            .expect("valid");
+        assert_eq!(seed.title, "Bank");
+        assert_eq!(seed.description, "Open an account");
+        assert_eq!(seed.level, "B1");
+        assert!(seed.tutor_role.is_empty() && seed.opening_line.is_empty());
+    }
+
+    #[test]
+    fn free_scenario_falls_back_to_default_title_and_description() {
+        let seed = custom_scenario_seed(&input("free", "", "", "A2")).expect("valid");
+        assert_eq!(seed.kind, "free");
+        assert_eq!(seed.title, FREE_TALK_TITLE);
+        assert_eq!(seed.description, FREE_TALK_DESCRIPTION);
+    }
+
+    #[test]
+    fn rejects_unknown_level_kind_and_overlong_text() {
+        assert!(custom_scenario_seed(&input("free", "", "", "D9")).is_err());
+        assert!(custom_scenario_seed(&input("quiz", "t", "d", "B1")).is_err());
+        let long = "x".repeat(MAX_DESCRIPTION_CHARS + 1);
+        assert!(custom_scenario_seed(&input("guided", "t", &long, "B1")).is_err());
+    }
 }

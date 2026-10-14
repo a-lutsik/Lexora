@@ -44,7 +44,9 @@ import type {
   PronunciationModelDto,
   SaveAudioRecordingInput,
   SaveAudioRecordingResult,
+  CreateDialogueScenarioInput,
   DialogueScenarioDto,
+  GenerateDialogueScenariosResult,
   DialogueSessionDto,
   StartDialogueSessionInput,
   SendDialogueTurnInput,
@@ -174,6 +176,14 @@ export const ipc = {
   dialogue: {
     listScenarios: (language?: string | null) =>
       invoke<DialogueScenarioDto[]>('list_dialogue_scenarios', { language: language ?? null }),
+
+    generateScenarios: (language: string) =>
+      invoke<GenerateDialogueScenariosResult>('generate_dialogue_scenarios', { language }),
+
+    createScenario: (input: CreateDialogueScenarioInput) =>
+      invoke<DialogueScenarioDto>('create_dialogue_scenario', { input }),
+
+    deleteScenario: (id: number) => invoke<void>('delete_dialogue_scenario', { id }),
 
     startSession: (input: StartDialogueSessionInput = {}) =>
       invoke<DialogueSessionDto>('start_dialogue_session', { input }),

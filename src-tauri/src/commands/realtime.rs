@@ -101,7 +101,7 @@ impl LiveTranscript {
     }
 }
 
-fn language_name(conn: &rusqlite::Connection, code: &str) -> String {
+pub(crate) fn language_name(conn: &rusqlite::Connection, code: &str) -> String {
     conn.query_row(
         "SELECT name FROM language WHERE code = ?1",
         [code],

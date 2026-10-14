@@ -5,13 +5,45 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ipc } from '../lib/ipc';
 import { QUERY_KEYS, STALE_TIME } from '../lib/constants';
-import type { SendDialogueTurnInput, StartDialogueSessionInput } from '../lib/types';
+import type {
+  CreateDialogueScenarioInput,
+  SendDialogueTurnInput,
+  StartDialogueSessionInput,
+} from '../lib/types';
 
 export function useDialogueScenarios(language?: string | null) {
   return useQuery({
     queryKey: [QUERY_KEYS.DIALOGUE_SCENARIOS, language ?? 'all'],
     queryFn: () => ipc.dialogue.listScenarios(language),
     staleTime: STALE_TIME.LONG,
+  });
+}
+
+export function useGenerateDialogueScenarios() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (language: string) => ipc.dialogue.generateScenarios(language),
+    // A partial run still saved scenarios, so refresh on error too.
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.DIALOGUE_SCENARIOS] }),
+  });
+}
+
+export function useCreateDialogueScenario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateDialogueScenarioInput) => ipc.dialogue.createScenario(input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.DIALOGUE_SCENARIOS] }),
+  });
+}
+
+export function useDeleteDialogueScenario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => ipc.dialogue.deleteScenario(id),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.DIALOGUE_SCENARIOS] }),
   });
 }
 

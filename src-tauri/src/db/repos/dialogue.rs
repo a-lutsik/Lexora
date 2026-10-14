@@ -20,7 +20,43 @@ pub struct DialogueScenarioDto {
     pub opening_line: String,
     pub suggested_vocab: Vec<String>,
     pub sort_order: i64,
+    /// `guided` (a concrete situation) or `free` (talk about anything).
+    pub kind: String,
+    /// `builtin` (English seed), `generated` (AI localization) or `custom`.
+    pub origin: String,
+    /// Slug of the builtin scenario a generated row localizes.
+    pub base_slug: Option<String>,
 }
+
+/// A scenario row to insert (generated localization or learner's own).
+#[derive(Debug, Clone)]
+pub struct NewScenario {
+    pub slug: String,
+    pub title: String,
+    pub level: String,
+    pub language: String,
+    pub description: Option<String>,
+    pub tutor_role: String,
+    pub opening_line: String,
+    pub suggested_vocab: Vec<String>,
+    pub kind: String,
+    pub origin: String,
+    pub base_slug: Option<String>,
+    /// `None` → appended after the language's last scenario.
+    pub sort_order: Option<i64>,
+}
+
+pub const KIND_GUIDED: &str = "guided";
+pub const KIND_FREE: &str = "free";
+pub const ORIGIN_BUILTIN: &str = "builtin";
+pub const ORIGIN_GENERATED: &str = "generated";
+pub const ORIGIN_CUSTOM: &str = "custom";
+/// Language of the builtin scenarios every localization is generated from.
+pub const BASE_LANGUAGE: &str = "en";
+
+const SCENARIO_COLUMNS: &str = "id, slug, title, level, language, description, tutor_role,
+                        opening_line, suggested_vocab_json, sort_order,
+                        kind, origin, base_slug";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,60 +120,140 @@ impl DialogueRepo {
         conn: &Connection,
         language: Option<&str>,
     ) -> Result<Vec<DialogueScenarioDto>, AppError> {
-        let rows = if let Some(lang) = language.filter(|s| !s.is_empty()) {
-            let mut stmt = conn.prepare(
-                "SELECT id, slug, title, level, language, description, tutor_role,
-                        opening_line, suggested_vocab_json, sort_order
-                 FROM dialogue_scenario
-                 WHERE language = ?1
-                 ORDER BY sort_order ASC, id ASC",
-            )?;
-            let mapped = stmt
-                .query_map(params![lang], map_scenario_row)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| AppError::Database(e.to_string()))?;
-            mapped
-        } else {
-            let mut stmt = conn.prepare(
-                "SELECT id, slug, title, level, language, description, tutor_role,
-                        opening_line, suggested_vocab_json, sort_order
-                 FROM dialogue_scenario
-                 ORDER BY sort_order ASC, id ASC",
-            )?;
-            let mapped = stmt
-                .query_map([], map_scenario_row)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| AppError::Database(e.to_string()))?;
-            mapped
-        };
+        let lang = language.filter(|s| !s.is_empty());
+        let sql = format!(
+            "SELECT {SCENARIO_COLUMNS}
+             FROM dialogue_scenario
+             WHERE deleted_at IS NULL AND (?1 IS NULL OR language = ?1)
+             ORDER BY sort_order ASC, id ASC"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(params![lang], map_scenario_row)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Database(e.to_string()))?;
         Ok(rows)
     }
 
     pub fn get_scenario_by_id(conn: &Connection, id: i64) -> Result<DialogueScenarioDto, AppError> {
-        conn.query_row(
-            "SELECT id, slug, title, level, language, description, tutor_role,
-                    opening_line, suggested_vocab_json, sort_order
-             FROM dialogue_scenario WHERE id = ?1",
-            params![id],
-            map_scenario_row,
-        )
-        .optional()?
-        .ok_or_else(|| AppError::NotFound(format!("Dialogue scenario {id} not found")))
+        let sql = format!("SELECT {SCENARIO_COLUMNS} FROM dialogue_scenario WHERE id = ?1");
+        conn.query_row(&sql, params![id], map_scenario_row)
+            .optional()?
+            .ok_or_else(|| AppError::NotFound(format!("Dialogue scenario {id} not found")))
     }
 
     pub fn get_scenario_by_slug(
         conn: &Connection,
         slug: &str,
     ) -> Result<DialogueScenarioDto, AppError> {
-        conn.query_row(
-            "SELECT id, slug, title, level, language, description, tutor_role,
-                    opening_line, suggested_vocab_json, sort_order
-             FROM dialogue_scenario WHERE slug = ?1",
-            params![slug],
-            map_scenario_row,
-        )
-        .optional()?
-        .ok_or_else(|| AppError::NotFound(format!("Dialogue scenario '{slug}' not found")))
+        let sql = format!("SELECT {SCENARIO_COLUMNS} FROM dialogue_scenario WHERE slug = ?1");
+        conn.query_row(&sql, params![slug], map_scenario_row)
+            .optional()?
+            .ok_or_else(|| AppError::NotFound(format!("Dialogue scenario '{slug}' not found")))
+    }
+
+    /// First live scenario of a language (the one a fresh page opens).
+    pub fn first_scenario(
+        conn: &Connection,
+        language: &str,
+    ) -> Result<Option<DialogueScenarioDto>, AppError> {
+        let sql = format!(
+            "SELECT {SCENARIO_COLUMNS} FROM dialogue_scenario
+             WHERE language = ?1 AND deleted_at IS NULL
+             ORDER BY sort_order ASC, id ASC LIMIT 1"
+        );
+        Ok(conn.query_row(&sql, params![language], map_scenario_row).optional()?)
+    }
+
+    /// Builtin English scenarios that have no live localization in `language`.
+    pub fn missing_base_scenarios(
+        conn: &Connection,
+        language: &str,
+    ) -> Result<Vec<DialogueScenarioDto>, AppError> {
+        let sql = "SELECT b.id, b.slug, b.title, b.level, b.language, b.description,
+                          b.tutor_role, b.opening_line, b.suggested_vocab_json, b.sort_order,
+                          b.kind, b.origin, b.base_slug
+                   FROM dialogue_scenario b
+                   WHERE b.language = ?1 AND b.origin = ?2 AND b.deleted_at IS NULL
+                     AND NOT EXISTS (
+                         SELECT 1 FROM dialogue_scenario g
+                         WHERE g.base_slug = b.slug AND g.language = ?3 AND g.deleted_at IS NULL
+                     )
+                   ORDER BY b.sort_order ASC, b.id ASC";
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt
+            .query_map(params![BASE_LANGUAGE, ORIGIN_BUILTIN, language], map_scenario_row)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        Ok(rows)
+    }
+
+    /// English name of a catalogued language (`None` = unknown code).
+    pub fn language_name(conn: &Connection, code: &str) -> Result<Option<String>, AppError> {
+        Ok(conn
+            .query_row("SELECT name FROM language WHERE code = ?1", params![code], |row| {
+                row.get::<_, String>(0)
+            })
+            .optional()?)
+    }
+
+    /// Insert one scenario. Transactional.
+    pub fn insert_scenario(
+        conn: &mut Connection,
+        new: &NewScenario,
+    ) -> Result<DialogueScenarioDto, AppError> {
+        let tx = conn.transaction()?;
+        let sort_order = match new.sort_order {
+            Some(order) => order,
+            None => tx.query_row(
+                "SELECT COALESCE(MAX(sort_order), 0) + 1 FROM dialogue_scenario
+                 WHERE language = ?1",
+                params![new.language],
+                |row| row.get::<_, i64>(0),
+            )?,
+        };
+        let vocab_json = serde_json::to_string(&new.suggested_vocab)?;
+        tx.execute(
+            "INSERT INTO dialogue_scenario (
+                slug, title, level, language, description, tutor_role, opening_line,
+                suggested_vocab_json, sort_order, kind, origin, base_slug
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                new.slug,
+                new.title,
+                new.level,
+                new.language,
+                new.description,
+                new.tutor_role,
+                new.opening_line,
+                vocab_json,
+                sort_order,
+                new.kind,
+                new.origin,
+                new.base_slug,
+            ],
+        )?;
+        let id = tx.last_insert_rowid();
+        tx.commit()?;
+        Self::get_scenario_by_id(conn, id)
+    }
+
+    /// Soft-delete a learner's or generated scenario. Builtin seeds stay.
+    /// The slug is freed so the same localization can be generated again.
+    pub fn delete_scenario(conn: &Connection, id: i64) -> Result<(), AppError> {
+        let scenario = Self::get_scenario_by_id(conn, id)?;
+        if scenario.origin == ORIGIN_BUILTIN {
+            return Err(AppError::Validation(
+                "Built-in scenarios cannot be deleted".to_string(),
+            ));
+        }
+        conn.execute(
+            "UPDATE dialogue_scenario
+             SET deleted_at = unixepoch(), slug = slug || '~deleted-' || id
+             WHERE id = ?1 AND deleted_at IS NULL",
+            params![id],
+        )?;
+        Ok(())
     }
 
     /// Create a session and insert the tutor opening line. Transactional.
@@ -439,6 +555,9 @@ fn map_scenario_row(row: &rusqlite::Row<'_>) -> Result<DialogueScenarioDto, rusq
         opening_line: row.get(7)?,
         suggested_vocab: parse_string_array(&vocab_json),
         sort_order: row.get(9)?,
+        kind: row.get(10)?,
+        origin: row.get(11)?,
+        base_slug: row.get(12)?,
     })
 }
 
@@ -621,5 +740,120 @@ mod tests {
         let list = DialogueRepo::list_scenarios(&conn, Some("en")).expect("list");
         assert!(list.len() >= 5);
         assert!(list.iter().any(|s| s.slug == "coffee-shop-london-b2"));
+    }
+
+    fn new_scenario(slug: &str, language: &str, origin: &str, base: Option<&str>) -> NewScenario {
+        NewScenario {
+            slug: slug.into(),
+            title: format!("Title {slug}"),
+            level: "B1".into(),
+            language: language.into(),
+            description: Some("desc".into()),
+            tutor_role: "role".into(),
+            opening_line: "Hallo!".into(),
+            suggested_vocab: vec!["eins".into()],
+            kind: KIND_GUIDED.into(),
+            origin: origin.into(),
+            base_slug: base.map(str::to_string),
+            sort_order: None,
+        }
+    }
+
+    #[test]
+    fn seeded_scenarios_are_builtin_guided_english() {
+        let pool = pool();
+        let conn = pool.get().expect("conn");
+        let list = DialogueRepo::list_scenarios(&conn, Some("en")).expect("list");
+        assert!(list.iter().all(|s| s.origin == ORIGIN_BUILTIN && s.kind == KIND_GUIDED));
+        assert!(DialogueRepo::list_scenarios(&conn, Some("de")).expect("de").is_empty());
+        assert_eq!(
+            DialogueRepo::first_scenario(&conn, "en").expect("first").map(|s| s.slug),
+            Some("coffee-shop-london-b2".to_string())
+        );
+        assert!(DialogueRepo::first_scenario(&conn, "de").expect("first").is_none());
+    }
+
+    #[test]
+    fn missing_base_scenarios_shrink_as_localizations_are_added() {
+        let pool = pool();
+        let mut conn = pool.get().expect("conn");
+        let all = DialogueRepo::missing_base_scenarios(&conn, "de").expect("missing");
+        assert_eq!(all.len(), 5);
+
+        let base = all.first().expect("base");
+        let mut new = new_scenario("coffee-shop-london-b2-de", "de", ORIGIN_GENERATED, Some(&base.slug));
+        new.sort_order = Some(base.sort_order);
+        let saved = DialogueRepo::insert_scenario(&mut conn, &new).expect("insert");
+        assert_eq!(saved.base_slug.as_deref(), Some(base.slug.as_str()));
+        assert_eq!(saved.sort_order, base.sort_order);
+        assert_eq!(DialogueRepo::missing_base_scenarios(&conn, "de").expect("missing").len(), 4);
+        // Another language is unaffected.
+        assert_eq!(DialogueRepo::missing_base_scenarios(&conn, "fr").expect("missing").len(), 5);
+
+        // One live localization per base and language.
+        let dup = new_scenario("dup-slug", "de", ORIGIN_GENERATED, Some(&base.slug));
+        assert!(DialogueRepo::insert_scenario(&mut conn, &dup).is_err());
+    }
+
+    #[test]
+    fn custom_scenarios_are_appended_after_existing_ones() {
+        let pool = pool();
+        let mut conn = pool.get().expect("conn");
+        let first = DialogueRepo::insert_scenario(&mut conn, &new_scenario("custom-a", "de", ORIGIN_CUSTOM, None))
+            .expect("a");
+        let second = DialogueRepo::insert_scenario(&mut conn, &new_scenario("custom-b", "de", ORIGIN_CUSTOM, None))
+            .expect("b");
+        assert!(second.sort_order > first.sort_order);
+        let list = DialogueRepo::list_scenarios(&conn, Some("de")).expect("list");
+        assert_eq!(list.iter().map(|s| s.slug.as_str()).collect::<Vec<_>>(), ["custom-a", "custom-b"]);
+        assert_eq!(list[0].suggested_vocab, vec!["eins".to_string()]);
+    }
+
+    #[test]
+    fn delete_hides_generated_scenario_and_allows_regeneration() {
+        let pool = pool();
+        let mut conn = pool.get().expect("conn");
+        let base = DialogueRepo::get_scenario_by_slug(&conn, "airport-checkin-b1").expect("base");
+        let generated = DialogueRepo::insert_scenario(
+            &mut conn,
+            &new_scenario("airport-checkin-b1-de", "de", ORIGIN_GENERATED, Some(&base.slug)),
+        )
+        .expect("insert");
+
+        // A session keeps its scenario even after the scenario is deleted.
+        let session = DialogueRepo::start_session(&mut conn, generated.id, "de").expect("session");
+        DialogueRepo::delete_scenario(&conn, generated.id).expect("delete");
+
+        assert!(DialogueRepo::list_scenarios(&conn, Some("de")).expect("list").is_empty());
+        assert_eq!(DialogueRepo::missing_base_scenarios(&conn, "de").expect("missing").len(), 5);
+        assert_eq!(
+            DialogueRepo::get_session(&conn, session.id).expect("session").scenario_id,
+            generated.id
+        );
+        DialogueRepo::insert_scenario(
+            &mut conn,
+            &new_scenario("airport-checkin-b1-de", "de", ORIGIN_GENERATED, Some(&base.slug)),
+        )
+        .expect("regenerate under the same slug");
+    }
+
+    #[test]
+    fn builtin_scenarios_cannot_be_deleted() {
+        let pool = pool();
+        let conn = pool.get().expect("conn");
+        let builtin = DialogueRepo::get_scenario_by_slug(&conn, "small-talk-b2").expect("seed");
+        assert!(matches!(
+            DialogueRepo::delete_scenario(&conn, builtin.id),
+            Err(AppError::Validation(_))
+        ));
+        assert!(DialogueRepo::get_scenario_by_slug(&conn, "small-talk-b2").is_ok());
+    }
+
+    #[test]
+    fn language_name_resolves_catalog_codes() {
+        let pool = pool();
+        let conn = pool.get().expect("conn");
+        assert!(DialogueRepo::language_name(&conn, "de").expect("de").is_some());
+        assert!(DialogueRepo::language_name(&conn, "zz-nope").expect("zz").is_none());
     }
 }

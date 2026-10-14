@@ -7,7 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DialoguePage from './DialoguePage';
 import { ChannelMock, invokeMock } from '../../test/mocks';
 import { installFakeAudio } from '../../test/fakeAudio';
-import type { DialogueSessionDto, ModelRoutes, RealtimeEvent, RoleState } from '../../lib/types';
+import type {
+  DialogueScenarioDto,
+  DialogueSessionDto,
+  ModelRoutes,
+  RealtimeEvent,
+  RoleState,
+} from '../../lib/types';
 
 vi.mock('@tauri-apps/api/core', () => ({
   convertFileSrc: (path: string) => `asset://${path}`,
@@ -117,6 +123,9 @@ async function baseInvoke(cmd: string): Promise<unknown> {
               ?? 'What kind of roast would you like with your flat white today?',
             suggestedVocab: openingSession.turns[0]?.suggestions ?? [],
             sortOrder: 1,
+            kind: 'guided',
+            origin: 'builtin',
+            baseSlug: null,
           },
         ];
       }
@@ -344,5 +353,234 @@ describe('DialoguePage — failed auto-start', () => {
     renderPage();
     await screen.findByText('What kind of roast would you like with your flat white today?');
     expect(startCalls()).toBe(1);
+  });
+});
+
+// ── Scenarios in the learner's language + the learner's own scenarios ──
+
+function scenario(overrides: Partial<DialogueScenarioDto>): DialogueScenarioDto {
+  return {
+    id: 50,
+    slug: 'kaffeehaus-b2-de',
+    title: 'Im Café (B2)',
+    level: 'B2',
+    language: 'de',
+    description: 'Bestelle einen Kaffee.',
+    tutorRole: 'You are a barista. Speak only German.',
+    openingLine: 'Guten Tag! Was darf es sein?',
+    suggestedVocab: ['Milchkaffee'],
+    sortOrder: 1,
+    kind: 'guided',
+    origin: 'generated',
+    baseSlug: 'coffee-shop-london-b2',
+    ...overrides,
+  };
+}
+
+type Backend = {
+  language: string;
+  scenarios: DialogueScenarioDto[];
+  generate?: () => Promise<unknown>;
+  create?: (input: unknown) => Promise<unknown>;
+};
+
+function useBackend(backend: Backend) {
+  invokeMock.mockReset();
+  invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+    switch (cmd) {
+      case 'get_settings':
+        return { primaryLanguage: backend.language, offlineMode: false, aiProvider: 'openai' };
+      case 'list_dialogue_scenarios':
+        return backend.scenarios.filter((sc) => sc.language === args?.['language']);
+      case 'generate_dialogue_scenarios':
+        return backend.generate?.() ?? { created: 0, remaining: 0 };
+      case 'create_dialogue_scenario':
+        return backend.create?.(args?.['input']) ?? null;
+      case 'start_dialogue_session':
+        return { ...openingSession, language: backend.language };
+      default:
+        return null;
+    }
+  });
+}
+
+describe('DialoguePage — scenarios per language', () => {
+  const startCalls = () =>
+    invokeMock.mock.calls.filter(([cmd]) => cmd === 'start_dialogue_session');
+
+  it('starts the first scenario of the learner language, not the English coffee shop', async () => {
+    useBackend({ language: 'de', scenarios: [scenario({})] });
+    renderPage();
+
+    await waitFor(() => expect(startCalls()).toHaveLength(1));
+    expect(startCalls()[0]?.[1]).toEqual({ input: { scenarioId: 50, language: 'de' } });
+  });
+
+  it('offers to open Practice Scenarios when the language has none, without starting a session', async () => {
+    const user = userEvent.setup();
+    useBackend({ language: 'de', scenarios: [] });
+    renderPage();
+
+    expect(await screen.findByText(/no scenarios in German yet/i)).toBeInTheDocument();
+    expect(startCalls()).toHaveLength(0);
+
+    await user.click(screen.getByRole('button', { name: 'Open Practice Scenarios' }));
+    expect(screen.getByRole('heading', { name: 'Practice Scenarios' })).toBeInTheDocument();
+  });
+
+  it('generates the scenarios from the English ones and lists them', async () => {
+    const user = userEvent.setup();
+    const backend: Backend = { language: 'de', scenarios: [] };
+    backend.generate = async () => {
+      backend.scenarios = [scenario({})];
+      return { created: 1, remaining: 0 };
+    };
+    useBackend(backend);
+    renderPage();
+
+    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    await user.click(await screen.findByRole('button', { name: 'Generate scenarios in German' }));
+
+    expect(invokeMock).toHaveBeenCalledWith('generate_dialogue_scenarios', { language: 'de' });
+    expect(await screen.findByRole('status')).toHaveTextContent('Generated 1 scenarios.');
+    expect(await screen.findByText('Im Café (B2)')).toBeInTheDocument();
+  });
+
+  it('tells the learner to press again when only part of the scenarios were generated', async () => {
+    const user = userEvent.setup();
+    useBackend({
+      language: 'de',
+      scenarios: [scenario({})],
+      generate: async () => ({ created: 2, remaining: 3 }),
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    await user.click(await screen.findByRole('button', { name: 'Generate scenarios in German' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/2 scenarios, 3 left/);
+  });
+
+  it('shows the generation error', async () => {
+    const user = userEvent.setup();
+    useBackend({
+      language: 'de',
+      scenarios: [scenario({})],
+      generate: async () => {
+        throw new Error('AI provider is not configured');
+      },
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    await user.click(await screen.findByRole('button', { name: 'Generate scenarios in German' }));
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('does not offer generation for English, which already has the built-in scenarios', async () => {
+    const user = userEvent.setup();
+    useBackend({ language: 'en', scenarios: [scenario({ language: 'en', origin: 'builtin' })] });
+    renderPage();
+
+    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    expect(await screen.findByRole('button', { name: 'Add scenario' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Generate scenarios/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('DialoguePage — own scenarios', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  async function openAddDialog() {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    await user.click(await screen.findByRole('button', { name: 'Add scenario' }));
+    return { user, dialog: await screen.findByRole('dialog', { name: 'Add scenario' }) };
+  }
+
+  it('creates a situation scenario from a title and a description', async () => {
+    const create = vi.fn(async () => scenario({ id: 51, origin: 'custom' }));
+    useBackend({ language: 'de', scenarios: [scenario({})], create });
+    const { user, dialog } = await openAddDialog();
+
+    const submit = within(dialog).getByRole('button', { name: 'Create scenario' });
+    expect(submit).toBeDisabled();
+
+    await user.type(within(dialog).getByLabelText('Title'), 'Beim Arzt');
+    await user.type(
+      within(dialog).getByLabelText('Describe the situation'),
+      'Ich habe Kopfschmerzen und brauche einen Termin.',
+    );
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create).toHaveBeenCalledWith({
+      language: 'de',
+      level: 'B1',
+      kind: 'guided',
+      title: 'Beim Arzt',
+      description: 'Ich habe Kopfschmerzen und brauche einen Termin.',
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('creates a free conversation without a title or description', async () => {
+    const create = vi.fn(async () => scenario({ id: 52, origin: 'custom', kind: 'free' }));
+    useBackend({ language: 'de', scenarios: [scenario({})], create });
+    const { user, dialog } = await openAddDialog();
+
+    await user.click(within(dialog).getByRole('radio', { name: /Free conversation/ }));
+    const submit = within(dialog).getByRole('button', { name: 'Create scenario' });
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'free', language: 'de', title: '', description: '' }),
+    );
+  });
+
+  it('keeps the dialog open and shows the error when creating fails', async () => {
+    const create = vi.fn(async () => {
+      throw new Error('AI provider is not configured');
+    });
+    useBackend({ language: 'de', scenarios: [scenario({})], create });
+    const { user, dialog } = await openAddDialog();
+
+    await user.click(within(dialog).getByRole('radio', { name: /Free conversation/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Create scenario' }));
+
+    expect(await within(dialog).findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('closes the dialog with Escape', async () => {
+    useBackend({ language: 'de', scenarios: [scenario({})] });
+    const { user } = await openAddDialog();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('deletes a custom scenario after a second press and never offers it for built-ins', async () => {
+    const user = userEvent.setup();
+    const builtin = scenario({ id: 1, slug: 'coffee-shop-london-b2', language: 'en', origin: 'builtin', title: 'Coffee' });
+    const custom = scenario({ id: 7, slug: 'custom-1', language: 'en', origin: 'custom', title: 'Mine' });
+    useBackend({ language: 'en', scenarios: [builtin, custom] });
+    renderPage();
+
+    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    await screen.findByText('Mine');
+    expect(screen.queryByRole('button', { name: 'Delete Coffee' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Delete Mine' }));
+    expect(invokeMock).not.toHaveBeenCalledWith('delete_dialogue_scenario', expect.anything());
+
+    await user.click(screen.getByRole('button', { name: 'Confirm deleting Mine' }));
+    expect(invokeMock).toHaveBeenCalledWith('delete_dialogue_scenario', { id: 7 });
   });
 });

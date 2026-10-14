@@ -471,6 +471,7 @@ mod tests {
     use crate::providers::ai::{
         AIProvider, ArticulationTipRequest, ArticulationTipResult, AudioTranslationResult,
         CheckWritingRequest, CheckWritingResult, DialogueTurnRequest, DialogueTurnResult,
+        GenerateScenarioRequest, GeneratedScenario,
         DocChunkTranslationResult, EnrichRequest, EnrichResult, EvaluatePronunciationRequest,
         EvaluateRequest, ExplainRequest, GenerateExercisesRequest, ImageTranslationResult,
         MnemonicAssociation, MnemonicConceptsResult, MnemonicRankResult,
@@ -585,6 +586,12 @@ mod tests {
             &self,
             _req: DialogueTurnRequest,
         ) -> Result<DialogueTurnResult, AppError> {
+            unreachable!()
+        }
+        async fn generate_scenario(
+            &self,
+            _req: GenerateScenarioRequest,
+        ) -> Result<GeneratedScenario, AppError> {
             unreachable!()
         }
         fn provider_name(&self) -> &'static str {

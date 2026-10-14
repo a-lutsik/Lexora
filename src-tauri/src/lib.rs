@@ -267,6 +267,9 @@ pub fn run() {
             commands::pronunciation::get_minimal_pairs,
             // AI Dialogue
             commands::dialogue::list_dialogue_scenarios,
+            commands::dialogue::generate_dialogue_scenarios,
+            commands::dialogue::create_dialogue_scenario,
+            commands::dialogue::delete_dialogue_scenario,
             commands::dialogue::start_dialogue_session,
             commands::dialogue::send_dialogue_turn,
             commands::dialogue::get_dialogue_session,
