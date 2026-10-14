@@ -25,7 +25,7 @@ use tauri::window::Color;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use windows::core::{BSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{CloseHandle, HWND, RECT, LPARAM, WPARAM};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
 };
@@ -46,7 +46,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VIRTUAL_KEY, VK_A, VK_CONTROL, VK_DELETE, VK_V,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongPtrW,
+    GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongPtrW, GetWindowRect,
     GetWindowThreadProcessId, SendMessageTimeoutW, SetForegroundWindow, SetWindowLongPtrW,
     SetWindowPos, GUITHREADINFO, GWL_EXSTYLE, HWND_TOPMOST, SMTO_ABORTIFHUNG, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_SHOWWINDOW, WM_GETTEXT,
     WM_GETTEXTLENGTH, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
@@ -105,7 +105,29 @@ const ROLE_SECURE: &str = "AXSecureTextField";
 /// created on an MTA thread are agile, so moving them between the watcher
 /// and the IPC threads is sound.
 #[derive(Clone)]
-struct Elem(IUIAutomationElement);
+enum Elem {
+    /// A UI Automation element.
+    Uia(IUIAutomationElement),
+    /// A plain Win32 window driven by window messages only (Scintilla):
+    /// UI Automation is never called for it, because its provider chain
+    /// crashed the process while typing in Notepad++.
+    Win32(HWND),
+}
+
+impl Elem {
+    fn uia(&self) -> Option<&IUIAutomationElement> {
+        match self {
+            Elem::Uia(element) => Some(element),
+            Elem::Win32(_) => None,
+        }
+    }
+}
+
+fn window_class(window: HWND) -> String {
+    let mut class = [0u16; 64];
+    let length = usize::try_from(unsafe { GetClassNameW(window, &mut class) }).unwrap_or(0);
+    String::from_utf16_lossy(&class[..length.min(class.len())])
+}
 
 unsafe impl Send for Elem {}
 unsafe impl Sync for Elem {}
@@ -183,11 +205,16 @@ fn utf16_to_utf8_offset(text: &str, units: usize) -> Option<usize> {
 impl Elem {
     /// The Scintilla window behind this element, if it is one.
     fn scintilla(&self) -> Option<HWND> {
-        if !self.class_name().eq_ignore_ascii_case(SCINTILLA_CLASS) {
-            return None;
+        match self {
+            Elem::Win32(window) => Some(*window),
+            Elem::Uia(element) => {
+                if !self.class_name().eq_ignore_ascii_case(SCINTILLA_CLASS) {
+                    return None;
+                }
+                let window = unsafe { element.CurrentNativeWindowHandle() }.ok()?;
+                (!window.0.is_null()).then_some(window)
+            }
         }
-        let window = unsafe { self.0.CurrentNativeWindowHandle() }.ok()?;
-        (!window.0.is_null()).then_some(window)
     }
 
     /// Select `removed` UTF-16 units from `start` in a Scintilla document
@@ -213,41 +240,58 @@ impl Elem {
 
 impl Elem {
     fn same_as(&self, other: &Elem, automation: &IUIAutomation) -> bool {
-        unsafe { automation.CompareElements(&self.0, &other.0) }
-            .map(|same| same.as_bool())
-            .unwrap_or(false)
+        match (self, other) {
+            (Elem::Uia(a), Elem::Uia(b)) => unsafe { automation.CompareElements(a, b) }
+                .map(|same| same.as_bool())
+                .unwrap_or(false),
+            (Elem::Win32(a), Elem::Win32(b)) => a == b,
+            _ => false,
+        }
     }
 
     fn pid(&self) -> Option<u32> {
-        unsafe { self.0.CurrentProcessId() }
-            .ok()
-            .and_then(|pid| u32::try_from(pid).ok())
+        match self {
+            Elem::Uia(element) => unsafe { element.CurrentProcessId() }
+                .ok()
+                .and_then(|pid| u32::try_from(pid).ok()),
+            Elem::Win32(window) => {
+                let mut pid = 0u32;
+                unsafe { GetWindowThreadProcessId(*window, Some(&mut pid)) };
+                (pid != 0).then_some(pid)
+            }
+        }
     }
 
     fn class_name(&self) -> String {
-        unsafe { self.0.CurrentClassName() }
-            .map(|name| name.to_string())
-            .unwrap_or_default()
+        match self {
+            Elem::Uia(element) => unsafe { element.CurrentClassName() }
+                .map(|name| name.to_string())
+                .unwrap_or_default(),
+            Elem::Win32(window) => window_class(*window),
+        }
     }
 
     fn name(&self) -> String {
-        unsafe { self.0.CurrentName() }
+        self.uia()
+            .and_then(|element| unsafe { element.CurrentName() }.ok())
             .map(|name| name.to_string())
             .unwrap_or_default()
     }
 
     fn is_password(&self) -> bool {
-        unsafe { self.0.CurrentIsPassword() }
-            .map(|flag| flag.as_bool())
-            .unwrap_or(false)
+        self.uia()
+            .and_then(|element| unsafe { element.CurrentIsPassword() }.ok())
+            .is_some_and(|flag| flag.as_bool())
     }
 
     fn value_pattern(&self) -> Option<IUIAutomationValuePattern> {
-        unsafe { self.0.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) }.ok()
+        let element = self.uia()?;
+        unsafe { element.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) }.ok()
     }
 
     fn text_pattern(&self) -> Option<IUIAutomationTextPattern> {
-        unsafe { self.0.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId) }.ok()
+        let element = self.uia()?;
+        unsafe { element.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId) }.ok()
     }
 
     fn is_read_only(&self) -> bool {
@@ -295,7 +339,14 @@ impl Elem {
     }
 
     fn bounds(&self) -> Option<Rect> {
-        let rect = unsafe { self.0.CurrentBoundingRectangle() }.ok()?;
+        let rect = match self {
+            Elem::Uia(element) => unsafe { element.CurrentBoundingRectangle() }.ok()?,
+            Elem::Win32(window) => {
+                let mut rect = RECT::default();
+                unsafe { GetWindowRect(*window, &mut rect) }.ok()?;
+                rect
+            }
+        };
         let bounds = Rect {
             x: f64::from(rect.left),
             y: f64::from(rect.top),
@@ -442,7 +493,7 @@ fn role_of(element: &Elem) -> Option<&'static str> {
     if element.scintilla().is_some() {
         return Some(ROLE_TEXT_AREA);
     }
-    let control = unsafe { element.0.CurrentControlType() }.ok()?;
+    let control = unsafe { element.uia()?.CurrentControlType() }.ok()?;
     if control == UIA_EditControlTypeId {
         Some(ROLE_TEXT_FIELD)
     } else if control == UIA_ComboBoxControlTypeId {
@@ -514,7 +565,7 @@ fn is_same_app(element_pid: u32, foreground_pid: u32) -> bool {
 /// The focused Scintilla control of the foreground window (Notepad++, SciTE).
 /// UI Automation shows it as an unfocusable pane and never reports it as the
 /// focused element, so ask the window's GUI thread which child has the focus.
-fn focused_scintilla(automation: &IUIAutomation, window: HWND) -> Option<Elem> {
+fn focused_scintilla(window: HWND) -> Option<Elem> {
     let thread = unsafe { GetWindowThreadProcessId(window, None) };
     let mut info = GUITHREADINFO {
         cbSize: size_of::<GUITHREADINFO>() as u32,
@@ -525,12 +576,19 @@ fn focused_scintilla(automation: &IUIAutomation, window: HWND) -> Option<Elem> {
     if focus.0.is_null() {
         return None;
     }
-    let mut class = [0u16; 32];
-    let length = usize::try_from(unsafe { GetClassNameW(focus, &mut class) }).ok()?;
-    if !String::from_utf16_lossy(&class[..length]).eq_ignore_ascii_case(SCINTILLA_CLASS) {
-        return None;
-    }
-    unsafe { automation.ElementFromHandle(focus) }.ok().map(Elem)
+    window_class(focus)
+        .eq_ignore_ascii_case(SCINTILLA_CLASS)
+        .then_some(Elem::Win32(focus))
+}
+
+/// The focused text control of the foreground window: Scintilla through its
+/// window handle, anything else through UI Automation.
+fn focused_element(automation: &IUIAutomation, window: HWND) -> Option<Elem> {
+    focused_scintilla(window).or_else(|| {
+        unsafe { automation.GetFocusedElement() }
+            .ok()
+            .map(Elem::Uia)
+    })
 }
 
 fn probe(automation: &IUIAutomation, own_pid: u32, config: &WatchConfig) -> Probe {
@@ -547,12 +605,8 @@ fn probe(automation: &IUIAutomation, own_pid: u32, config: &WatchConfig) -> Prob
     {
         return Skipped::probe(ActivityCode::ExcludedApp, Some(&app), app.bundle_id.clone());
     }
-    let element = match focused_scintilla(automation, window) {
-        Some(element) => element,
-        None => match unsafe { automation.GetFocusedElement() } {
-            Ok(focused) => Elem(focused),
-            Err(_) => return Skipped::probe(ActivityCode::NoField, Some(&app), None),
-        },
+    let Some(element) = focused_element(automation, window) else {
+        return Skipped::probe(ActivityCode::NoField, Some(&app), None);
     };
     if !element.pid().is_some_and(|element_pid| is_same_app(element_pid, pid)) {
         return Skipped::probe(ActivityCode::NoField, Some(&app), None);
@@ -1190,8 +1244,9 @@ fn paste_fallback(
     // Keystrokes must land in the same field, not wherever focus went.
     let same_field = automation()
         .and_then(|automation| {
-            let focused = unsafe { automation.GetFocusedElement() }.ok()?;
-            Some(Elem(focused).same_as(element, &automation))
+            let (foreground, _) = foreground_window()?;
+            let focused = focused_element(&automation, foreground)?;
+            Some(focused.same_as(element, &automation))
         })
         .unwrap_or(false);
     if !same_field {
