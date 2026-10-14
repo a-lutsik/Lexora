@@ -66,6 +66,8 @@ const ATTR_SIZE: &str = "AXSize";
 const ATTR_WINDOW: &str = "AXWindow";
 /// Chromium/Electron build their accessibility tree only on request.
 const ATTR_MANUAL_ACCESSIBILITY: &str = "AXManualAccessibility";
+/// Chrome and other Chromium browsers react to this one (VoiceOver-style hint).
+const ATTR_ENHANCED_UI: &str = "AXEnhancedUserInterface";
 
 // ── Accessibility FFI ────────────────────────────────────
 
@@ -306,7 +308,17 @@ impl AppCache {
                 ATTR_MANUAL_ACCESSIBILITY,
                 CFBoolean::true_value().as_CFTypeRef(),
             );
+            let _ = app_element.set_raw(
+                ATTR_ENHANCED_UI,
+                CFBoolean::true_value().as_CFTypeRef(),
+            );
         }
+    }
+
+    /// The app exposed no focused element: its tree may not have been built
+    /// yet, so ask again on the next tick.
+    fn retry_accessibility(&mut self, pid: i32) {
+        self.ax_enabled.remove(&pid);
     }
 
     fn info(&mut self, pid: i32) -> AppInfo {
@@ -375,6 +387,7 @@ fn probe(system: &AxElement, own_pid: i32, config: &WatchConfig, cache: &mut App
     }
     cache.enable_accessibility(&app_element, pid);
     let Some(element) = app_element.copy_element(ATTR_FOCUSED_UI) else {
+        cache.retry_accessibility(pid);
         return Skipped::new(ActivityCode::NoField, Some(&app), None);
     };
     let role = element.copy_string(ATTR_ROLE);
@@ -718,8 +731,10 @@ fn clip_corners(view: &NSView, radius: f64) {
 }
 
 fn configure_ns_window(ns_window: &NSWindow, radius: f64) {
+    // MoveToActiveSpace: the panel follows the user's current Space instead of
+    // staying on the Space where it was last shown.
     ns_window.setCollectionBehavior(
-        NSWindowCollectionBehavior::CanJoinAllSpaces
+        NSWindowCollectionBehavior::MoveToActiveSpace
             | NSWindowCollectionBehavior::Transient
             | NSWindowCollectionBehavior::IgnoresCycle
             | NSWindowCollectionBehavior::FullScreenAuxiliary,
