@@ -5,6 +5,9 @@
 // ✓ when the text is clean, «!» when the check failed.
 // ============================================================
 
+import { t as tUi } from "../i18n";
+import { useI18n } from "../hooks/useI18n";
+
 export type BadgeState =
   | { kind: 'checking' }
   | { kind: 'error' }
@@ -19,13 +22,15 @@ type GrammarBadgeProps = {
 function badgeLabel(state: BadgeState): string {
   switch (state.kind) {
     case 'checking':
-      return 'Lexora is checking your text';
+      return tUi("Lexora is checking your text");
     case 'error':
-      return 'Writing check failed — open details';
+      return tUi("Writing check failed — open details");
     case 'clean':
-      return 'No mistakes found — open writing check';
+      return tUi("No mistakes found — open writing check");
     case 'issues':
-      return `${state.count} writing ${state.count === 1 ? 'suggestion' : 'suggestions'} — open`;
+      return state.count === 1
+        ? tUi("{count} writing suggestion — open", { count: state.count })
+        : tUi("{count} writing suggestions — open", { count: state.count });
   }
 }
 
@@ -43,6 +48,7 @@ function badgeContent(state: BadgeState): string {
 }
 
 export function GrammarBadge({ state, onOpen }: GrammarBadgeProps) {
+  useI18n();
   return (
     <button type="button" className="grammar-badge" onClick={onOpen} aria-label={badgeLabel(state)}>
       <span className={`grammar-badge-dot is-${state.kind}`} aria-hidden="true">

@@ -1,3 +1,4 @@
+import { useI18n } from './hooks/useI18n';
 // ============================================================
 // LEXORA — App Router
 // ============================================================
@@ -25,9 +26,10 @@ const StatsPage = lazy(() => import('./pages/stats/StatsPage'));
 const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'));
 
 function PageLoader() {
+  const { t } = useI18n();
   return (
-    <div className="page-loader" aria-label="Loading page">
-      <span className="animate-pulse text-muted text-sm">Loading…</span>
+    <div className="page-loader" aria-label={t("Loading page")}>
+      <span className="animate-pulse text-muted text-sm">{t("Loading…")}</span>
     </div>
   );
 }

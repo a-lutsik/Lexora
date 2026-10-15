@@ -256,7 +256,7 @@ describe('DialoguePage — live conversation', () => {
     await screen.findByText('What kind of roast would you like with your flat white today?');
 
     await user.click(screen.getByRole('button', { name: 'Live conversation' }));
-    expect(await screen.findByText(/Live conversation is unavailable: Нужен ключ Gemini/)).toBeInTheDocument();
+    expect(await screen.findByText(/Live conversation is unavailable: Gemini API key is required/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start live conversation' })).toBeDisabled();
     expect(screen.queryByText('Press or hold Spacebar to reply')).not.toBeInTheDocument();
   });

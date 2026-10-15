@@ -137,7 +137,7 @@ describe('targets', () => {
       'Gemini · Gemini 3.8 Flash',
     );
     expect(targetLabel(CATALOG, { provider: 'custom', model: 'qwen3' })).toBe(
-      'Ollama / свой сервер · qwen3',
+      'Ollama / custom server · qwen3',
     );
   });
 
@@ -159,7 +159,7 @@ describe('targets', () => {
   it('describes model lifecycle', () => {
     expect(statusNote({ kind: 'stable' })).toBeNull();
     expect(statusNote({ kind: 'preview' })).toBe('Preview');
-    expect(statusNote({ kind: 'deprecated', shutdown: '2026-12-01' })).toBe('Отключат 2026-12-01');
+    expect(statusNote({ kind: 'deprecated', shutdown: '2026-12-01' }, 'ru')).toBe('Отключат 2026-12-01');
   });
 });
 
@@ -236,11 +236,19 @@ describe('usage estimate', () => {
   });
 
   it('describes the amount in the unit that is billed', () => {
-    expect(usageAmount(row({ seconds: 754 }))).toBe('13 мин');
-    expect(usageAmount(row({ seconds: 42 }))).toBe('42 с');
-    expect(usageAmount(row({ units: 3, requests: 3 }))).toBe('3 картинки');
-    expect(usageAmount(row({ requests: 21 }))).toBe('21 запрос');
-    expect(usageAmount(row({ requests: 12 }))).toBe('12 запросов');
+    expect(usageAmount(row({ seconds: 754 }), 'ru')).toBe('13 мин');
+    expect(usageAmount(row({ seconds: 42 }), 'ru')).toBe('42 с');
+    expect(usageAmount(row({ units: 3, requests: 3 }), 'ru')).toBe('3 изображения');
+    expect(usageAmount(row({ requests: 21 }), 'ru')).toBe('21 запрос');
+    expect(usageAmount(row({ requests: 12 }), 'ru')).toBe('12 запросов');
+  });
+
+  it('formats dynamic counts and shutdown dates in English without Russian fragments', () => {
+    expect(usageAmount(row({ seconds: 754 }), 'en')).toBe('13 min');
+    expect(usageAmount(row({ seconds: 42 }), 'en')).toBe('42 sec');
+    expect(usageAmount(row({ units: 3 }), 'en')).toBe('3 images');
+    expect(usageAmount(row({ requests: 1 }), 'en')).toBe('1 request');
+    expect(statusNote({ kind: 'deprecated', shutdown: '2026-12-01' }, 'en')).toBe('Shuts down 2026-12-01');
   });
 
   it('formats small sums honestly', () => {

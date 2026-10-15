@@ -1,3 +1,5 @@
+import { pluralize } from './utils';
+import { getLocale, translate } from '../i18n';
 // ============================================================
 // LEXORA — AI model routing: labels, packages, pure helpers
 // Mirrors src-tauri/src/providers/models/{roles,router}.rs.
@@ -98,7 +100,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
 };
 
 export function providerLabel(provider: string): string {
-  return PROVIDER_LABELS[provider] ?? provider;
+  return translate(getLocale(), PROVIDER_LABELS[provider] ?? provider);
 }
 
 export type RoleGroupMeta = {
@@ -171,7 +173,7 @@ export function findSpec(
 /** «Gemini · Gemini 3.8 Flash»; unknown custom names show the raw id. */
 export function targetLabel(catalog: readonly ModelSpec[], target: RouteTarget): string {
   const spec = findSpec(catalog, target);
-  return `${providerLabel(target.provider)} · ${spec?.label ?? target.model}`;
+  return `${providerLabel(target.provider)} · ${spec ? translate(getLocale(), spec.label) : target.model}`;
 }
 
 export function isRetired(status: ModelStatus): boolean {
@@ -179,14 +181,14 @@ export function isRetired(status: ModelStatus): boolean {
 }
 
 /** Short lifecycle note for a model: preview / shutdown date. */
-export function statusNote(status: ModelStatus): string | null {
+export function statusNote(status: ModelStatus, locale = getLocale()): string | null {
   switch (status.kind) {
     case 'preview':
-      return 'Preview';
+      return translate(locale, 'Preview');
     case 'deprecated':
-      return `Отключат ${status.shutdown}`;
+      return locale === 'ru' ? `Отключат ${status.shutdown}` : translate(locale, 'Shuts down {date}', { date: status.shutdown });
     case 'retired':
-      return 'Снята с поддержки';
+      return locale === 'ru' ? 'Снята с поддержки' : translate(locale, 'Retired');
     case 'stable':
       return null;
   }
@@ -263,23 +265,25 @@ export function estimateUsageCost(
 }
 
 /** «12 мин», «45 с», «3 картинки», «28 запросов». */
-export function usageAmount(row: AiUsageRow): string {
+export function usageAmount(row: AiUsageRow, locale = getLocale()): string {
   if (row.seconds > 0) {
-    return row.seconds >= 60 ? `${Math.round(row.seconds / 60)} мин` : `${Math.round(row.seconds)} с`;
+    return row.seconds >= 60
+      ? translate(locale, '{count} min', { count: Math.round(row.seconds / 60) })
+      : translate(locale, '{count} sec', { count: Math.round(row.seconds) });
   }
-  if (row.units > 0) return `${row.units} ${plural(row.units, 'картинка', 'картинки', 'картинок')}`;
-  return `${row.requests} ${plural(row.requests, 'запрос', 'запроса', 'запросов')}`;
-}
-
-function plural(n: number, one: string, few: string, many: string): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-  return many;
+  return row.units > 0
+    ? pluralize(row.units, 'image', 'images', locale)
+    : pluralize(row.requests, 'request', 'requests', locale);
 }
 
 export function formatUsd(value: number): string {
+  if (getLocale() !== 'en') {
+    const formatted = new Intl.NumberFormat(getLocale(), {
+      style: 'currency', currency: 'USD',
+      minimumFractionDigits: value === 0 ? 0 : 2,
+    }).format(value > 0 && value < 0.01 ? 0.01 : value);
+    return value > 0 && value < 0.01 ? `< ${formatted}` : formatted;
+  }
   if (value === 0) return '$0';
   return value < 0.01 ? '< $0.01' : `$${value.toFixed(2)}`;
 }

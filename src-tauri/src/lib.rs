@@ -11,6 +11,7 @@ pub mod display;
 pub mod error;
 pub mod grammar_watch;
 pub mod hotkeys;
+pub mod i18n;
 pub mod popup;
 pub mod pronunciation;
 pub mod providers;
@@ -71,6 +72,8 @@ pub fn run() {
         })
         // ── Setup ─────────────────────────────────────────
         .setup(|app| {
+            i18n::initialize(app.handle())?;
+
             // Initialize SQLite connection pool
             let app_dir = app.path().app_data_dir()?;
 
@@ -96,7 +99,10 @@ pub fn run() {
                     .notification()
                     .builder()
                     .title("Lexora")
-                    .body(&health.message)
+                    .body(i18n::text(app.handle(), match health.status {
+                        db::backup::DbHealthStatus::RecoveredFromBackup => "Database was corrupt and restored from backup.",
+                        _ => "Database was corrupt and no usable backup found; starting with an empty database. The original file was preserved for recovery.",
+                    }))
                     .show()
                 {
                     log::warn!("Failed to show recovery notification: {e}");
@@ -220,13 +226,20 @@ pub fn run() {
         })
         // ── IPC Commands ───────────────────────────────────
         .invoke_handler(tauri::generate_handler![
+            commands::interface::set_interface_locale,
             // Vocabulary
+            commands::categories::list_categories,
+            commands::categories::create_category,
+            commands::categories::rename_category,
+            commands::categories::delete_category,
+            commands::categories::move_vocabulary_to_category,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::get_vocabulary_entry,
             commands::vocabulary::add_to_vocabulary,
             commands::vocabulary::add_vocabulary_batch,
             commands::vocabulary::import_word_list,
             commands::vocabulary::remove_from_vocabulary,
+            commands::vocabulary::remove_vocabulary_batch,
             commands::vocabulary::toggle_favorite,
             commands::vocabulary::update_vocabulary_notes,
             commands::vocabulary::update_vocabulary_entry,

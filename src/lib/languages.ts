@@ -142,23 +142,28 @@ export function getLanguageEntry(code: string | null | undefined): LanguageCatal
   return BY_CODE.get(normalized);
 }
 
-export function languageLabel(code: string | null | undefined, preferNative = false): string {
+export function languageLabel(code: string | null | undefined, preferNative = false, locale = 'en'): string {
   const entry = getLanguageEntry(code);
   if (!entry) {
     const fallback = normalizeLangCode(code) ?? code ?? 'Unknown';
     return fallback.toUpperCase();
   }
-  if (preferNative && entry.nativeName !== entry.name) {
-    return `${entry.name} (${entry.nativeName})`;
+  let name = entry.name;
+  if (locale !== 'en' && typeof Intl.DisplayNames === 'function') {
+    try {
+      name = new Intl.DisplayNames([locale], { type: 'language' }).of(entry.code) ?? name;
+    } catch {
+      // Preserve catalog names on platforms without this language code.
+    }
   }
-  return entry.name;
+  if (preferNative && entry.nativeName.toLowerCase() !== name.toLowerCase()) {
+    return `${name} (${entry.nativeName})`;
+  }
+  return name;
 }
 
-export function languageSelectLabel(code: string): string {
-  const entry = getLanguageEntry(code);
-  if (!entry) return code.toUpperCase();
-  if (entry.nativeName === entry.name) return entry.name;
-  return `${entry.name} (${entry.nativeName})`;
+export function languageSelectLabel(code: string, locale = 'en'): string {
+  return languageLabel(code, true, locale);
 }
 
 /** Expected sizes shown on Load buttons. */

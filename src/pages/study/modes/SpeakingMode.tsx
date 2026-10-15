@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Speaking Study Mode
 // Say the word, get phoneme feedback, map score → SM-2 grade.
@@ -24,6 +25,7 @@ type SpeakingModeProps = {
 };
 
 export function SpeakingMode({ entry, onComplete }: SpeakingModeProps) {
+  const { t: tUi } = useI18n();
   const [attempt, setAttempt] = useState<PronunciationAttemptDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const startTime = useRef<number>(Date.now());
@@ -71,7 +73,7 @@ export function SpeakingMode({ entry, onComplete }: SpeakingModeProps) {
       setError(
         formatIpcError(
           err,
-          'Could not evaluate this recording. Check the AI provider in Settings.',
+          tUi("Could not evaluate this recording. Check the AI provider in Settings."),
         ),
       );
     }
@@ -90,11 +92,11 @@ export function SpeakingMode({ entry, onComplete }: SpeakingModeProps) {
       <PosBadge pos={lexeme.partOfSpeech} />
 
       <div className="typing-prompt">
-        <div className="typing-prompt-label">Say this word aloud:</div>
+        <div className="typing-prompt-label">{tUi("Say this word aloud:")}</div>
         <div className="flashcard-word">{lexeme.text}</div>
         {lexeme.phonetic && <div className="flashcard-phonetic">{lexeme.phonetic}</div>}
         <div className="text-secondary">{mainTranslation}</div>
-        <AudioButton text={lexeme.text} ariaLabel="Play model pronunciation" />
+        <AudioButton text={lexeme.text} ariaLabel={tUi("Play model pronunciation")} />
       </div>
 
       {!attempt && (
@@ -118,15 +120,13 @@ export function SpeakingMode({ entry, onComplete }: SpeakingModeProps) {
           <div className="speaking-result-head">
             <ScoreGauge score={attempt.overallScore} />
             <div className="typing-feedback-title">
-              {gradeLabel(scoreToStudyGrade(attempt.overallScore))}
+              {tUi(gradeLabel(scoreToStudyGrade(attempt.overallScore)))}
             </div>
           </div>
           {attempt.summary && <p className="text-secondary text-sm">{attempt.summary}</p>}
           <PhonemeFeedback phonemes={attempt.phonemes} />
           <div className="typing-feedback-actions">
-            <Button variant="secondary" size="md" onClick={handleNext}>
-              Continue (Space)
-            </Button>
+            <Button variant="secondary" size="md" onClick={handleNext}>{tUi("Continue (Space)")}</Button>
           </div>
         </div>
       )}

@@ -8,17 +8,56 @@
 use crate::error::AppError;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
+
+struct TrayMenuItems(Vec<(MenuItem<tauri::Wry>, &'static str)>);
+
+pub fn refresh_locale(app: &AppHandle) -> Result<(), AppError> {
+    if let Some(items) = app.try_state::<TrayMenuItems>() {
+        for (item, source) in &items.0 {
+            item.set_text(crate::i18n::text(app, source))?;
+        }
+    }
+    Ok(())
+}
 
 pub fn build_tray(app: &AppHandle) -> Result<(), AppError> {
     let header = MenuItem::with_id(app, "header", "Lexora", false, None::<&str>)?;
-    let open_item = MenuItem::with_id(app, "open", "Open Lexora", true, None::<&str>)?;
-    let translator_item =
-        MenuItem::with_id(app, "translator", "Open Translator", true, None::<&str>)?;
-    let translate_item =
-        MenuItem::with_id(app, "translate", "Translate Selection", true, None::<&str>)?;
-    let stickers_item = MenuItem::with_id(app, "stickers", "Toggle Stickers", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let open_item = MenuItem::with_id(
+        app,
+        "open",
+        crate::i18n::text(app, "Open Lexora"),
+        true,
+        None::<&str>,
+    )?;
+    let translator_item = MenuItem::with_id(
+        app,
+        "translator",
+        crate::i18n::text(app, "Open Translator"),
+        true,
+        None::<&str>,
+    )?;
+    let translate_item = MenuItem::with_id(
+        app,
+        "translate",
+        crate::i18n::text(app, "Translate Selection"),
+        true,
+        None::<&str>,
+    )?;
+    let stickers_item = MenuItem::with_id(
+        app,
+        "stickers",
+        crate::i18n::text(app, "Toggle Stickers"),
+        true,
+        None::<&str>,
+    )?;
+    let quit_item = MenuItem::with_id(
+        app,
+        "quit",
+        crate::i18n::text(app, "Quit"),
+        true,
+        None::<&str>,
+    )?;
     let sep_top = PredefinedMenuItem::separator(app)?;
     let sep_bottom = PredefinedMenuItem::separator(app)?;
 
@@ -69,5 +108,12 @@ pub fn build_tray(app: &AppHandle) -> Result<(), AppError> {
     }
 
     builder.build(app)?;
+    app.manage(TrayMenuItems(vec![
+        (open_item, "Open Lexora"),
+        (translator_item, "Open Translator"),
+        (translate_item, "Translate Selection"),
+        (stickers_item, "Toggle Stickers"),
+        (quit_item, "Quit"),
+    ]));
     Ok(())
 }

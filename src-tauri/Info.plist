@@ -15,6 +15,17 @@
 -->
 <plist version="1.0">
 <dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>ru</string>
+        <string>uk</string>
+        <string>es</string>
+        <string>fr</string>
+        <string>it</string>
+    </array>
     <key>NSMicrophoneUsageDescription</key>
     <string>Lexora records your voice to score pronunciation and give phoneme-level feedback.</string>
     <key>NSServices</key>

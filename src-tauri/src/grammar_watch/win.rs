@@ -924,7 +924,7 @@ fn run_action(app: &AppHandle, action: UiAction) {
 fn build_window(app: &AppHandle) -> Result<tauri::WebviewWindow, AppError> {
     let window =
         WebviewWindowBuilder::new(app, GRAMMAR_LABEL, WebviewUrl::App("grammar.html".into()))
-            .title("Lexora Writing Check")
+            .title(crate::i18n::text(app, "Lexora Writing Check"))
             .inner_size(BADGE_SIZE, BADGE_SIZE)
             .decorations(false)
             .transparent(true)

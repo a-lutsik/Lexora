@@ -307,7 +307,7 @@ pub fn show_popup_anchored(
     let window = match app.get_webview_window(POPUP_LABEL) {
         Some(window) => window,
         None => WebviewWindowBuilder::new(app, POPUP_LABEL, WebviewUrl::App("popup.html".into()))
-            .title("Lexora Quick Translate")
+            .title(crate::i18n::text(app, "Lexora Quick Translate"))
             .inner_size(width, height)
             .min_inner_size(
                 if resizable {
@@ -504,7 +504,7 @@ fn notify_paste_fallback(app: &AppHandle) {
         .notification()
         .builder()
         .title("Lexora")
-        .body(body)
+        .body(crate::i18n::text(app, body))
         .show()
     {
         log::warn!("Failed to show paste fallback notification: {e}");

@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Image Overlay Viewer
 // Renders the original image with translated text bounding boxes
@@ -22,6 +23,7 @@ export function ImageOverlayViewer({
   result,
   onAddToVocabulary,
 }: ImageOverlayViewerProps) {
+  const { t: tUi } = useI18n();
   const [mode, setMode] = useState<ViewMode>('overlay');
   const [copied, setCopied] = useState(false);
   const [selectedBlock, setSelectedBlock] = useState<ImageTextBlock | null>(null);
@@ -41,28 +43,22 @@ export function ImageOverlayViewer({
     <div className="image-overlay-viewer animate-fade-in">
       {/* Top Toolbar */}
       <div className="image-overlay-toolbar">
-        <div className="image-overlay-modes" role="group" aria-label="Image view mode">
+        <div className="image-overlay-modes" role="group" aria-label={tUi("Image view mode")}>
           <button
             type="button"
             className={`btn-toggle ${mode === 'overlay' ? 'is-active' : ''}`}
             onClick={() => setMode('overlay')}
-          >
-            In-Place Overlay
-          </button>
+          >{tUi("In-Place Overlay")}</button>
           <button
             type="button"
             className={`btn-toggle ${mode === 'side-by-side' ? 'is-active' : ''}`}
             onClick={() => setMode('side-by-side')}
-          >
-            Side-by-Side
-          </button>
+          >{tUi("Side-by-Side")}</button>
           <button
             type="button"
             className={`btn-toggle ${mode === 'text-only' ? 'is-active' : ''}`}
             onClick={() => setMode('text-only')}
-          >
-            Extracted Text
-          </button>
+          >{tUi("Extracted Text")}</button>
         </div>
 
         <div className="image-overlay-actions">
@@ -71,9 +67,9 @@ export function ImageOverlayViewer({
             variant="ghost"
             size="sm"
             onClick={handleCopyAll}
-            aria-label="Copy full translated text"
+            aria-label={tUi("Copy full translated text")}
           >
-            {copied ? '✓ Copied' : 'Copy Translation'}
+            {copied ? tUi("✓ Copied") : tUi("Copy Translation")}
           </Button>
         </div>
       </div>
@@ -82,7 +78,7 @@ export function ImageOverlayViewer({
       <div className={`image-overlay-canvas-wrapper is-${mode}`}>
         {mode !== 'text-only' && (
           <div className="image-overlay-image-container">
-            <img src={imageUrl} alt="Uploaded document" className="image-overlay-base-img" />
+            <img src={imageUrl} alt={tUi("Uploaded document")} className="image-overlay-base-img" />
 
             {/* Bounding box overlays */}
             {mode === 'overlay' &&
@@ -104,7 +100,7 @@ export function ImageOverlayViewer({
                       minHeight: `${Math.max(4, height)}%`,
                     }}
                     onClick={() => setSelectedBlock(block)}
-                    title={`Original: ${block.originalText}\nTranslated: ${block.translatedText}`}
+                    title={tUi("Original: {value1}\nTranslated: {value2}", { value1: block.originalText, value2: block.translatedText })}
                   >
                     <span className="image-bbox-text">
                       <span className="image-bbox-original">{block.originalText}</span>
@@ -119,13 +115,12 @@ export function ImageOverlayViewer({
         {(mode === 'side-by-side' || mode === 'text-only') && (
           <div className="image-overlay-text-panel">
             <div className="image-overlay-full-translation">
-              <h4 className="text-secondary text-xs uppercase tracking-wide">Full Translation</h4>
+              <h4 className="text-secondary text-xs uppercase tracking-wide">{tUi("Full Translation")}</h4>
               <p className="image-overlay-full-text">{result.fullTranslatedText}</p>
             </div>
 
             <div className="image-overlay-blocks-list">
-              <h4 className="text-secondary text-xs uppercase tracking-wide">
-                Detected Text Blocks ({result.blocks.length})
+              <h4 className="text-secondary text-xs uppercase tracking-wide">{tUi("Detected Text Blocks (")}{result.blocks.length})
               </h4>
               <div className="image-blocks-grid">
                 {result.blocks.map((block, idx) => (
@@ -151,10 +146,8 @@ export function ImageOverlayViewer({
                         type="button"
                         className="btn-card-add text-xs"
                         onClick={() => onAddToVocabulary(block.originalText, block.translatedText)}
-                        aria-label={`Save ${block.originalText} to vocabulary`}
-                      >
-                        + Add to Vocab
-                      </button>
+                        aria-label={tUi("Save {value1} to vocabulary", { value1: block.originalText })}
+                      >{tUi("+ Add to Vocab")}</button>
                     )}
                   </div>
                 ))}
@@ -168,9 +161,9 @@ export function ImageOverlayViewer({
       {selectedBlock && mode === 'overlay' && (
         <div className="image-overlay-detail-bar animate-slide-up">
           <div className="image-detail-content">
-            <span className="text-secondary text-xs">Original:</span>
+            <span className="text-secondary text-xs">{tUi("Original:")}</span>
             <strong className="text-sm">{selectedBlock.originalText}</strong>
-            <span className="text-secondary text-xs">Translated:</span>
+            <span className="text-secondary text-xs">{tUi("Translated:")}</span>
             <strong className="text-sm text-accent">{selectedBlock.translatedText}</strong>
           </div>
           <div className="image-detail-actions">
@@ -182,9 +175,7 @@ export function ImageOverlayViewer({
                 onClick={() =>
                   onAddToVocabulary(selectedBlock.originalText, selectedBlock.translatedText)
                 }
-              >
-                + Save as Card
-              </Button>
+              >{tUi("+ Save as Card")}</Button>
             )}
             <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedBlock(null)}>
               ✕

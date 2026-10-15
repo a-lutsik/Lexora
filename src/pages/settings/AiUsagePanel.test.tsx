@@ -1,6 +1,7 @@
+import { setLocale } from '../../i18n';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AiUsagePanel } from './AiUsagePanel';
 import { invokeMock } from '../../test/mocks';
 import { renderWithQueryClient } from '../../test/render';
@@ -51,6 +52,7 @@ const ROWS: AiUsageRow[] = [
 let rowsByDays: Record<number, AiUsageRow[]>;
 
 beforeEach(() => {
+  setLocale('ru');
   rowsByDays = { 30: ROWS, 7: [] };
   invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
     if (cmd === 'get_ai_usage') return rowsByDays[args?.days as number] ?? [];
@@ -71,9 +73,9 @@ describe('AiUsagePanel', () => {
 
     const live = within(table).getByRole('row', { name: /Живой диалог/ });
     expect(live).toHaveTextContent('20 мин');
-    expect(live).toHaveTextContent('$0.46');
+    expect(live).toHaveTextContent('0,46');
 
-    expect(screen.getByText(/Оценка за 30 дней/)).toHaveTextContent('$0.46 + текстовые запросы');
+    expect(screen.getByText(/Оценка за 30 дней/)).toHaveTextContent(/0,46\s*\$ \+ текстовые запросы/);
   });
 
   it('switches the period and shows an empty state', async () => {
@@ -87,3 +89,6 @@ describe('AiUsagePanel', () => {
     expect(screen.getByRole('button', { name: '7 дней' })).toHaveAttribute('aria-pressed', 'true');
   });
 });
+
+// These existing interaction scenarios exercise the Russian UI explicitly.
+afterEach(() => setLocale('en'));

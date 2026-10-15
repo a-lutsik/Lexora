@@ -1,3 +1,5 @@
+import { localizeModelMessage } from '../../lib/interfaceText';
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — AI Dialogue page
 // Scenario chat, voice console (record & send, or a live
@@ -109,6 +111,7 @@ async function playTutorLine(text: string, language: string): Promise<void> {
 }
 
 export default function DialoguePage() {
+  const { t: tUi, locale } = useI18n();
   const { data: settings } = useSettings();
   const language = settings?.primaryLanguage ?? 'en';
 
@@ -185,7 +188,7 @@ export default function DialoguePage() {
   const liveRole = modelRoutes?.roles.find((r) => r.role === 'realtime_voice');
   const liveUnavailable =
     liveRole && liveRole.state !== 'ready'
-      ? `Live conversation is unavailable: ${liveRole.message || 'choose the Gemini package in Settings.'}`
+      ? tUi('Live conversation is unavailable: {reason}', { reason: localizeModelMessage(liveRole.message || 'Choose the Gemini package in Settings.') })
       : null;
   const liveTurns = useMemo(
     () => (voiceMode === 'live' ? pendingLiveTurns(live.turns, savedExchanges) : []),
@@ -224,9 +227,9 @@ export default function DialoguePage() {
 
   const startDefaultScenario = useCallback(() => {
     void ensureSession().catch((err: unknown) => {
-      setError(formatIpcError(err, 'Could not start dialogue. Check the AI provider in Settings.'));
+      setError(formatIpcError(err, tUi("Could not start dialogue. Check the AI provider in Settings.")));
     });
-  }, [ensureSession]);
+  }, [ensureSession, tUi]);
 
   // Auto-start the first scenario when opening the dialogue tab — one attempt
   // per visit. Without the flag a failed start flipped the mutation state,
@@ -287,10 +290,10 @@ export default function DialoguePage() {
         setError(null);
         clearPendingClip();
       } catch (err) {
-        setError(formatIpcError(err, 'Could not send your reply. Check the AI provider in Settings.'));
+        setError(formatIpcError(err, tUi("Could not send your reply. Check the AI provider in Settings.")));
       }
     },
-    [clearPendingClip, ensureSession, isBusy, sendMutation, session?.scenarioSlug],
+    [clearPendingClip, ensureSession, isBusy, sendMutation, session?.scenarioSlug, tUi],
   );
 
   const submitClip = useCallback(
@@ -309,10 +312,10 @@ export default function DialoguePage() {
         revokeObjectUrl(clip.objectUrl);
         setPendingClip(null);
       } catch (err) {
-        setError(formatIpcError(err, 'Could not send the recording. Check the AI provider in Settings.'));
+        setError(formatIpcError(err, tUi("Could not send the recording. Check the AI provider in Settings.")));
       }
     },
-    [ensureSession, isBusy, sendMutation, session?.scenarioSlug],
+    [ensureSession, isBusy, sendMutation, session?.scenarioSlug, tUi],
   );
 
   const toggleRecording = useCallback(async () => {
@@ -340,7 +343,7 @@ export default function DialoguePage() {
         const clip = await recorder.stop();
         await submitClip(clip);
       } catch (err) {
-        setError(formatIpcError(err, 'Could not send your reply. Check the AI provider in Settings.'));
+        setError(formatIpcError(err, tUi("Could not send your reply. Check the AI provider in Settings.")));
       }
       return;
     }
@@ -351,7 +354,7 @@ export default function DialoguePage() {
     if (textDraft.trim()) {
       await submitText(textDraft);
     }
-  }, [isBusy, pendingClip, recorder, submitClip, submitText, textDraft]);
+  }, [isBusy, pendingClip, recorder, submitClip, submitText, textDraft, tUi]);
 
   // Spacebar: hold = PTT, tap = toggle (dialogue tab, record mode only).
   useEffect(() => {
@@ -428,9 +431,9 @@ export default function DialoguePage() {
     void ensureSession(session?.scenarioSlug)
       .then((active) => startLive({ mode: 'dialogue', dialogueSessionId: active.id }))
       .catch((err: unknown) => {
-        setError(formatIpcError(err, 'Could not start dialogue. Check the AI provider in Settings.'));
+        setError(formatIpcError(err, tUi("Could not start dialogue. Check the AI provider in Settings.")));
       });
-  }, [ensureSession, session, startLive]);
+  }, [ensureSession, session, startLive, tUi]);
 
   const switchVoiceMode = useCallback(
     (mode: VoiceMode) => {
@@ -453,7 +456,7 @@ export default function DialoguePage() {
     try {
       const input = startInputFor(session?.scenarioSlug);
       if (!input) {
-        setError('There are no scenarios in this language yet. Add or generate one in Practice Scenarios.');
+        setError(tUi("There are no scenarios in this language yet. Add or generate one in Practice Scenarios."));
         return;
       }
       if (session && session.status === 'active') {
@@ -463,9 +466,9 @@ export default function DialoguePage() {
       setSession(next);
       setError(null);
     } catch (err) {
-      setError(formatIpcError(err, 'Could not restart this scenario. Try again.'));
+      setError(formatIpcError(err, tUi("Could not restart this scenario. Try again.")));
     }
-  }, [clearPendingClip, endMutation, session, startInputFor, startSession, stopLive]);
+  }, [clearPendingClip, endMutation, session, startInputFor, startSession, stopLive, tUi]);
 
   const handleEnd = useCallback(async () => {
     setMenuOpen(false);
@@ -476,9 +479,9 @@ export default function DialoguePage() {
       setSession(next);
       setError(null);
     } catch (err) {
-      setError(formatIpcError(err, 'Could not end this session. Try again.'));
+      setError(formatIpcError(err, tUi("Could not end this session. Try again.")));
     }
-  }, [endMutation, session, stopLive]);
+  }, [endMutation, session, stopLive, tUi]);
 
   const handleSelectScenario = useCallback(
     async (scenario: DialogueScenarioDto) => {
@@ -496,10 +499,10 @@ export default function DialoguePage() {
         setTab('dialogue');
         setError(null);
       } catch (err) {
-        setError(formatIpcError(err, 'Could not start this scenario. Check the AI provider in Settings.'));
+        setError(formatIpcError(err, tUi("Could not start this scenario. Check the AI provider in Settings.")));
       }
     },
-    [clearPendingClip, endMutation, language, session, startSession, stopLive],
+    [clearPendingClip, endMutation, language, session, startSession, stopLive, tUi],
   );
 
   const handleGenerate = useCallback(async () => {
@@ -517,9 +520,9 @@ export default function DialoguePage() {
         setNotice(`Generated ${result.created} scenarios.`);
       }
     } catch (err) {
-      setError(formatIpcError(err, 'Could not generate scenarios. Check the AI provider in Settings.'));
+      setError(formatIpcError(err, tUi("Could not generate scenarios. Check the AI provider in Settings.")));
     }
-  }, [generateMutation, language]);
+  }, [generateMutation, language, tUi]);
 
   const handleDeleteScenario = useCallback(
     async (scenario: DialogueScenarioDto) => {
@@ -533,10 +536,10 @@ export default function DialoguePage() {
         await deleteMutation.mutateAsync(scenario.id);
         setNotice(null);
       } catch (err) {
-        setError(formatIpcError(err, 'Could not delete this scenario. Try again.'));
+        setError(formatIpcError(err, tUi("Could not delete this scenario. Try again.")));
       }
     },
-    [deleteMutation, pendingDeleteId],
+    [deleteMutation, pendingDeleteId, tUi],
   );
 
   const handlePlay = useCallback(
@@ -545,12 +548,12 @@ export default function DialoguePage() {
       try {
         await playTutorLine(turn.text, language);
       } catch (err) {
-        setError(formatIpcError(err, 'Could not play audio. Try again.'));
+        setError(formatIpcError(err, tUi("Could not play audio. Try again.")));
       } finally {
         window.setTimeout(() => setPlayingTurnId(null), 800);
       }
     },
-    [language],
+    [language, tUi],
   );
 
   const userTurn = lastUserTurn(session);
@@ -563,7 +566,7 @@ export default function DialoguePage() {
 
   return (
     <div className="dialogue-page animate-fade-in">
-      <div className="dialogue-tabs" role="tablist" aria-label="Dialogue modes">
+      <div className="dialogue-tabs" role="tablist" aria-label={tUi("Dialogue modes")}>
         <button
           type="button"
           role="tab"
@@ -572,9 +575,7 @@ export default function DialoguePage() {
           aria-controls="dialogue-panel-dialogue"
           className={`dialogue-tab${tab === 'dialogue' ? ' is-active' : ''}`}
           onClick={() => setTab('dialogue')}
-        >
-          AI Dialogue
-        </button>
+        >{tUi("AI Dialogue")}</button>
         <button
           type="button"
           role="tab"
@@ -583,9 +584,7 @@ export default function DialoguePage() {
           aria-controls="dialogue-panel-scenarios"
           className={`dialogue-tab${tab === 'scenarios' ? ' is-active' : ''}`}
           onClick={() => setTab('scenarios')}
-        >
-          Practice Scenarios
-        </button>
+        >{tUi("Practice Scenarios")}</button>
       </div>
 
       {error && (
@@ -603,10 +602,8 @@ export default function DialoguePage() {
         >
           <div className="dialogue-scenarios-head">
             <div>
-              <h1 className="dialogue-scenarios-title">Practice Scenarios</h1>
-              <p className="dialogue-scenarios-sub text-secondary text-sm">
-                Pick a situation and level to practice speaking with an AI tutor.
-              </p>
+              <h1 className="dialogue-scenarios-title">{tUi("Practice Scenarios")}</h1>
+              <p className="dialogue-scenarios-sub text-secondary text-sm">{tUi("Pick a situation and level to practice speaking with an AI tutor.")}</p>
             </div>
             <div className="dialogue-scenarios-actions">
               {language !== BASE_LANGUAGE && (
@@ -615,18 +612,16 @@ export default function DialoguePage() {
                   onClick={() => void handleGenerate()}
                   isLoading={generateMutation.isPending}
                   disabled={isBusy}
-                  aria-label={`Generate scenarios in ${languageLabel(language)}`}
+                  aria-label={tUi("Generate scenarios in {value1}", { value1: languageLabel(language, false, locale) })}
                 >
-                  {generateMutation.isPending ? 'Generating…' : 'Generate scenarios'}
+                  {generateMutation.isPending ? tUi("Generating…") : tUi("Generate scenarios")}
                 </Button>
               )}
               <Button
                 variant="primary"
                 onClick={() => setCreateOpen(true)}
                 disabled={isBusy || generateMutation.isPending}
-              >
-                Add scenario
-              </Button>
+              >{tUi("Add scenario")}</Button>
             </div>
           </div>
           {notice && (
@@ -635,12 +630,12 @@ export default function DialoguePage() {
             </p>
           )}
           {scenariosLoading ? (
-            <p className="text-muted text-sm">Loading scenarios…</p>
+            <p className="text-muted text-sm">{tUi("Loading scenarios…")}</p>
           ) : scenarios.length === 0 ? (
             <p className="dialogue-scenarios-empty text-secondary text-sm">
               {language === BASE_LANGUAGE
-                ? 'No scenarios yet. Add your own.'
-                : `There are no scenarios in ${languageLabel(language)} yet. Generate them from the built-in English ones, or add your own.`}
+                ? tUi("No scenarios yet. Add your own.")
+                : tUi("There are no scenarios in {value1} yet. Generate them from the built-in English ones, or add your own.", { value1: languageLabel(language, false, locale) })}
             </p>
           ) : (
             <ul className="dialogue-scenario-list">
@@ -657,7 +652,7 @@ export default function DialoguePage() {
                     <span className="dialogue-scenario-badges">
                       <span className="dialogue-scenario-level">{scenario.level}</span>
                       {scenario.kind === 'free' && (
-                        <span className="dialogue-scenario-kind">Free talk</span>
+                        <span className="dialogue-scenario-kind">{tUi("Free talk")}</span>
                       )}
                     </span>
                     <span className="dialogue-scenario-name">{scenario.title}</span>
@@ -673,14 +668,14 @@ export default function DialoguePage() {
                       }`}
                       aria-label={
                         pendingDeleteId === scenario.id
-                          ? `Confirm deleting ${scenario.title}`
-                          : `Delete ${scenario.title}`
+                          ? tUi("Confirm deleting {value1}", { value1: scenario.title })
+                          : tUi("Delete {value1}", { value1: scenario.title })
                       }
                       onClick={() => void handleDeleteScenario(scenario)}
                       onBlur={() => setPendingDeleteId(null)}
                       disabled={deleteMutation.isPending}
                     >
-                      {pendingDeleteId === scenario.id ? 'Delete?' : '×'}
+                      {pendingDeleteId === scenario.id ? tUi("Delete?") : '×'}
                     </button>
                   )}
                 </li>
@@ -696,16 +691,16 @@ export default function DialoguePage() {
           className="dialogue-layout"
         >
           <div className="dialogue-main">
-            <section className="dialogue-thread-panel glass" aria-label="Scenario conversation">
+            <section className="dialogue-thread-panel glass" aria-label={tUi("Scenario conversation")}>
               <header className="dialogue-thread-header">
                 <h1 className="dialogue-thread-title">
-                  {session?.scenarioTitle ?? scenarios[0]?.title ?? 'AI Dialogue'}
+                  {session?.scenarioTitle ?? scenarios[0]?.title ?? tUi("AI Dialogue")}
                 </h1>
                 <div className="dialogue-menu" ref={menuRef}>
                   <button
                     type="button"
                     className="dialogue-menu-btn"
-                    aria-label="Session menu"
+                    aria-label={tUi("Session menu")}
                     aria-haspopup="menu"
                     aria-expanded={menuOpen}
                     onClick={() => setMenuOpen((v) => !v)}
@@ -714,17 +709,13 @@ export default function DialoguePage() {
                   </button>
                   {menuOpen && (
                     <div className="dialogue-menu-pop" role="menu">
-                      <button type="button" role="menuitem" onClick={() => void handleRestart()}>
-                        Restart scenario
-                      </button>
+                      <button type="button" role="menuitem" onClick={() => void handleRestart()}>{tUi("Restart scenario")}</button>
                       <button
                         type="button"
                         role="menuitem"
                         onClick={() => void handleEnd()}
                         disabled={!session || session.status !== 'active'}
-                      >
-                        End session
-                      </button>
+                      >{tUi("End session")}</button>
                     </div>
                   )}
                 </div>
@@ -742,7 +733,7 @@ export default function DialoguePage() {
                           className={`dialogue-play-btn${
                             playingTurnId === turn.id ? ' is-playing' : ''
                           }`}
-                          aria-label="Play tutor line"
+                          aria-label={tUi("Play tutor line")}
                           onClick={() => void handlePlay(turn)}
                         >
                           <PlayIcon />
@@ -777,42 +768,34 @@ export default function DialoguePage() {
                   </Fragment>
                 ))}
                 {!session && isStarting && (
-                  <p className="text-muted text-sm">Starting scenario…</p>
+                  <p className="text-muted text-sm">{tUi("Starting scenario…")}</p>
                 )}
                 {!session && !isStarting && error && (
-                  <Button onClick={handleRetryStart}>Try again</Button>
+                  <Button onClick={handleRetryStart}>{tUi("Try again")}</Button>
                 )}
                 {!session && !isStarting && !error && !scenariosLoading && scenarios.length === 0 && (
                   <div className="dialogue-empty">
-                    <p className="text-secondary text-sm">
-                      There are no scenarios in {languageLabel(language)} yet.
-                    </p>
-                    <Button variant="primary" onClick={() => setTab('scenarios')}>
-                      Open Practice Scenarios
-                    </Button>
+                    <p className="text-secondary text-sm">{tUi("There are no scenarios in ")}{languageLabel(language, false, locale)}{tUi(" yet.")}</p>
+                    <Button variant="primary" onClick={() => setTab('scenarios')}>{tUi("Open Practice Scenarios")}</Button>
                   </div>
                 )}
               </div>
             </section>
 
-            <section className="dialogue-voice-console glass" aria-label="Voice reply console">
-              <div className="dialogue-mode-switch" role="group" aria-label="Voice mode">
+            <section className="dialogue-voice-console glass" aria-label={tUi("Voice reply console")}>
+              <div className="dialogue-mode-switch" role="group" aria-label={tUi("Voice mode")}>
                 <button
                   type="button"
                   className={`dialogue-mode-btn${voiceMode === 'record' ? ' is-active' : ''}`}
                   aria-pressed={voiceMode === 'record'}
                   onClick={() => switchVoiceMode('record')}
-                >
-                  Record &amp; send
-                </button>
+                >{tUi("Record & send")}</button>
                 <button
                   type="button"
                   className={`dialogue-mode-btn${voiceMode === 'live' ? ' is-active' : ''}`}
                   aria-pressed={voiceMode === 'live'}
                   onClick={() => switchVoiceMode('live')}
-                >
-                  Live conversation
-                </button>
+                >{tUi("Live conversation")}</button>
               </div>
 
               {voiceMode === 'live' ? (
@@ -841,7 +824,7 @@ export default function DialoguePage() {
                     <button
                       type="button"
                       className={`dialogue-mic-btn${recording ? ' is-live' : ''}`}
-                      aria-label={recording ? 'Stop recording' : 'Start recording'}
+                      aria-label={recording ? tUi("Stop recording") : tUi("Start recording")}
                       aria-pressed={recording}
                       onClick={() => void toggleRecording()}
                       disabled={isBusy && !recording}
@@ -850,8 +833,8 @@ export default function DialoguePage() {
                     </button>
 
                     <div className="dialogue-space-badge" aria-hidden="true">
-                      <kbd className="dialogue-space-key">Space</kbd>
-                      <span>Press or hold Spacebar to reply</span>
+                      <kbd className="dialogue-space-key">{tUi("Space")}</kbd>
+                      <span>{tUi("Press or hold Spacebar to reply")}</span>
                     </div>
 
                     <button
@@ -859,9 +842,9 @@ export default function DialoguePage() {
                       className="dialogue-send-btn"
                       onClick={() => void handleSaySend()}
                       disabled={isBusy && !recording}
-                      aria-label="Say or send reply"
+                      aria-label={tUi("Say or send reply")}
                     >
-                      {processing ? 'Sending…' : 'Say / Send'}
+                      {processing ? tUi("Sending…") : tUi("Say / Send")}
                     </button>
                   </div>
 
@@ -872,7 +855,7 @@ export default function DialoguePage() {
                       onClick={() => setShowTextInput((v) => !v)}
                       aria-expanded={showTextInput}
                     >
-                      {showTextInput ? 'Hide typed reply' : 'Type a reply instead'}
+                      {showTextInput ? tUi("Hide typed reply") : tUi("Type a reply instead")}
                     </button>
                     {showTextInput && (
                       <form
@@ -882,21 +865,17 @@ export default function DialoguePage() {
                           void submitText(textDraft);
                         }}
                       >
-                        <label className="sr-only" htmlFor="dialogue-text-input">
-                          Typed reply
-                        </label>
-                        <input
+                        <label className="sr-only" htmlFor="dialogue-text-input">{tUi("Typed reply")}</label>
+                        <input dir="auto"
                           id="dialogue-text-input"
                           className="dialogue-text-input"
                           value={textDraft}
                           onChange={(e) => setTextDraft(e.target.value)}
-                          placeholder="Type your reply…"
+                          placeholder={tUi("Type your reply…")}
                           autoComplete="off"
                           disabled={isBusy}
                         />
-                        <button type="submit" className="dialogue-text-submit" disabled={isBusy}>
-                          Send
-                        </button>
+                        <button type="submit" className="dialogue-text-submit" disabled={isBusy}>{tUi("Send")}</button>
                       </form>
                     )}
                   </div>
@@ -907,37 +886,35 @@ export default function DialoguePage() {
                     </p>
                   )}
                   {pendingClip && !recording && (
-                    <p className="dialogue-pending text-sm text-secondary" aria-live="polite">
-                      Recording ready — press Say / Send to submit.
-                    </p>
+                    <p className="dialogue-pending text-sm text-secondary" aria-live="polite">{tUi("Recording ready — press Say / Send to submit.")}</p>
                   )}
                 </>
               )}
             </section>
           </div>
 
-          <aside className="dialogue-metrics glass" aria-label="Session metrics">
+          <aside className="dialogue-metrics glass" aria-label={tUi("Session metrics")}>
             <div className="dialogue-metrics-scores">
               <div className="dialogue-metrics-turn">
-                <p className="dialogue-metrics-label">Current Turn Score:</p>
+                <p className="dialogue-metrics-label">{tUi("Current Turn Score:")}</p>
                 <TurnScoreRing score={turnScore} />
               </div>
               <div className="dialogue-metrics-session">
-                <p className="dialogue-metrics-label">Total Session Score:</p>
+                <p className="dialogue-metrics-label">{tUi("Total Session Score:")}</p>
                 <p className="dialogue-session-value" aria-live="polite">
                   {sessionScore == null ? '—' : `${sessionScore}%`}
                 </p>
-                <p className="dialogue-session-caption">(Fluency &amp; Clarity)</p>
+                <p className="dialogue-session-caption">{tUi("(Fluency & Clarity)")}</p>
               </div>
             </div>
 
             <hr className="dialogue-metrics-divider" />
 
             <div className="dialogue-suggestions">
-              <p className="dialogue-metrics-label">Live vocabulary suggestions:</p>
-              <ul className="dialogue-chip-list" aria-label="Suggested phrases">
+              <p className="dialogue-metrics-label">{tUi("Live vocabulary suggestions:")}</p>
+              <ul className="dialogue-chip-list" aria-label={tUi("Suggested phrases")}>
                 {suggestions.length === 0 ? (
-                  <li className="text-muted text-sm">Suggestions appear after you reply.</li>
+                  <li className="text-muted text-sm">{tUi("Suggestions appear after you reply.")}</li>
                 ) : (
                   suggestions.map((phrase) => (
                     <li key={phrase}>

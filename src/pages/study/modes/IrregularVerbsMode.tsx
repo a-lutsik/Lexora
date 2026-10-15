@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Irregular Verbs Study Mode
 // Base form shown; user types past simple + past participle.
@@ -64,6 +65,7 @@ function parseVerbForms(entry: VocabularyEntryDto): VerbForms | null {
 }
 
 export function IrregularVerbsMode({ entry, onComplete }: IrregularVerbsModeProps) {
+  const { t: tUi } = useI18n();
   const [pastInput, setPastInput] = useState('');
   const [participleInput, setParticipleInput] = useState('');
   const [result, setResult] = useState<EvaluationResult | null>(null);
@@ -123,9 +125,7 @@ export function IrregularVerbsMode({ entry, onComplete }: IrregularVerbsModeProp
 
       {/* Prompt: base form */}
       <div className="typing-prompt">
-        <div className="typing-prompt-label">
-          Give the past simple and past participle of:
-        </div>
+        <div className="typing-prompt-label">{tUi("Give the past simple and past participle of:")}</div>
         <div className="typing-prompt-word">{lexeme.text}</div>
       </div>
 
@@ -133,17 +133,15 @@ export function IrregularVerbsMode({ entry, onComplete }: IrregularVerbsModeProp
       <form onSubmit={handleSubmit} className="typing-form">
         <div className="irregular-inputs">
           <div className="irregular-field">
-            <label className="irregular-field-label" htmlFor={`past-${entry.id}`}>
-              Past Simple
-            </label>
-            <input
+            <label className="irregular-field-label" htmlFor={`past-${entry.id}`}>{tUi("Past Simple")}</label>
+            <input dir="auto"
               ref={pastInputRef}
               id={`past-${entry.id}`}
               type="text"
               className="typing-input"
               value={pastInput}
               onChange={(e) => setPastInput(e.target.value)}
-              placeholder="went"
+              placeholder={"went"}
               disabled={result !== null}
               autoComplete="off"
               autoCorrect="off"
@@ -151,16 +149,14 @@ export function IrregularVerbsMode({ entry, onComplete }: IrregularVerbsModeProp
             />
           </div>
           <div className="irregular-field">
-            <label className="irregular-field-label" htmlFor={`participle-${entry.id}`}>
-              Past Participle
-            </label>
-            <input
+            <label className="irregular-field-label" htmlFor={`participle-${entry.id}`}>{tUi("Past Participle")}</label>
+            <input dir="auto"
               id={`participle-${entry.id}`}
               type="text"
               className="typing-input"
               value={participleInput}
               onChange={(e) => setParticipleInput(e.target.value)}
-              placeholder="gone"
+              placeholder={"gone"}
               disabled={result !== null}
               autoComplete="off"
               autoCorrect="off"
@@ -176,9 +172,7 @@ export function IrregularVerbsMode({ entry, onComplete }: IrregularVerbsModeProp
               variant="primary"
               size="md"
               isLoading={evaluateMutation.isPending}
-            >
-              Check Answer (↵)
-            </Button>
+            >{tUi("Check Answer (↵)")}</Button>
           </div>
         )}
       </form>
@@ -197,8 +191,8 @@ export function IrregularVerbsMode({ entry, onComplete }: IrregularVerbsModeProp
         >
           <div className="typing-feedback-title">
             {result.isCorrect
-              ? '✓ Excellent!'
-              : `Correct forms: ${forms.past} — ${forms.participle}`}
+              ? tUi("✓ Excellent!")
+              : tUi("Correct forms: {value1} — {value2}", { value1: forms.past, value2: forms.participle })}
           </div>
           {result.explanation && (
             <SafeHtml html={result.explanation} className="typing-feedback-explanation" />
@@ -208,9 +202,7 @@ export function IrregularVerbsMode({ entry, onComplete }: IrregularVerbsModeProp
           )}
 
           <div className="typing-feedback-actions">
-            <Button variant="secondary" size="md" onClick={handleNext}>
-              Continue (Space)
-            </Button>
+            <Button variant="secondary" size="md" onClick={handleNext}>{tUi("Continue (Space)")}</Button>
           </div>
         </div>
       )}

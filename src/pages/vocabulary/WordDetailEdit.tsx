@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Word Detail: fix a typo in a saved card
 // Edits the word and its main translation. Review progress is kept;
@@ -14,9 +15,11 @@ type WordDetailEditProps = {
   text: string;
   translation: string;
   onDone: () => void;
+  onPendingChange?: (pending: boolean) => void;
 };
 
-export function WordDetailEdit({ entryId, text, translation, onDone }: WordDetailEditProps) {
+export function WordDetailEdit({ entryId, text, translation, onDone, onPendingChange }: WordDetailEditProps) {
+  const { t: tUi } = useI18n();
   const updateMutation = useUpdateVocabularyEntry();
   const [wordValue, setWordValue] = useState(text);
   const [translationValue, setTranslationValue] = useState(translation);
@@ -24,6 +27,7 @@ export function WordDetailEdit({ entryId, text, translation, onDone }: WordDetai
 
   const handleSave = async () => {
     setError(null);
+    onPendingChange?.(true);
     try {
       await updateMutation.mutateAsync({
         id: entryId,
@@ -32,7 +36,9 @@ export function WordDetailEdit({ entryId, text, translation, onDone }: WordDetai
       });
       onDone();
     } catch (err) {
-      setError(formatIpcError(err, 'Couldn’t save the changes. Please try again.'));
+      setError(formatIpcError(err, tUi("Couldn’t save the changes. Please try again.")));
+    } finally {
+      onPendingChange?.(false);
     }
   };
 
@@ -44,10 +50,8 @@ export function WordDetailEdit({ entryId, text, translation, onDone }: WordDetai
         void handleSave();
       }}
     >
-      <label className="word-detail-edit-label" htmlFor="word-detail-edit-word">
-        Word
-      </label>
-      <input
+      <label className="word-detail-edit-label" htmlFor="word-detail-edit-word">{tUi("Word")}</label>
+      <input dir="auto"
         id="word-detail-edit-word"
         className="word-detail-edit-input"
         value={wordValue}
@@ -56,10 +60,8 @@ export function WordDetailEdit({ entryId, text, translation, onDone }: WordDetai
         // Focus the field the user just asked to edit.
         autoFocus
       />
-      <label className="word-detail-edit-label" htmlFor="word-detail-edit-translation">
-        Translation
-      </label>
-      <input
+      <label className="word-detail-edit-label" htmlFor="word-detail-edit-translation">{tUi("Translation")}</label>
+      <input dir="auto"
         id="word-detail-edit-translation"
         className="word-detail-edit-input"
         value={translationValue}
@@ -71,18 +73,14 @@ export function WordDetailEdit({ entryId, text, translation, onDone }: WordDetai
         </p>
       )}
       <div className="word-detail-edit-actions">
-        <Button variant="ghost" size="sm" onClick={onDone} disabled={updateMutation.isPending}>
-          Cancel
-        </Button>
+        <Button variant="ghost" size="sm" onClick={onDone} disabled={updateMutation.isPending}>{tUi("Cancel")}</Button>
         <Button
           variant="primary"
           size="sm"
           type="submit"
           isLoading={updateMutation.isPending}
           disabled={!wordValue.trim()}
-        >
-          Save
-        </Button>
+        >{tUi("Save")}</Button>
       </div>
     </form>
   );

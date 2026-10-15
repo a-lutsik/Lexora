@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Study Page
 // Exact match to mockup: Study Session header, streak badge,
@@ -81,6 +82,7 @@ function CloseIcon() {
 }
 
 export default function StudyPage() {
+  const { t: tUi } = useI18n();
   const [selectedMode, setSelectedMode] = useState<StudyMode>('flashcard');
   const [secondsElapsed, setSecondsElapsed] = useState(0);
   const activeLanguageId = useSettingsStore((s) => s.activeLanguageId);
@@ -196,27 +198,25 @@ export default function StudyPage() {
       <div className="study-page">
         <div className="study-setup animate-slide-up">
           <div className="study-summary-icon">🎉</div>
-          <h2>Session Complete!</h2>
-          <p className="text-secondary">Great job! Here is your session summary:</p>
+          <h2>{tUi("Session Complete!")}</h2>
+          <p className="text-secondary">{tUi("Great job! Here is your session summary:")}</p>
 
           <div className="study-summary-stats">
             <div className="study-mode-card study-summary-stat">
               <div className="study-summary-value text-accent">
                 {stats.total}
               </div>
-              <div className="text-muted text-xs">Words Reviewed</div>
+              <div className="text-muted text-xs">{tUi("Words Reviewed")}</div>
             </div>
             <div className="study-mode-card study-summary-stat">
               <div className="study-summary-value text-success">
                 {accuracy}
               </div>
-              <div className="text-muted text-xs">Accuracy</div>
+              <div className="text-muted text-xs">{tUi("Accuracy")}</div>
             </div>
           </div>
 
-          <Button variant="primary" size="lg" onClick={session.endSession}>
-            Back to Study Overview
-          </Button>
+          <Button variant="primary" size="lg" onClick={session.endSession}>{tUi("Back to Study Overview")}</Button>
         </div>
       </div>
     );
@@ -228,14 +228,14 @@ export default function StudyPage() {
       <div className="study-page">
         <div className="study-setup animate-fade-in">
           <div className="study-setup-icon">🎯</div>
-          <h1 className="study-setup-title">Study Session</h1>
+          <h1 className="study-setup-title">{tUi("Study Session")}</h1>
           <p className="text-secondary study-setup-desc">
             {dueCount && dueCount > 0
-              ? `You have ${pluralize(dueCount, 'card')} due for review today.`
-              : 'All caught up on scheduled reviews! Ready to learn new words?'}
+              ? tUi("You have {value1} due for review today.", { value1: pluralize(dueCount, 'card') })
+              : tUi("All caught up on scheduled reviews! Ready to learn new words?")}
           </p>
 
-          <div className="study-modes-grid" role="radiogroup" aria-label="Select study mode">
+          <div className="study-modes-grid" role="radiogroup" aria-label={tUi("Select study mode")}>
             {STUDY_MODES.map((item, index) => (
               <div
                 key={item.mode}
@@ -248,25 +248,21 @@ export default function StudyPage() {
                 onKeyDown={(e) => handleModeKeyDown(e, index)}
               >
                 <div className="study-mode-icon">{item.icon}</div>
-                <div className="study-mode-name">{item.name}</div>
-                <div className="study-mode-desc">{item.desc}</div>
+                <div className="study-mode-name">{tUi(item.name)}</div>
+                <div className="study-mode-desc">{tUi(item.desc)}</div>
               </div>
             ))}
           </div>
 
           {isQueueError && !isQueueLoading && (
             <div className="study-setup-error" role="alert">
-              <p className="text-secondary text-sm">Couldn’t load your cards.</p>
-              <Button variant="secondary" size="md" onClick={() => void refetch()}>
-                Try again
-              </Button>
+              <p className="text-secondary text-sm">{tUi("Couldn’t load your cards.")}</p>
+              <Button variant="secondary" size="md" onClick={() => void refetch()}>{tUi("Try again")}</Button>
             </div>
           )}
 
           {!isQueueLoading && !isQueueError && startableQueue.length === 0 && (
-            <p className="study-setup-empty text-secondary text-sm" role="status">
-              Nothing to review right now. Add words in My Vocabulary, or enable a collection.
-            </p>
+            <p className="study-setup-empty text-secondary text-sm" role="status">{tUi("Nothing to review right now. Add words in My Vocabulary, or enable a collection.")}</p>
           )}
 
           <Button
@@ -277,8 +273,8 @@ export default function StudyPage() {
             className="study-start-btn"
           >
             {isQueueLoading
-              ? 'Loading cards…'
-              : `Start Session (${pluralize(startableQueue.length, 'word')})`}
+              ? tUi("Loading cards…")
+              : tUi("Start Session ({value1})", { value1: pluralize(startableQueue.length, 'word') })}
           </Button>
         </div>
       </div>
@@ -295,7 +291,7 @@ export default function StudyPage() {
       {/* Session Top Bar */}
       <header className="study-session-header">
         <div className="study-header-left">
-          <h2 className="study-header-title">Study Session</h2>
+          <h2 className="study-header-title">{tUi("Study Session")}</h2>
         </div>
 
         <div className="study-header-center">
@@ -311,19 +307,18 @@ export default function StudyPage() {
         </div>
 
         <div className="study-header-right">
-          <span className="study-card-counter">
-            Card {session.currentIndex + 1} of {session.queue.length}
+          <span className="study-card-counter">{tUi("Card ")}{session.currentIndex + 1}{tUi(" of ")}{session.queue.length}
           </span>
           {dueCount != null && dueCount > 0 && (
             <div className="study-streak-badge">
-              <span>{dueCount} due</span>
+              <span>{dueCount}{tUi(" due")}</span>
             </div>
           )}
           <button
             type="button"
             className="study-exit-btn"
             onClick={session.endSession}
-            aria-label="Exit Session"
+            aria-label={tUi("Exit Session")}
           >
             <CloseIcon />
           </button>
@@ -403,11 +398,11 @@ export default function StudyPage() {
       {/* Bottom Status Footer matching mockup */}
       <footer className="study-footer-bar">
         <div className="study-stats-pill">
-          <span className="study-stat-item">Due today: <strong>{dueCount ?? 0}</strong></span>
+          <span className="study-stat-item">{tUi("Due today: ")}<strong>{dueCount ?? 0}</strong></span>
           <span className="study-stat-sep">·</span>
-          <span className="study-stat-item">Accuracy: <strong>{currentAccuracy}%</strong></span>
+          <span className="study-stat-item">{tUi("Accuracy: ")}<strong>{currentAccuracy}%</strong></span>
           <span className="study-stat-sep">·</span>
-          <span className="study-stat-item">Time: <strong>{formatTimer(secondsElapsed)}</strong></span>
+          <span className="study-stat-item">{tUi("Time: ")}<strong>{formatTimer(secondsElapsed)}</strong></span>
         </div>
       </footer>
     </div>

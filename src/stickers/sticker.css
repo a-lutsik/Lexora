@@ -392,3 +392,36 @@ html body {
     animation: none;
   }
 }
+
+.sticker-empty-topic {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.sticker-empty-topic p {
+  margin: 0;
+}
+
+.sticker-source-empty-button {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: var(--glass-border);
+  border-radius: var(--radius-sm);
+  min-height: var(--space-12);
+  cursor: pointer;
+}
+
+.sticker-source-empty-button:hover,
+.sticker-source-empty-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: var(--space-1);
+}
+
+.sticker-empty-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.sticker-empty-actions > button {
+  min-width: var(--space-12);
+}
