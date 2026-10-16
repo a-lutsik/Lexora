@@ -702,6 +702,7 @@
   "Writing Mistake Patterns": "Типичные ошибки письма",
   "Writing check in other apps": "Проверка письма в других приложениях",
   "Writing diff": "Изменения текста",
+  "You exceeded {limit} characters. Auto-check will not run. Shorten the text, then press Check writing.": "Вы превысили {limit} символов. Автопроверка не будет работать. Сократите текст и нажмите «Проверить текст».",
   "You have {value1} due for review today.": "Сегодня нужно повторить: {value1}.",
   "Your Error Patterns": "Ваши типичные ошибки",
   "Your answer": "Ваш ответ",

@@ -1029,6 +1029,7 @@
   "Writing check in other apps",
   "Writing diff",
   "Writing privacy mode",
+  "You exceeded {limit} characters. Auto-check will not run. Shorten the text, then press Check writing.",
   "You have {value1} due for review today.",
   "Your Error Patterns",
   "Your answer",

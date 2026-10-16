@@ -850,6 +850,7 @@
   "Writing check in other apps": "Revisión de escritura en otras aplicaciones",
   "Writing diff": "Cambios del texto",
   "Writing privacy mode": "Modo de privacidad de escritura",
+  "You exceeded {limit} characters. Auto-check will not run. Shorten the text, then press Check writing.": "Superaste {limit} caracteres. La revisión automática no se ejecutará. Acorta el texto y pulsa «Revisar escritura».",
   "You have {value1} due for review today.": "Tienes {value1} pendientes para repasar hoy.",
   "Your Error Patterns": "Tus patrones de errores",
   "Your answer": "Tu respuesta",

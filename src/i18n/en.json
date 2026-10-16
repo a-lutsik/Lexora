@@ -1200,6 +1200,7 @@
   "Writing check in other apps": "Writing check in other apps",
   "Writing diff": "Writing diff",
   "Writing privacy mode": "Writing privacy mode",
+  "You exceeded {limit} characters. Auto-check will not run. Shorten the text, then press Check writing.": "You exceeded {limit} characters. Auto-check will not run. Shorten the text, then press Check writing.",
   "You have {value1} due for review today.": "You have {value1} due for review today.",
   "Your Error Patterns": "Your Error Patterns",
   "Your answer": "Your answer",

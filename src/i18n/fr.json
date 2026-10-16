@@ -844,6 +844,7 @@
   "Writing check in other apps": "Vérification de l’écriture dans d’autres applications",
   "Writing diff": "Comparaison des versions du texte",
   "Writing privacy mode": "Mode confidentialité de l’écriture",
+  "You exceeded {limit} characters. Auto-check will not run. Shorten the text, then press Check writing.": "Vous avez dépassé {limit} caractères. La vérification automatique ne s’exécutera pas. Raccourcissez le texte, puis appuyez sur « Vérifier le texte ».",
   "You have {value1} due for review today.": "Vous avez {value1} mots à réviser aujourd’hui.",
   "Your Error Patterns": "Vos erreurs récurrentes",
   "Your answer": "Votre réponse",

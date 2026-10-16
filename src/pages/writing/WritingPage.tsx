@@ -86,9 +86,11 @@ export default function WritingPage() {
   const [openIssueId, setOpenIssueId] = useState<number | null>(null);
   const [issuesListOpen, setIssuesListOpen] = useState(false);
   const [autoCheckScheduled, setAutoCheckScheduled] = useState(false);
+  const [limitNoticeOpen, setLimitNoticeOpen] = useState(false);
 
   const autoCheckTimerRef = useRef<number | null>(null);
   const checkGenerationRef = useRef(0);
+  const autoCheckBlockedByLimitRef = useRef(false);
 
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
@@ -117,6 +119,7 @@ export default function WritingPage() {
   const charCount = countWritingChars(text);
   const overLimit = charCount > MAX_WRITING_CHARS;
   const canSubmit = text.trim().length > 0 && !overLimit;
+  const autoCheckBlockedByLimit = autoCheckEnabled && overLimit;
 
   const { data: errorPatterns } = useWritingErrorPatterns(language);
 
@@ -170,6 +173,15 @@ export default function WritingPage() {
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);
+
+  useEffect(() => {
+    if (autoCheckBlockedByLimit && !autoCheckBlockedByLimitRef.current) {
+      setLimitNoticeOpen(true);
+    } else if (!autoCheckBlockedByLimit) {
+      setLimitNoticeOpen(false);
+    }
+    autoCheckBlockedByLimitRef.current = autoCheckBlockedByLimit;
+  }, [autoCheckBlockedByLimit]);
 
   const lastCheckedText = latestCheck?.originalText ?? null;
 
@@ -347,6 +359,23 @@ export default function WritingPage() {
 
       {privacyMode && (
         <div className="writing-privacy-banner" role="status">{tUi("Privacy mode: checked text is not stored")}</div>
+      )}
+
+      {limitNoticeOpen && (
+        <div className="writing-limit-toast animate-slide-up" role="alert">
+          <p className="writing-limit-toast-text">
+            {tUi(
+              "You exceeded {limit} characters. Auto-check will not run. Shorten the text, then press Check writing.",
+              { limit: MAX_WRITING_CHARS },
+            )}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLimitNoticeOpen(false)}
+            aria-label={tUi("Close")}
+          >{tUi("Close")}</Button>
+        </div>
       )}
 
       <section className="writing-editor" aria-label={tUi("Text to check")}>

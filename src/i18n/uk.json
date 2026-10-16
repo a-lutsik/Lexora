@@ -850,6 +850,7 @@
   "Writing check in other apps": "Перевірка письма в інших застосунках",
   "Writing diff": "Зміни тексту",
   "Writing privacy mode": "Режим конфіденційності письма",
+  "You exceeded {limit} characters. Auto-check will not run. Shorten the text, then press Check writing.": "Ви перевищили {limit} символів. Автоперевірка не працюватиме. Скоротіть текст і натисніть «Перевірити письмо».",
   "You have {value1} due for review today.": "На сьогодні у вас {value1} до повторення.",
   "Your Error Patterns": "Ваші типові помилки",
   "Your answer": "Ваша відповідь",
