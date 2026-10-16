@@ -18,7 +18,8 @@ export type StudyMode =
   | 'cloze'
   | 'irregular_verbs'
   | 'definition'
-  | 'speaking';
+  | 'speaking'
+  | 'collocation';
 
 export type ErrorType =
   | 'typo'
@@ -121,6 +122,46 @@ export type VocabularyEntryDto = {
   reviewState: ReviewStateDto | null;
   /** Persisted local image generated or fetched when the word was added. */
   imagePath?: string | null;
+  /** Study hints when this card was created from a word's collocation. */
+  collocationDrill?: CollocationDrillDto | null;
+};
+
+// ── Collocations ──────────────────────────────────────────
+
+/** A frequent word combination of a word ("take advantage of"). */
+export type CollocationDto = {
+  id: number;
+  lexemeId: number;
+  text: string;
+  /** Grammatical pattern, e.g. "verb + noun". */
+  pattern: string | null;
+  /** Meaning of the whole collocation in the target language. */
+  translation: string;
+  example: string | null;
+  /** Partner word blanked in the collocation study mode. */
+  focus: string | null;
+  distractors: string[];
+  /** How it differs from similar collocations ("in the end" vs "at the end"). */
+  nuance: string | null;
+  /** Active vocabulary entry when this collocation is already being learned. */
+  vocabularyEntryId: number | null;
+};
+
+export type CollocationDrillDto = {
+  focus: string;
+  distractors: string[];
+  translation: string;
+  example: string | null;
+  pattern: string | null;
+  /** The word this collocation belongs to. */
+  headword: string;
+};
+
+export type AddCollocationsInput = {
+  lexemeId: number;
+  targetLanguage: string;
+  collocationIds: number[];
+  categoryId?: number | null;
 };
 
 // ── Review State (SRS) ────────────────────────────────────
@@ -873,6 +914,8 @@ export type StudyQueueFilters = {
   includeMine?: boolean;
   collectionIds?: number[];
   categoryIds?: number[];
+  /** Collocation mode: only cards created from a drillable collocation. */
+  collocationsOnly?: boolean;
 };
 
 // ── Stage 4: Multimodal Translation Hub ──────────────────

@@ -47,6 +47,12 @@ fn source_filter_sql(include_mine: Option<bool>, collection_ids: &[i64], categor
     (format!("AND ({})", clauses.join(" OR ")), params)
 }
 
+/// Restricts a queue to phrase cards that have a drillable collocation (V030).
+const COLLOCATION_CARD_SQL: &str = " AND EXISTS (
+    SELECT 1 FROM lexeme_collocation c
+    WHERE c.collocation_lexeme_id = uv.lexeme_id
+      AND c.focus IS NOT NULL AND c.distractors != '[]')";
+
 fn query_ids(conn: &Connection, sql: &str, params: Vec<Value>) -> Result<Vec<i64>, AppError> {
     let mut stmt = conn.prepare(sql)?;
     let ids = stmt
@@ -82,8 +88,11 @@ impl QueueBuilder {
     ) -> Result<Vec<i64>, AppError> {
         let now_sec = chrono::Utc::now().timestamp();
         let limit = filters.limit.clamp(5, 100);
-        let (source_sql, source_params) =
+        let (mut source_sql, source_params) =
             source_filter_sql(filters.include_mine, &filters.collection_ids, &filters.category_ids);
+        if filters.collocations_only {
+            source_sql.push_str(COLLOCATION_CARD_SQL);
+        }
 
         // Fetch due cards (ordered by overdue duration)
         let mut due_params: Vec<Value> = vec![now_sec.into(), filters.language_id.into()];
@@ -283,6 +292,7 @@ mod tests {
             include_mine: None,
             collection_ids: Vec::new(),
             category_ids: Vec::new(),
+            collocations_only: false,
         }
     }
 

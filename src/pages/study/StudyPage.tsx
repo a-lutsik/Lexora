@@ -18,6 +18,7 @@ import { ImageMode } from './modes/ImageMode';
 import { IrregularVerbsMode } from './modes/IrregularVerbsMode';
 import { DefinitionMode } from './modes/DefinitionMode';
 import { SpeakingMode } from './modes/SpeakingMode';
+import { CollocationMode } from './modes/CollocationMode';
 import type { StudyGrade, StudyMode } from '../../lib/types';
 import { pluralize } from '../../lib/utils';
 import './study.css';
@@ -71,6 +72,12 @@ const STUDY_MODES: { mode: StudyMode; icon: string; name: string; desc: string }
     name: 'Speaking',
     desc: 'Say the word and get phoneme-level pronunciation feedback',
   },
+  {
+    mode: 'collocation',
+    icon: '🔗',
+    name: 'Collocations',
+    desc: 'Pick the word that goes with it: take advantage of, in the end',
+  },
 ];
 
 function CloseIcon() {
@@ -95,6 +102,7 @@ export default function StudyPage() {
     limit: 20,
     includeNew: true,
     includeMatureRefresh: false,
+    collocationsOnly: selectedMode === 'collocation',
   });
 
   // Track session timer
@@ -262,7 +270,11 @@ export default function StudyPage() {
           )}
 
           {!isQueueLoading && !isQueueError && startableQueue.length === 0 && (
-            <p className="study-setup-empty text-secondary text-sm" role="status">{tUi("Nothing to review right now. Add words in My Vocabulary, or enable a collection.")}</p>
+            <p className="study-setup-empty text-secondary text-sm" role="status">
+              {selectedMode === 'collocation'
+                ? tUi("No collocation cards yet. Open a word’s collocations and add the ones you want to learn.")
+                : tUi("Nothing to review right now. Add words in My Vocabulary, or enable a collection.")}
+            </p>
           )}
 
           <Button
@@ -379,6 +391,15 @@ export default function StudyPage() {
 
         {currentEntry && selectedMode === 'definition' && (
           <DefinitionMode
+            key={currentEntry.id}
+            entry={currentEntry}
+            onComplete={(grade) => handleCardGrade(grade)}
+            onSkip={handleSkipCard}
+          />
+        )}
+
+        {currentEntry && selectedMode === 'collocation' && (
+          <CollocationMode
             key={currentEntry.id}
             entry={currentEntry}
             onComplete={(grade) => handleCardGrade(grade)}

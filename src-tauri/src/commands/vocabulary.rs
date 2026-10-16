@@ -110,6 +110,9 @@ pub struct VocabularyEntryDto {
     /// Persisted local image path (AI / stock / seed). Newest media row.
     #[serde(default)]
     pub image_path: Option<String>,
+    /// Study hints when this card was created from a word's collocation.
+    #[serde(default)]
+    pub collocation_drill: Option<crate::commands::collocations::CollocationDrillDto>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -495,6 +498,7 @@ pub fn get_vocabulary_entry_by_id(
                     synonyms: vec![],
                     review_state,
                     image_path: None,
+                    collocation_drill: None,
                 })
             },
         )
@@ -509,6 +513,8 @@ pub fn get_vocabulary_entry_by_id(
         entry.lexeme.language_id,
     )?;
     entry.image_path = crate::db::repos::lexeme::LexemeRepo::get_image_path(conn, entry.lexeme.id)?;
+    entry.collocation_drill =
+        crate::db::repos::collocation::CollocationRepo::drill_for_phrase(conn, entry.lexeme.id)?;
 
     Ok(entry)
 }
@@ -754,6 +760,7 @@ fn apply_entry_edit(
         )?;
         tx.execute("DELETE FROM example WHERE lexeme_id = ?1", rusqlite::params![lexeme_id])?;
         tx.execute("DELETE FROM media WHERE lexeme_id = ?1", rusqlite::params![lexeme_id])?;
+        crate::db::repos::collocation::CollocationRepo::forget_for_lexeme(&tx, lexeme_id)?;
     }
 
     if let Some(translation) = new_translation.map(str::trim).filter(|t| !t.is_empty()) {
@@ -1011,6 +1018,30 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM review_state WHERE user_vocabulary_id = ?1", [id], |r| r.get(0))
             .expect("reviews");
         assert_eq!(reviews, 1);
+    }
+
+    #[test]
+    fn edit_entry_respelling_drops_cached_collocations() {
+        let pool = create_pool_test_memory().expect("pool");
+        run_migrations(&pool).expect("migrate");
+        let id = seeded_entry(&pool, "bnak");
+        let mut conn = pool.get().expect("conn");
+        let lexeme_id: i64 = conn
+            .query_row("SELECT lexeme_id FROM user_vocabulary WHERE id = ?1", [id], |r| r.get(0))
+            .expect("lexeme");
+        let ru = crate::db::repos::lexeme::LexemeRepo::ensure_language(&conn, "ru").expect("ru");
+        conn.execute(
+            "INSERT INTO lexeme_collocation (lexeme_id, target_language_id, text, normalized_text, translation)
+             VALUES (?1, ?2, 'bnak account', 'bnak account', 'x')",
+            rusqlite::params![lexeme_id, ru],
+        )
+        .expect("collocation");
+
+        apply_entry_edit(&mut conn, id, "bank", None).expect("edit");
+        let left: i64 = conn
+            .query_row("SELECT COUNT(*) FROM lexeme_collocation WHERE lexeme_id = ?1", [lexeme_id], |r| r.get(0))
+            .expect("count");
+        assert_eq!(left, 0);
     }
 
     #[test]

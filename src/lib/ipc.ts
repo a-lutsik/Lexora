@@ -11,6 +11,8 @@ import type {
   GrammarWatchSettings,
   GrammarWatchStatus,
   AddVocabularyInput,
+  AddCollocationsInput,
+  CollocationDto,
   AddVocabularyBatchInput,
   AddVocabularyBatchResult,
   AppSettings,
@@ -125,6 +127,18 @@ export const ipc = {
 
     importData: (path: string) =>
       invoke<ImportResult>('import_vocabulary', { path }),
+  },
+
+  // ── Collocations ──────────────────────────────────────
+
+  collocations: {
+    /** Cached in SQLite after the first AI call for this word and target language. */
+    get: (lexemeId: number, targetLanguage: string) =>
+      invoke<CollocationDto[]>('get_collocations', { lexemeId, targetLanguage }),
+
+    /** Adds chosen collocations as vocabulary cards; returns the refreshed list. */
+    add: (input: AddCollocationsInput) =>
+      invoke<CollocationDto[]>('add_collocations_to_vocabulary', { input }),
   },
 
   // ── Translation/AI ────────────────────────────────────

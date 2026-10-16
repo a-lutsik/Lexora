@@ -19,6 +19,7 @@ import { Button, IconButton } from '../../components/ui/Button';
 import { AudioButton } from '../../components/domain/AudioButton';
 import { AssociatedImage } from '../../components/domain/AssociatedImage';
 import { FreqBadge } from '../../components/domain/FreqBadge';
+import { CollocationList } from '../../components/domain/CollocationList';
 import { WordCategory } from './WordCategory';
 import { WordDetailEdit } from './WordDetailEdit';
 import { WordDetailRemove } from './WordDetailRemove';
@@ -26,6 +27,7 @@ import { WordDetailUnavailable } from './WordDetailUnavailable';
 import { ipc } from '../../lib/ipc';
 import { STALE_TIME, QUERY_KEYS } from '../../lib/constants';
 import { formatImageProviderError } from '../../lib/inlineAssistant';
+import { canHaveCollocations } from '../../lib/collocations';
 import type { CardEnrichEvent } from '../../lib/types';
 import './vocabulary.css';
 
@@ -76,6 +78,7 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
   const [imageRefreshing, setImageRefreshing] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [imageNonce, setImageNonce] = useState(0);
+  const [showCollocations, setShowCollocations] = useState(false);
   const [viewTarget, setViewTarget] = useState(settings?.interfaceLanguage ?? 'ru');
   const dialogRef = useRef<HTMLDivElement>(null);
   const langOptions = useLanguageOptions([viewTarget, settings?.interfaceLanguage ?? 'ru']);
@@ -327,6 +330,21 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
                   : mainTranslation}
             </div>
           </div>
+
+          {canHaveCollocations(lexeme.text, lexeme.partOfSpeech) && (
+            <div className="word-detail-collocations">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setShowCollocations((open) => !open)}
+              >
+                {showCollocations ? tUi("Hide collocations") : tUi("Show collocations")}
+              </Button>
+              {showCollocations && (
+                <CollocationList lexemeId={entry.lexemeId} word={lexeme.text} targetLanguage={viewTarget} />
+              )}
+            </div>
+          )}
 
           <AssociatedImage
             path={imagePath ?? null}

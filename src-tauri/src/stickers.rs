@@ -420,6 +420,7 @@ fn sticker_queue_filters(sources: &[String], language_id: i64) -> StudyQueueFilt
     } else { Vec::new() };
     StudyQueueFilters {
         category_ids,
+        collocations_only: false,
         language_id,
         limit: STICKER_QUEUE_LIMIT,
         include_new: true,

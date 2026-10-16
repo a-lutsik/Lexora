@@ -34,6 +34,9 @@ pub struct StudyQueueFilters {
     pub collection_ids: Vec<i64>,
     #[serde(default)]
     pub category_ids: Vec<i64>,
+    /// Collocation study mode: only cards created from a drillable collocation.
+    #[serde(default)]
+    pub collocations_only: bool,
 }
 
 #[derive(Debug, Deserialize)]

@@ -46,6 +46,7 @@ export const QUERY_KEYS = {
   STICKER_CARD: 'sticker-card',
   COLLECTIONS:  'collections',
   CATEGORIES: 'categories',
+  COLLOCATIONS: 'collocations',
   LANGUAGES:    'languages',
   SETTINGS:     'settings',
   STATS:        'stats',

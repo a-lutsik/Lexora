@@ -1,5 +1,6 @@
 pub mod categories;
 pub mod collections;
+pub mod collocations;
 pub mod dialogue;
 pub mod export_import;
 pub mod grammar_watch;

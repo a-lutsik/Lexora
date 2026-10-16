@@ -236,6 +236,8 @@ pub fn run() {
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::get_vocabulary_entry,
             commands::vocabulary::add_to_vocabulary,
+            commands::collocations::get_collocations,
+            commands::collocations::add_collocations_to_vocabulary,
             commands::vocabulary::add_vocabulary_batch,
             commands::vocabulary::import_word_list,
             commands::vocabulary::remove_from_vocabulary,

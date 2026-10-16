@@ -150,6 +150,7 @@ impl VocabularyRepo {
                         synonyms: vec![],
                         review_state,
                         image_path: None,
+                        collocation_drill: None,
                     })
                 },
             )?
@@ -163,6 +164,8 @@ impl VocabularyRepo {
             entry.synonyms =
                 LexemeRepo::get_synonyms(conn, entry.lexeme.id, entry.lexeme.language_id)?;
             entry.image_path = LexemeRepo::get_image_path(conn, entry.lexeme.id)?;
+            entry.collocation_drill =
+                crate::db::repos::collocation::CollocationRepo::drill_for_phrase(conn, entry.lexeme.id)?;
         }
 
         Ok(full_entries)

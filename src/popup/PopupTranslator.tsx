@@ -9,6 +9,7 @@ import { useI18n } from "../hooks/useI18n";
 import { useState, useEffect, useRef } from 'react';
 import { listen, emit } from '@tauri-apps/api/event';
 import { AssociatedImage } from '../components/domain/AssociatedImage';
+import { CollocationList } from '../components/domain/CollocationList';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslate } from '../hooks/useTranslate';
 import { useAddToVocabulary } from '../hooks/useVocabulary';
@@ -25,6 +26,7 @@ import { isLongWritingText, OPEN_WRITING_EVENT, saveWritingDraft } from '../lib/
 import { classifyPopupText, formatImageProviderError, formatProviderError } from '../lib/inlineAssistant';
 import { useSessionLexicalDomain } from '../hooks/useSessionLexicalDomain';
 import { formatFrequencyHint, splitByTerm } from '../lib/utils';
+import { canHaveCollocations } from '../lib/collocations';
 import type { LexicalDomain } from '../lib/translationDomain';
 
 const AUTO_TEXT_DEBOUNCE_MS = 800;
@@ -101,6 +103,11 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
   const [imageRefreshing, setImageRefreshing] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [imageNonce, setImageNonce] = useState(0);
+  const [collocationsOpen, setCollocationsOpen] = useState(false);
+  const collocationsOpenRef = useRef(false);
+  collocationsOpenRef.current = collocationsOpen;
+  const showCollocationsRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef(false);
   const langMenuOpenRef = useRef(false);
   const lexemeIdRef = useRef<number | null>(null);
   const queryRef = useRef(query);
@@ -149,6 +156,18 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
     }
   }, [translateMutation.data]);
 
+  // Back from the collocations view: focus returns to the button that opened it.
+  useEffect(() => {
+    if (collocationsOpen || !returnFocusRef.current) return;
+    returnFocusRef.current = false;
+    showCollocationsRef.current?.focus();
+  }, [collocationsOpen]);
+
+  const closeCollocations = () => {
+    returnFocusRef.current = true;
+    setCollocationsOpen(false);
+  };
+
   const handleClose = () => {
     void ipc.window.closePopup();
   };
@@ -160,12 +179,14 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
     setImagePending(false);
     setExamplesPending(false);
     setAdded(false);
+    setCollocationsOpen(false);
     addMutation.reset();
   };
 
   const handleTranslate = (text: string, overrideTarget?: string, overrideDomain?: LexicalDomain) => {
     if (!text.trim()) return;
     setAdded(false);
+    setCollocationsOpen(false);
     addMutation.reset();
     setEnrichPatch(null);
     setImagePending(true);
@@ -246,6 +267,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
           setImagePending(false);
           setExamplesPending(false);
           setAdded(false);
+          setCollocationsOpen(false);
         }
         return;
       }
@@ -306,6 +328,12 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
       if (langMenuOpenRef.current) return;
       const target = e.target;
       if (target instanceof Element && target.closest('.language-select')) return;
+      // Esc on the collocations view goes back to the word, not out of the popup.
+      if (collocationsOpenRef.current) {
+        returnFocusRef.current = true;
+        setCollocationsOpen(false);
+        return;
+      }
       handleClose();
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -375,6 +403,10 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
   const isWritingQuery = isLongWritingText(query);
   const canOpenAssistant = Boolean(onOpenAssistant) && classifyPopupText(query) === 'assistant';
   const frequencyLabel = formatFrequencyHint(data?.frequencyHint);
+  const collocationLexemeId =
+    data && data.lexemeId != null && !data.isOfflineFallback && canHaveCollocations(data.text, data.partOfSpeech)
+      ? data.lexemeId
+      : null;
   const exampleSentences = data
     ? uniqueExampleSentences(data.exampleSentence, data.exampleSentence2)
     : [];
@@ -577,7 +609,18 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
         </div>
       )}
 
-      {data && !translateMutation.isPending && (
+      {data && !translateMutation.isPending && collocationsOpen && collocationLexemeId != null && (
+        <div className="popup-body animate-fade-in">
+          <CollocationList
+            lexemeId={collocationLexemeId}
+            word={data.text}
+            targetLanguage={data.targetLanguage || targetLang}
+            onBack={closeCollocations}
+          />
+        </div>
+      )}
+
+      {data && !translateMutation.isPending && !(collocationsOpen && collocationLexemeId != null) && (
         <div className="popup-body animate-fade-in">
           {/* Offline fallback notice */}
           {data.isOfflineFallback && (
@@ -645,6 +688,16 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
                   </span>
                 ))}
               </div>
+            )}
+            {collocationLexemeId != null && (
+              <button
+                ref={showCollocationsRef}
+                type="button"
+                className="popup-collocations-btn"
+                onClick={() => setCollocationsOpen(true)}
+              >
+                {tUi("Show collocations")}
+              </button>
             )}
           </div>
 

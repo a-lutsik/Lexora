@@ -972,3 +972,14 @@
 .vocabulary-category-select:disabled {
   opacity: var(--opacity-disabled, 0.5);
 }
+
+.word-detail-collocations {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+
+.word-detail-collocations > .btn {
+  align-self: flex-start;
+}

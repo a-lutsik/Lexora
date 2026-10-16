@@ -200,3 +200,25 @@ fn category_migration_backfills_existing_words_and_restarts_safely() -> Result<(
     assert_eq!(general_count, 1);
     Ok(())
 }
+
+#[test]
+fn v030_adds_collocation_cache_and_check_table() -> Result<(), AppError> {
+    let pool = create_pool_test_memory()?;
+    run_migrations(&pool)?;
+    run_migrations(&pool)?;
+
+    let conn = pool.get()?;
+    let table: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'lexeme_collocation'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(table, 1);
+    let marker: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'lexeme_collocation_check'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(marker, 1);
+    Ok(())
+}
