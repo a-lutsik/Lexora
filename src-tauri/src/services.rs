@@ -186,6 +186,7 @@ mod macos {
                     source_language: source_language.clone(),
                     notes: None,
                     source: Some(SERVICE_SOURCE.to_string()),
+                    category_id: None,
                 };
                 let uv_id = VocabularyRepo::add(&conn, &input)?;
                 let (lexeme_id, lexeme_text): (i64, String) = conn.query_row(
@@ -214,7 +215,10 @@ mod macos {
                         .notification()
                         .builder()
                         .title("Lexora")
-                        .body(format!("Added to Vocabulary: {}", preview(&text)))
+                        .body(
+                            crate::i18n::text(&app, "Added to Vocabulary: {word}")
+                                .replace("{word}", &preview(&text)),
+                        )
                         .show()
                     {
                         log::warn!("Services: notification failed: {e}");

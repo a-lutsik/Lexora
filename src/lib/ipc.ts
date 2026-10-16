@@ -1,3 +1,4 @@
+import type { CategoryDto } from './types';
 // ============================================================
 // LEXORA — IPC Layer
 // Все вызовы invoke() только здесь. В компонентах — запрещено.
@@ -75,6 +76,16 @@ import type {
 // ── Vocabulary ────────────────────────────────────────────
 
 export const ipc = {
+  categories: {
+    list: (languageId: number) => invoke<CategoryDto[]>('list_categories', { languageId }),
+    create: (name: string, languageId: number) => invoke<CategoryDto>('create_category', { name, languageId }),
+    rename: (id: number, name: string) => invoke<CategoryDto>('rename_category', { id, name }),
+    remove: (id: number) => invoke<void>('delete_category', { id }),
+    move: (ids: number[], categoryId: number) => invoke<void>('move_vocabulary_to_category', { ids, categoryId }),
+  },
+  interface: {
+    setLocale: (locale: string) => invoke<void>('set_interface_locale', { locale }),
+  },
   vocabulary: {
     list: (filters: VocabularyFilters) =>
       invoke<VocabularyEntryDto[]>('list_vocabulary', { filters }),
@@ -93,6 +104,9 @@ export const ipc = {
 
     remove: (id: number) =>
       invoke<void>('remove_from_vocabulary', { id }),
+
+    removeBatch: (ids: number[]) =>
+      invoke<void>('remove_vocabulary_batch', { ids }),
 
     toggleFavorite: (id: number) =>
       invoke<VocabularyEntryDto>('toggle_favorite', { id }),

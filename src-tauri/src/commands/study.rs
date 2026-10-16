@@ -32,6 +32,8 @@ pub struct StudyQueueFilters {
     pub include_mine: Option<bool>,
     #[serde(default)]
     pub collection_ids: Vec<i64>,
+    #[serde(default)]
+    pub category_ids: Vec<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -316,6 +318,7 @@ mod tests {
             conn,
             &AddVocabularyInput {
                 lexeme_id: None,
+                category_id: None,
                 text: text.to_string(),
                 source_language: "en".to_string(),
                 notes: None,

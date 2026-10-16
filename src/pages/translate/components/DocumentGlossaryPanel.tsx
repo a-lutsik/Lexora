@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Document glossary panel
 // Termbase for consistent document translation (DeepL Glossary).
@@ -14,6 +15,7 @@ type DocumentGlossaryPanelProps = {
 };
 
 export function DocumentGlossaryPanel({ terms, onChange }: DocumentGlossaryPanelProps) {
+  const { t: tUi } = useI18n();
   const [source, setSource] = useState('');
   const [target, setTarget] = useState('');
 
@@ -39,12 +41,8 @@ export function DocumentGlossaryPanel({ terms, onChange }: DocumentGlossaryPanel
   return (
     <section className="doc-glossary" aria-labelledby="doc-glossary-title">
       <div className="doc-glossary-head">
-        <h3 id="doc-glossary-title" className="doc-glossary-title">
-          Glossary
-        </h3>
-        <p className="text-muted text-xs">
-          Locked term translations applied to every segment (DeepL / Smartcat termbase).
-        </p>
+        <h3 id="doc-glossary-title" className="doc-glossary-title">{tUi("Glossary")}</h3>
+        <p className="text-muted text-xs">{tUi("Locked term translations applied to every segment (DeepL / Smartcat termbase).")}</p>
       </div>
 
       <form
@@ -54,36 +52,30 @@ export function DocumentGlossaryPanel({ terms, onChange }: DocumentGlossaryPanel
           handleAdd();
         }}
       >
-        <label className="sr-only" htmlFor="doc-glossary-source">
-          Source term
-        </label>
-        <input
+        <label className="sr-only" htmlFor="doc-glossary-source">{tUi("Source term")}</label>
+        <input dir="auto"
           id="doc-glossary-source"
           className="doc-glossary-input"
           value={source}
           onChange={(e) => setSource(e.target.value)}
-          placeholder="Source term"
+          placeholder={tUi("Source term")}
         />
         <span className="doc-glossary-arrow" aria-hidden="true">
           →
         </span>
-        <label className="sr-only" htmlFor="doc-glossary-target">
-          Target term
-        </label>
-        <input
+        <label className="sr-only" htmlFor="doc-glossary-target">{tUi("Target term")}</label>
+        <input dir="auto"
           id="doc-glossary-target"
           className="doc-glossary-input"
           value={target}
           onChange={(e) => setTarget(e.target.value)}
-          placeholder="Required translation"
+          placeholder={tUi("Required translation")}
         />
-        <Button type="submit" variant="secondary" size="sm" disabled={!source.trim() || !target.trim()}>
-          Add term
-        </Button>
+        <Button type="submit" variant="secondary" size="sm" disabled={!source.trim() || !target.trim()}>{tUi("Add term")}</Button>
       </form>
 
       {terms.length === 0 ? (
-        <p className="text-muted text-xs">No terms yet. Product names and jargon go here.</p>
+        <p className="text-muted text-xs">{tUi("No terms yet. Product names and jargon go here.")}</p>
       ) : (
         <ul className="doc-glossary-list">
           {terms.map((term) => (
@@ -96,11 +88,9 @@ export function DocumentGlossaryPanel({ terms, onChange }: DocumentGlossaryPanel
               <button
                 type="button"
                 className="doc-glossary-remove"
-                aria-label={`Remove glossary term ${term.source}`}
+                aria-label={tUi("Remove glossary term {value1}", { value1: term.source })}
                 onClick={() => onChange(terms.filter((t) => t.id !== term.id))}
-              >
-                Remove
-              </button>
+              >{tUi("Remove")}</button>
             </li>
           ))}
         </ul>

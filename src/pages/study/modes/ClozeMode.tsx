@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Cloze (Fill the Gap) Study Mode
 // Example sentence with the target word blanked out.
@@ -36,6 +37,7 @@ function buildGappedSentence(sentence: string, word: string): GappedSentence | n
 }
 
 export function ClozeMode({ entry, onComplete, onSkip }: ClozeModeProps) {
+  const { t: tUi } = useI18n();
   const [input, setInput] = useState('');
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const startTime = useRef<number>(Date.now());
@@ -93,14 +95,10 @@ export function ClozeMode({ entry, onComplete, onSkip }: ClozeModeProps) {
       <div className="typing-card">
         <PosBadge pos={lexeme.partOfSpeech} />
         <div className="typing-prompt">
-          <div className="typing-prompt-label">Fill the Gap</div>
-          <div className="study-fallback-text">
-            No example sentence is available for “{lexeme.text}” yet.
-          </div>
+          <div className="typing-prompt-label">{tUi("Fill the Gap")}</div>
+          <div className="study-fallback-text">{tUi("No example sentence is available for “")}{lexeme.text}{tUi("” yet.")}</div>
         </div>
-        <Button variant="secondary" size="md" onClick={onSkip}>
-          Skip Card (→)
-        </Button>
+        <Button variant="secondary" size="md" onClick={onSkip}>{tUi("Skip Card (→)")}</Button>
       </div>
     );
   }
@@ -111,9 +109,7 @@ export function ClozeMode({ entry, onComplete, onSkip }: ClozeModeProps) {
 
       {/* Prompt: sentence with a gap */}
       <div className="typing-prompt">
-        <div className="typing-prompt-label">
-          Complete the sentence:
-        </div>
+        <div className="typing-prompt-label">{tUi("Complete the sentence:")}</div>
         <div className="cloze-sentence">
           {gapped.before}
           <span className="cloze-gap">_____</span>
@@ -126,18 +122,18 @@ export function ClozeMode({ entry, onComplete, onSkip }: ClozeModeProps) {
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="typing-form">
-        <input
+        <input dir="auto"
           ref={inputRef}
           type="text"
           className="typing-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type the missing word…"
+          placeholder={tUi("Type the missing word…")}
           disabled={result !== null}
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          aria-label="Missing word"
+          aria-label={tUi("Missing word")}
         />
 
         {!result && (
@@ -147,9 +143,7 @@ export function ClozeMode({ entry, onComplete, onSkip }: ClozeModeProps) {
               variant="primary"
               size="md"
               isLoading={evaluateMutation.isPending}
-            >
-              Check Answer (↵)
-            </Button>
+            >{tUi("Check Answer (↵)")}</Button>
           </div>
         )}
       </form>
@@ -167,7 +161,7 @@ export function ClozeMode({ entry, onComplete, onSkip }: ClozeModeProps) {
           }`}
         >
           <div className="typing-feedback-title">
-            {result.isCorrect ? '✓ Excellent!' : `Expected: ${result.correctAnswer}`}
+            {result.isCorrect ? tUi("✓ Excellent!") : tUi("Expected: {value1}", { value1: result.correctAnswer })}
           </div>
           {result.explanation && (
             <SafeHtml html={result.explanation} className="typing-feedback-explanation" />
@@ -177,9 +171,7 @@ export function ClozeMode({ entry, onComplete, onSkip }: ClozeModeProps) {
           )}
 
           <div className="typing-feedback-actions">
-            <Button variant="secondary" size="md" onClick={handleNext}>
-              Continue (Space)
-            </Button>
+            <Button variant="secondary" size="md" onClick={handleNext}>{tUi("Continue (Space)")}</Button>
           </div>
         </div>
       )}

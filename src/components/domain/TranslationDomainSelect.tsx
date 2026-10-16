@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Lexical domain select (subject lexicon)
 // ============================================================
@@ -30,6 +31,7 @@ export function TranslationDomainSelect({
   disabled = false,
   className = '',
 }: TranslationDomainSelectProps) {
+  const { t: tUi } = useI18n();
   const normalized = normalizeLexicalDomain(value);
   const detected =
     detectedDomain && detectedDomain !== 'auto'
@@ -37,10 +39,10 @@ export function TranslationDomainSelect({
       : null;
   // Keep selection as Auto, but show the resolved domain on the closed trigger.
   const showDetectedAsValue = normalized === 'auto' && detected !== null && detected !== 'auto';
-  const displayLabel = showDetectedAsValue ? lexicalDomainLabel(detected) : undefined;
+  const displayLabel = showDetectedAsValue ? tUi(lexicalDomainLabel(detected)) : undefined;
   const ariaLabel = showDetectedAsValue
-    ? `Lexical domain, Auto-detect (${lexicalDomainLabel(detected)})`
-    : 'Lexical domain';
+    ? tUi("Lexical domain, Auto-detect ({value1})", { value1: tUi(lexicalDomainLabel(detected)) })
+    : tUi("Lexical domain");
 
   return (
     <div
@@ -54,8 +56,8 @@ export function TranslationDomainSelect({
         displayLabel={displayLabel}
         options={LEXICAL_DOMAIN_OPTIONS.map((o) => ({
           value: o.value,
-          label: compact ? o.shortLabel : o.label,
-          badge: o.value === 'auto' ? 'Smart' : undefined,
+          label: tUi(compact ? o.shortLabel : o.label),
+          badge: o.value === 'auto' ? tUi("Smart") : undefined,
         }))}
         onChange={(next) => onChange(normalizeLexicalDomain(next))}
         ariaLabel={ariaLabel}

@@ -4,6 +4,7 @@
 // Формат файла версионируется; импорт — одна транзакция.
 // ============================================================
 
+use crate::db::repos::category::CategoryRepo;
 use crate::db::repos::lexeme::LexemeRepo;
 use crate::db::DbPool;
 use crate::error::AppError;
@@ -11,7 +12,7 @@ use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 /// Текущая версия формата экспорт-файла.
 const EXPORT_FORMAT_VERSION: i64 = 1;
@@ -38,6 +39,8 @@ pub struct ExportEntry {
     pub source: Option<String>,
     pub added_at: i64,
     pub review_state: Option<ExportReviewState>,
+    #[serde(default)]
+    pub category_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,9 +81,12 @@ pub async fn export_vocabulary(path: String, db: State<'_, Arc<DbPool>>) -> Resu
 pub async fn import_vocabulary(
     path: String,
     db: State<'_, Arc<DbPool>>,
+    app: AppHandle,
 ) -> Result<ImportResult, AppError> {
     let pool = db.inner().clone();
-    import_vocabulary_inner(&pool, Path::new(&path))
+    let result = import_vocabulary_inner(&pool, Path::new(&path))?;
+    crate::commands::categories::notify_categories_changed(&app);
+    Ok(result)
 }
 
 // ── Бизнес-логика (тестируемая без Tauri runtime) ────────
@@ -92,10 +98,11 @@ fn export_vocabulary_inner(pool: &DbPool, path: &Path) -> Result<i64, AppError> 
         "SELECT uv.lexeme_id, uv.added_at, uv.is_favorite, uv.notes, uv.source,
                 l.text, l.normalized_text, l.part_of_speech, l.phonetic,
                 lang.code,
-                rs.status, rs.ease, rs.interval, rs.due_at, rs.lapses, rs.repetitions
+                rs.status, rs.ease, rs.interval, rs.due_at, rs.lapses, rs.repetitions, c.name
          FROM user_vocabulary uv
          JOIN lexeme l ON l.id = uv.lexeme_id
          JOIN language lang ON lang.id = l.language_id
+         LEFT JOIN vocabulary_category c ON c.id = uv.category_id
          LEFT JOIN review_state rs ON rs.user_vocabulary_id = uv.id
          WHERE uv.deleted_at IS NULL
          ORDER BY uv.added_at ASC, uv.id ASC",
@@ -129,6 +136,7 @@ fn export_vocabulary_inner(pool: &DbPool, path: &Path) -> Result<i64, AppError> 
                     language_code: row.get(9)?,
                     translations: vec![],
                     review_state,
+                    category_name: row.get(16)?,
                 },
             ))
         })?
@@ -233,20 +241,25 @@ fn import_vocabulary_inner(pool: &DbPool, path: &Path) -> Result<ImportResult, A
             continue;
         }
 
+        let category_id =
+            CategoryRepo::resolve_imported(&tx, language_id, entry.category_name.as_deref())?;
+
         // 4. Вставка новой записи (или воскрешение soft-deleted)
         tx.execute(
-            "INSERT INTO user_vocabulary (user_id, lexeme_id, source, notes, is_favorite, added_at)
-             VALUES (1, ?1, 'import', ?2, ?3, ?4)
+            "INSERT INTO user_vocabulary (user_id, lexeme_id, source, notes, is_favorite, added_at, category_id)
+             VALUES (1, ?1, 'import', ?2, ?3, ?4, ?5)
              ON CONFLICT(user_id, lexeme_id) DO UPDATE SET
                 deleted_at = NULL,
                 source = 'import',
                 notes = COALESCE(?2, notes),
-                is_favorite = ?3",
+                is_favorite = ?3,
+                category_id = ?5",
             params![
                 lexeme_id,
                 entry.notes,
                 entry.is_favorite as i64,
-                entry.added_at
+                entry.added_at,
+                category_id
             ],
         )?;
 
@@ -366,6 +379,7 @@ mod tests {
                 source_language: "en".to_string(),
                 notes: notes.map(|s| s.to_string()),
                 source: Some("manual".to_string()),
+                category_id: None,
             },
         )
         .expect("add word");
@@ -523,6 +537,51 @@ mod tests {
         );
 
         let _ = std::fs::remove_file(&path);
+        Ok(())
+    }
+    #[test]
+    fn category_backup_roundtrip_and_legacy_default() -> Result<(), AppError> {
+        let src = test_pool();
+        seed_word(&src, "passport", None);
+        {
+            let mut conn = src.get()?;
+            let travel = CategoryRepo::create(&mut conn, 1, "Travel")?;
+            conn.execute("UPDATE user_vocabulary SET category_id = ?1", [travel.id])?;
+        }
+        let path = temp_file("categories");
+        export_vocabulary_inner(&src, &path)?;
+        let dst = test_pool();
+        import_vocabulary_inner(&dst, &path)?;
+        {
+            let conn = dst.get()?;
+            let categories = CategoryRepo::list(&conn, 1)?;
+            assert_eq!(
+                categories
+                    .iter()
+                    .find(|c| c.name == "Travel")
+                    .map(|c| c.word_count),
+                Some(1)
+            );
+        }
+        // Version 1 backups written before categories have no category_name.
+        let raw = std::fs::read_to_string(&path)?;
+        let mut legacy: serde_json::Value = serde_json::from_str(&raw)?;
+        legacy["entries"][0]
+            .as_object_mut()
+            .expect("entry")
+            .remove("category_name");
+        std::fs::write(&path, serde_json::to_vec(&legacy)?)?;
+        let legacy_dst = test_pool();
+        import_vocabulary_inner(&legacy_dst, &path)?;
+        let conn = legacy_dst.get()?;
+        assert_eq!(
+            CategoryRepo::list(&conn, 1)?
+                .iter()
+                .find(|c| c.is_general)
+                .map(|c| c.word_count),
+            Some(1)
+        );
+        let _ = std::fs::remove_file(path);
         Ok(())
     }
 }

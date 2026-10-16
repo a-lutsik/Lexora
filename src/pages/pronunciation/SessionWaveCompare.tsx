@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Native vs User waveform comparison (visual only)
 // ============================================================
@@ -23,10 +24,11 @@ function WaveRow({
   heights: number[];
   tone: 'native' | 'user';
 }) {
+  const { t: tUi } = useI18n();
   return (
     <div className={`pairs-wave-compare-row pairs-wave-compare-row--${tone}`}>
       <div className="pairs-wave-compare-meta">
-        <span className="pairs-wave-compare-label">{label}</span>
+        <span className="pairs-wave-compare-label">{tUi(label)}</span>
         {badge ? <span className="pairs-wave-compare-badge">{badge}</span> : null}
       </div>
       <div className="pairs-wave-compare-bars" aria-hidden="true">
@@ -49,6 +51,7 @@ export function SessionWaveCompare({
   userHeights = null,
   hasAttempt,
 }: SessionWaveCompareProps) {
+  const { t: tUi } = useI18n();
   const nativeHeights = useMemo(
     () => seededWaveHeights(`${nativeLabel}|${phoneme}`),
     [nativeLabel, phoneme],
@@ -62,9 +65,9 @@ export function SessionWaveCompare({
     : seededWaveHeights('idle-user').map((h) => h * 0.35);
 
   return (
-    <div className="pairs-wave-compare" aria-label="Native and user waveform comparison">
-      <WaveRow label="Native" badge={`/${phoneme}/`} heights={nativeHeights} tone="native" />
-      <WaveRow label="User" heights={user} tone="user" />
+    <div className="pairs-wave-compare" aria-label={tUi("Native and user waveform comparison")}>
+      <WaveRow label={tUi("Native")} badge={`/${phoneme}/`} heights={nativeHeights} tone="native" />
+      <WaveRow label={tUi("User")} heights={user} tone="user" />
     </div>
   );
 }

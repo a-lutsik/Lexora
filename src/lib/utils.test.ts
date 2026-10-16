@@ -16,7 +16,7 @@ describe('pluralize', () => {
     expect(pluralize(1, 'word')).toBe('1 word');
     expect(pluralize(0, 'word')).toBe('0 words');
     expect(pluralize(2, 'word')).toBe('2 words');
-    expect(pluralize(5282, 'card')).toBe('5282 cards');
+    expect(pluralize(5282, 'card')).toBe('5,282 cards');
   });
 
   it('accepts an irregular plural', () => {

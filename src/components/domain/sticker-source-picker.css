@@ -53,3 +53,26 @@
   font-size: 11px;
   gap: 6px;
 }
+
+.sticker-source-categories {
+  padding-inline-start: var(--space-6);
+}
+
+.sticker-source-categories summary {
+  min-height: var(--space-12);
+  display: flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.sticker-source-categories summary:focus-visible,
+.sticker-source-option input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: var(--space-1);
+}
+
+.sticker-source-picker .sticker-source-option {
+  min-height: var(--space-12);
+}

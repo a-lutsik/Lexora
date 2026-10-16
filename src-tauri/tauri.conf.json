@@ -54,6 +54,20 @@
       }
     },
     "macOS": {
+      "files": {
+        "Resources/en.lproj/InfoPlist.strings": "localizations/en.lproj/InfoPlist.strings",
+        "Resources/en.lproj/ServicesMenu.strings": "localizations/en.lproj/ServicesMenu.strings",
+        "Resources/ru.lproj/InfoPlist.strings": "localizations/ru.lproj/InfoPlist.strings",
+        "Resources/ru.lproj/ServicesMenu.strings": "localizations/ru.lproj/ServicesMenu.strings",
+        "Resources/uk.lproj/InfoPlist.strings": "localizations/uk.lproj/InfoPlist.strings",
+        "Resources/uk.lproj/ServicesMenu.strings": "localizations/uk.lproj/ServicesMenu.strings",
+        "Resources/es.lproj/InfoPlist.strings": "localizations/es.lproj/InfoPlist.strings",
+        "Resources/es.lproj/ServicesMenu.strings": "localizations/es.lproj/ServicesMenu.strings",
+        "Resources/fr.lproj/InfoPlist.strings": "localizations/fr.lproj/InfoPlist.strings",
+        "Resources/fr.lproj/ServicesMenu.strings": "localizations/fr.lproj/ServicesMenu.strings",
+        "Resources/it.lproj/InfoPlist.strings": "localizations/it.lproj/InfoPlist.strings",
+        "Resources/it.lproj/ServicesMenu.strings": "localizations/it.lproj/ServicesMenu.strings"
+      },
       "minimumSystemVersion": "12.0",
       "entitlements": "Entitlements.plist",
       "signingIdentity": "-",

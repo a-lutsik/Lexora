@@ -1,3 +1,6 @@
+import { languageDisplayName } from '../../../lib/inlineAssistant';
+import { t } from '../../../i18n';
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Audio & Speech Translate Tab
 // Voice studio: neon waveform, live mic, file upload,
@@ -30,23 +33,8 @@ type AudioTranslateTabProps = {
   onDetectedDomain?: (domain: string | null) => void;
 };
 
-const LANGUAGE_NAMES: Record<string, string> = {
-  auto: 'Auto-Detect',
-  ru: 'Russian',
-  en: 'English',
-  de: 'German',
-  fr: 'French',
-  es: 'Spanish',
-  it: 'Italian',
-  zh: 'Chinese',
-  ja: 'Japanese',
-  ko: 'Korean',
-  pt: 'Portuguese',
-  tr: 'Turkish',
-};
-
 function languageName(code: string): string {
-  return LANGUAGE_NAMES[code] ?? code.toUpperCase();
+  return code === 'auto' ? t('Auto-Detect') : languageDisplayName(code);
 }
 
 function formatClock(totalSeconds: number): string {
@@ -63,6 +51,7 @@ export function AudioTranslateTab({
   lexicalDomain,
   onDetectedDomain,
 }: AudioTranslateTabProps) {
+  const { t: tUi } = useI18n();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [resultAt, setResultAt] = useState<string | null>(null);
@@ -201,7 +190,7 @@ export function AudioTranslateTab({
             setMicError(
               formatIpcError(
                 err,
-                'Speech translation failed. Check the AI provider in Settings.',
+                tUi("Speech translation failed. Check the AI provider in Settings."),
               ),
             );
           },
@@ -248,14 +237,14 @@ export function AudioTranslateTab({
     (showLiveCards ? live.sourceLanguage : result?.sourceLanguage) ||
     (sourceLang === 'auto' ? 'en' : sourceLang);
   const statusLabel = live.isLive
-    ? 'Live'
+    ? tUi("Live")
     : isRecording
-      ? 'Recording'
+      ? tUi("Recording")
       : isProcessing
-        ? 'Processing'
+        ? tUi("Processing")
         : result || live.original
-          ? 'Translated'
-          : 'Ready';
+          ? tUi("Translated")
+          : tUi("Ready");
   const originalLang = languageName(displaySourceLang);
   const translatedLang = languageName(result?.targetLanguage ?? targetLang);
   const studioError = live.error ?? micError;
@@ -318,7 +307,7 @@ export function AudioTranslateTab({
           });
         },
         onError: (err) => {
-          setMicError(formatIpcError(err, 'Could not save the SRS card.'));
+          setMicError(formatIpcError(err, tUi("Could not save the SRS card.")));
         },
       },
     );
@@ -340,7 +329,7 @@ export function AudioTranslateTab({
 
   return (
     <div className="voice-studio animate-fade-in">
-      <input
+      <input dir="auto"
         ref={fileInputRef}
         type="file"
         accept="audio/mp3,audio/wav,audio/m4a,audio/ogg,audio/webm"
@@ -354,7 +343,7 @@ export function AudioTranslateTab({
         className={`voice-studio-status${live.isLive ? ' is-live' : ''}${isRecording ? ' is-recording' : ''}${isProcessing ? ' is-processing' : ''}`}
         aria-live="polite"
       >
-        {statusLabel}
+        {tUi(statusLabel)}
       </p>
 
       <LiveSpeechWave
@@ -367,7 +356,7 @@ export function AudioTranslateTab({
         {formatClock(timerSeconds)}
       </p>
 
-      <div className="voice-studio-controls" role="group" aria-label="Voice translation controls">
+      <div className="voice-studio-controls" role="group" aria-label={tUi("Voice translation controls")}>
         <button
           type="button"
           className={`voice-mode-btn${live.isLive ? ' is-live' : ''}${inputSource === 'mic' && !isRecording ? ' is-active' : ''}`}
@@ -376,12 +365,12 @@ export function AudioTranslateTab({
           aria-pressed={live.isLive}
           aria-label={
             live.isLive
-              ? 'Stop live translation'
-              : 'Start live microphone translation without saving'
+              ? tUi("Stop live translation")
+              : tUi("Start live microphone translation without saving")
           }
         >
           <IconMic />
-          {live.isLive ? 'Listening' : 'Microphone'}
+          {live.isLive ? tUi("Listening") : tUi("Microphone")}
         </button>
 
         <span className={`voice-record-ring${isRecording ? ' is-recording' : ''}`}>
@@ -391,11 +380,11 @@ export function AudioTranslateTab({
             onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
             disabled={isProcessing}
             aria-label={
-              isRecording ? 'Stop recording and save the translation' : 'Record and save translation'
+              isRecording ? tUi("Stop recording and save the translation") : tUi("Record and save translation")
             }
           >
             <span className={`voice-record-dot${isRecording ? ' is-recording' : ''}`} aria-hidden="true" />
-            {isRecording ? 'Stop' : 'Record'}
+            {isRecording ? tUi("Stop") : tUi("Record")}
           </button>
         </span>
 
@@ -404,11 +393,9 @@ export function AudioTranslateTab({
           className={`voice-mode-btn${inputSource === 'file' ? ' is-active' : ''}`}
           onClick={() => fileInputRef.current?.click()}
           disabled={isProcessing || live.isLive}
-          aria-label="Upload an audio file"
+          aria-label={tUi("Upload an audio file")}
         >
-          <IconUpload />
-          File Upload
-        </button>
+          <IconUpload />{tUi("File Upload")}</button>
       </div>
 
       {studioError && (
@@ -422,7 +409,7 @@ export function AudioTranslateTab({
           variant="original"
           languageName={originalLang}
           text={displayOriginal}
-          timestamp={showLiveCards && live.isLive ? 'Live' : resultAt}
+          timestamp={showLiveCards && live.isLive ? tUi('Live') : resultAt}
           isPlaying={playingTts === 'transcribed'}
           isBookmarked={savedSide === 'original' || savedSide === 'both'}
           copied={copiedSide === 'original'}
@@ -434,7 +421,7 @@ export function AudioTranslateTab({
           {...(live.isLive
             ? {
                 emptyHint:
-                  'Speak — the original appears here as you talk. Not saved to history.',
+                  tUi('Speak — the original appears here as you talk. Not saved to history.'),
                 showBookmark: false,
               }
             : {})}
@@ -443,7 +430,7 @@ export function AudioTranslateTab({
           variant="translation"
           languageName={translatedLang}
           text={displayTranslation}
-          timestamp={showLiveCards && live.isLive ? 'Live' : resultAt}
+          timestamp={showLiveCards && live.isLive ? tUi('Live') : resultAt}
           isPlaying={playingTts === 'translated'}
           isBookmarked={savedSide === 'translation' || savedSide === 'both'}
           copied={copiedSide === 'translation'}
@@ -454,7 +441,7 @@ export function AudioTranslateTab({
           onBookmark={() => handleSaveToVocab('translation')}
           {...(live.isLive
             ? {
-                emptyHint: 'Translation appears here while you speak. Not saved to history.',
+                emptyHint: tUi('Translation appears here while you speak. Not saved to history.'),
                 showBookmark: false,
               }
             : {})}

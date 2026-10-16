@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Shadowing drill panel
 // Vocabulary queue (read-only). Say / Space → model → record → score.
@@ -27,6 +28,7 @@ function nextQueueIndex(current: number, length: number): number {
 }
 
 export function ShadowingPanel({ language }: ShadowingPanelProps) {
+  const { t: tUi } = useI18n();
   const { data: languages } = useLanguages();
   const languageId = resolveLanguageId(languages, language);
   const { data: entries } = useVocabulary({
@@ -79,12 +81,12 @@ export function ShadowingPanel({ language }: ShadowingPanelProps) {
   const showPostpone = drill.phase === 'feedback' && !drill.passed;
   const sayLabel =
     drill.phase === 'playing'
-      ? 'Listening…'
+      ? tUi("Listening…")
       : drill.phase === 'recording'
-        ? 'Stop'
+        ? tUi("Stop")
         : drill.phase === 'scoring'
-          ? 'Scoring…'
-          : 'Say / Record';
+          ? tUi("Scoring…")
+          : tUi("Say / Record");
   const sayAria =
     drill.phase === 'recording'
       ? 'Stop recording'
@@ -95,11 +97,11 @@ export function ShadowingPanel({ language }: ShadowingPanelProps) {
           : 'Say phrase';
   const phaseMessage =
     drill.phase === 'recording'
-      ? 'Speak now'
+      ? tUi("Speak now")
       : drill.phase === 'playing'
-        ? 'Listening to model…'
+        ? tUi("Listening to model…")
         : drill.phase === 'scoring'
-          ? 'Scoring your pronunciation…'
+          ? tUi("Scoring your pronunciation…")
           : null;
 
   const handleListen = () => {
@@ -116,7 +118,7 @@ export function ShadowingPanel({ language }: ShadowingPanelProps) {
       phraseEditable={false}
       emptyPhraseHint="Add words to Vocabulary to start shadowing."
       phraseInputId="pron-shadow-target"
-      phraseInputLabel="Phrase to shadow"
+      phraseInputLabel={tUi("Phrase to shadow")}
       currentScore={drill.latest?.overallScore ?? null}
       sessionAverage={session.average}
       sessionPassed={session.passed}
@@ -136,33 +138,29 @@ export function ShadowingPanel({ language }: ShadowingPanelProps) {
       onPostpone={drill.postpone}
       onNextPhrase={drill.postpone}
       spaceHint={queue.length > 0}
-      spaceHintText="Press Spacebar to Shadow"
+      spaceHintText={tUi("Press Spacebar to Shadow")}
       phaseMessage={phaseMessage}
       error={drill.error}
     >
       {(drill.latest || drill.noSpeech) && drill.phase !== 'playing' && (
         <section className="pronunciation-result pronunciation-result--inline" aria-live="polite">
           {drill.noSpeech && (
-            <p className="text-secondary">
-              No speech detected. Please speak clearly into the microphone and try again.
-            </p>
+            <p className="text-secondary">{tUi("No speech detected. Please speak clearly into the microphone and try again.")}</p>
           )}
           {drill.latest && (
             <>
               <p className="pronunciation-pass-line">
                 {drill.passed
-                  ? 'Passed'
-                  : `Need ${PRONUNCIATION_PASS_SCORE}% to pass`}
+                  ? tUi("Passed")
+                  : tUi("Need {PRONUNCIATION_PASS_SCORE}% to pass", { PRONUNCIATION_PASS_SCORE: PRONUNCIATION_PASS_SCORE })}
               </p>
               {drill.attempt > 0 && (
-                <div className="pronunciation-shadow-meta" aria-live="polite">
-                  Attempt {drill.attempt}
+                <div className="pronunciation-shadow-meta" aria-live="polite">{tUi("Attempt ")}{drill.attempt}
                 </div>
               )}
               {drill.latest.summary && <p className="text-secondary">{drill.latest.summary}</p>}
               {drill.latest.recognizedText && (
-                <p className="text-sm">
-                  Heard: <span className="pronunciation-heard">{drill.latest.recognizedText}</span>
+                <p className="text-sm">{tUi("Heard: ")}<span className="pronunciation-heard">{drill.latest.recognizedText}</span>
                 </p>
               )}
               {drill.latest.stressFeedback && (
@@ -170,25 +168,25 @@ export function ShadowingPanel({ language }: ShadowingPanelProps) {
               )}
               <PhonemeFeedback phonemes={drill.latest.phonemes} />
               {drill.tipPending && (
-                <p className="text-muted text-sm">Getting a tip…</p>
+                <p className="text-muted text-sm">{tUi("Getting a tip…")}</p>
               )}
               {drill.tip && (
                 <p className="text-sm pronunciation-auto-tip">
                   {drill.tip.tip}
-                  {drill.tip.tonguePosition ? ` Tongue: ${drill.tip.tonguePosition}` : ''}
-                  {drill.tip.lipPosition ? ` Lips: ${drill.tip.lipPosition}` : ''}
+                  {drill.tip.tonguePosition ? tUi(" Tongue: {value1}", { value1: drill.tip.tonguePosition }) : ''}
+                  {drill.tip.lipPosition ? tUi(" Lips: {value1}", { value1: drill.tip.lipPosition }) : ''}
                 </p>
               )}
             </>
           )}
           {drill.playbackUrl && (
             <details className="pronunciation-playback-wrap">
-              <summary>Your recording</summary>
+              <summary>{tUi("Your recording")}</summary>
               <audio
                 className="pronunciation-playback"
                 controls
                 src={drill.playbackUrl}
-                aria-label="Your recording"
+                aria-label={tUi("Your recording")}
               >
                 <track kind="captions" />
               </audio>

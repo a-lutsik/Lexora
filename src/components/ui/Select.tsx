@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Custom Select Component
 // Instant single-click activation, accessible keyboard controls,
@@ -55,13 +56,14 @@ export function Select({
   options,
   value,
   onChange,
-  placeholder = 'Select an option…',
+  placeholder,
   disabled = false,
   ariaLabel,
   className = '',
   id,
   displayLabel,
 }: SelectProps) {
+  const { t: tUi } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -176,7 +178,7 @@ export function Select({
               )}
             </>
           ) : (
-            <span className="custom-select-placeholder">{placeholder}</span>
+            <span className="custom-select-placeholder">{placeholder ?? tUi("Select an option…")}</span>
           )}
         </span>
         <span className="custom-select-chevron">

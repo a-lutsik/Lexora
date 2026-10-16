@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import WritingPage from './WritingPage';
 import { invokeMock } from '../../test/mocks';
 import { renderWithQueryClient } from '../../test/render';
-import { AUTO_CHECK_DEBOUNCE_MS, saveWritingDraft } from '../../lib/writingText';
+import { AUTO_CHECK_DEBOUNCE_MS, MAX_WRITING_CHARS, saveWritingDraft } from '../../lib/writingText';
 import type {
   WritingCheckDto,
   WritingErrorPatternDto,
@@ -320,15 +320,17 @@ describe('WritingPage', () => {
   });
 
   describe('auto-check', () => {
-    const autoText = 'he go home now';
+    const autoText = 'bless god';
     const autoCheckResult: WritingCheckDto = {
       ...checkResult,
       originalText: autoText,
       issues: [
         {
           ...baseIssue,
-          offsetStart: 3,
-          offsetEnd: 5,
+          originalFragment: 'god',
+          suggestedFix: 'God',
+          offsetStart: 6,
+          offsetEnd: 9,
         },
       ],
     };
@@ -378,7 +380,7 @@ describe('WritingPage', () => {
       });
 
       expect(await screen.findByText('One grammar error.')).toBeInTheDocument();
-      expect(document.querySelector('.writing-mark')).toHaveTextContent('go');
+      expect(document.querySelector('.writing-mark')).toHaveTextContent('god');
     });
 
     it('does not auto-check when the setting is off', async () => {
@@ -418,6 +420,79 @@ describe('WritingPage', () => {
       }
 
       expect(invokeMock).not.toHaveBeenCalledWith('check_writing', expect.anything());
+    });
+
+    it('warns when auto-check is on and the text exceeds the character limit', async () => {
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === 'get_settings') {
+          return Promise.resolve({
+            primaryLanguage: 'en',
+            writingAutoCheck: true,
+            offlineMode: false,
+          });
+        }
+        if (cmd === 'get_writing_error_patterns') return Promise.resolve([]);
+        return Promise.resolve(null);
+      });
+
+      renderWithQueryClient(<WritingPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('switch', { name: 'Auto-check writing' })).toHaveAttribute(
+          'aria-checked',
+          'true'
+        );
+      });
+
+      const input = screen.getByRole('textbox', { name: 'Text to check' });
+      fireEvent.change(input, { target: { value: 'a'.repeat(MAX_WRITING_CHARS) } });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+      fireEvent.change(input, { target: { value: 'a'.repeat(MAX_WRITING_CHARS + 1) } });
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(`You exceeded ${MAX_WRITING_CHARS} characters.`);
+      expect(alert).toHaveTextContent('Auto-check will not run.');
+      expect(alert).toHaveTextContent('Shorten the text, then press Check writing.');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+      fireEvent.change(input, { target: { value: 'a'.repeat(MAX_WRITING_CHARS + 2) } });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+      fireEvent.change(input, { target: { value: 'short' } });
+      fireEvent.change(input, { target: { value: 'a'.repeat(MAX_WRITING_CHARS + 1) } });
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+    });
+
+    it('does not warn about the character limit when auto-check is off', async () => {
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === 'get_settings') {
+          return Promise.resolve({
+            primaryLanguage: 'en',
+            writingAutoCheck: false,
+            offlineMode: false,
+          });
+        }
+        if (cmd === 'get_writing_error_patterns') return Promise.resolve([]);
+        return Promise.resolve(null);
+      });
+
+      renderWithQueryClient(<WritingPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('switch', { name: 'Auto-check writing' })).toHaveAttribute(
+          'aria-checked',
+          'false'
+        );
+      });
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Text to check' }), {
+        target: { value: 'a'.repeat(MAX_WRITING_CHARS + 1) },
+      });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
   });
 });

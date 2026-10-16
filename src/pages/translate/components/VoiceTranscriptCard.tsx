@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Voice transcript / translation card
 // Speaker avatar, overflow scroll, play, copy menu, SRS bookmark.
@@ -42,15 +43,16 @@ export function VoiceTranscriptCard({
   emptyHint,
   showBookmark = true,
 }: VoiceTranscriptCardProps) {
+  const { t: tUi } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const speaker = variant === 'original' ? 'A' : 'B';
-  const title = variant === 'original' ? `Original (${languageName})` : `Translation (${languageName})`;
+  const title = variant === 'original' ? tUi('Original ({language})', { language: languageName }) : tUi('Translation ({language})', { language: languageName });
   const emptyLabel =
-    emptyHint ??
+    emptyHint ? tUi(emptyHint) :
     (variant === 'original'
-      ? 'Transcript will appear here after you speak or upload audio.'
-      : 'Translation will appear here after transcription.');
+      ? tUi('Transcript will appear here after you speak or upload audio.')
+      : tUi('Translation will appear here after transcription.'));
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -85,7 +87,7 @@ export function VoiceTranscriptCard({
             disabled={!text}
             aria-expanded={menuOpen}
             aria-haspopup="menu"
-            aria-label={`${title} actions`}
+            aria-label={tUi("{title} actions", { title: title })}
           >
             <IconMore />
           </button>
@@ -98,7 +100,7 @@ export function VoiceTranscriptCard({
                 onClick={onCopy}
               >
                 {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-                {copied ? 'Copied' : 'Copy text'}
+                {copied ? tUi("Copied") : tUi("Copy text")}
               </button>
             </div>
           )}
@@ -117,7 +119,7 @@ export function VoiceTranscriptCard({
           className="voice-play-btn"
           onClick={onPlay}
           disabled={!text || isPlaying}
-          aria-label={variant === 'original' ? 'Play original transcript' : 'Play translation'}
+          aria-label={variant === 'original' ? tUi("Play original transcript") : tUi("Play translation")}
         >
           <IconPlay size={14} />
         </button>
@@ -129,13 +131,11 @@ export function VoiceTranscriptCard({
             onClick={onBookmark}
             disabled={!text}
             aria-pressed={isBookmarked}
-            aria-label="Save to vocabulary as an SRS card"
+            aria-label={tUi("Save to vocabulary as an SRS card")}
           >
-            <IconBookmark filled={isBookmarked} />
-            Bookmark (SRS)
-          </button>
+            <IconBookmark filled={isBookmarked} />{tUi("Bookmark (SRS)")}</button>
         ) : (
-          <span className="voice-card-live-hint">Not saved</span>
+          <span className="voice-card-live-hint">{tUi("Not saved")}</span>
         )}
       </footer>
     </article>

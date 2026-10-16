@@ -104,6 +104,7 @@ export type MediaDto = {
 // ── User Vocabulary ───────────────────────────────────────
 
 export type VocabularyEntryDto = {
+  categoryId?: number;
   id: number;
   userId: number;
   lexemeId: number;
@@ -296,7 +297,7 @@ export type AppSettings = {
   ttsVoice: string;
   stickerCount: number;
   stickerOpacity: number;
-  /** `all` | `mine` | `c:<collectionId>` — multi-select of sticker word sources. */
+  /** `all` | `mine` | `cat:<categoryId>` | `c:<collectionId>` — multi-select of sticker word sources. */
   stickerSources: string[];
   quietHoursStart: string | null;
   quietHoursEnd: string | null;
@@ -462,6 +463,7 @@ export type RealtimeEvent =
 // ── Input types (for mutations) ───────────────────────────
 
 export type AddVocabularyInput = {
+  categoryId?: number | null;
   lexemeId: number | null;   // null if new word
   text: string;
   sourceLanguage: string;
@@ -470,12 +472,14 @@ export type AddVocabularyInput = {
 };
 
 export type AddVocabularyBatchInput = {
+  categoryId?: number | null;
   texts: string[];
   sourceLanguage: string;
   source?: string;
 };
 
 export type ImportWordListInput = {
+  categoryId?: number | null;
   path: string;
   sourceLanguage: string;
   source?: string;
@@ -842,6 +846,7 @@ export type PronunciationModelDto = {
 // ── Filter types ──────────────────────────────────────────
 
 export type VocabularyFilters = {
+  categoryId?: number | null;
   search: string;
   languageId: number | null;
   status: SrsStatus | 'all';
@@ -867,6 +872,7 @@ export type StudyQueueFilters = {
   /** When set, restrict the queue to user-added and/or selected collections. */
   includeMine?: boolean;
   collectionIds?: number[];
+  categoryIds?: number[];
 };
 
 // ── Stage 4: Multimodal Translation Hub ──────────────────
@@ -984,4 +990,12 @@ export type TranslationHistoryDto = {
   metadataJson?: string | null;
   isFavorite: boolean;
   createdAt: number;
+};
+
+export type CategoryDto = {
+  id: number;
+  name: string;
+  languageId: number;
+  isGeneral: boolean;
+  wordCount: number;
 };

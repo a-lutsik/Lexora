@@ -354,7 +354,7 @@ struct Skipped {
 }
 
 impl Skipped {
-    fn new(code: ActivityCode, app: Option<&AppInfo>, detail: Option<String>) -> Probe {
+    fn probe(code: ActivityCode, app: Option<&AppInfo>, detail: Option<String>) -> Probe {
         Probe::Nothing(Skipped {
             code,
             app: app.cloned(),
@@ -373,22 +373,22 @@ enum Probe {
 
 fn probe(system: &AxElement, own_pid: i32, config: &WatchConfig, cache: &mut AppCache) -> Probe {
     let Some(app_element) = system.copy_element(ATTR_FOCUSED_APP) else {
-        return Skipped::new(ActivityCode::NoField, None, None);
+        return Skipped::probe(ActivityCode::NoField, None, None);
     };
     let Some(pid) = app_element.pid() else {
-        return Skipped::new(ActivityCode::NoField, None, None);
+        return Skipped::probe(ActivityCode::NoField, None, None);
     };
     if pid == own_pid {
         return Probe::OwnApp;
     }
     let app = cache.info(pid);
     if logic::is_app_excluded(app.bundle_id.as_deref(), &config.excluded_apps) {
-        return Skipped::new(ActivityCode::ExcludedApp, Some(&app), app.bundle_id.clone());
+        return Skipped::probe(ActivityCode::ExcludedApp, Some(&app), app.bundle_id.clone());
     }
     cache.enable_accessibility(&app_element, pid);
     let Some(element) = app_element.copy_element(ATTR_FOCUSED_UI) else {
         cache.retry_accessibility(pid);
-        return Skipped::new(ActivityCode::NoField, Some(&app), None);
+        return Skipped::probe(ActivityCode::NoField, Some(&app), None);
     };
     let role = element.copy_string(ATTR_ROLE);
     let subrole = element.copy_string(ATTR_SUBROLE);
@@ -399,17 +399,17 @@ fn probe(system: &AxElement, own_pid: i32, config: &WatchConfig, cache: &mut App
             (role, None) => role,
             (None, subrole) => subrole,
         };
-        return Skipped::new(ActivityCode::UnsupportedField, Some(&app), detail);
+        return Skipped::probe(ActivityCode::UnsupportedField, Some(&app), detail);
     }
     let max_chars = i64::try_from(logic::MAX_CHECK_CHARS).unwrap_or(i64::MAX);
     if element
         .copy_i64(ATTR_CHAR_COUNT)
         .is_some_and(|count| count > max_chars)
     {
-        return Skipped::new(ActivityCode::FieldTooLong, Some(&app), None);
+        return Skipped::probe(ActivityCode::FieldTooLong, Some(&app), None);
     }
     let Some(text) = element.field_value() else {
-        return Skipped::new(
+        return Skipped::probe(
             ActivityCode::UnsupportedField,
             Some(&app),
             Some("no text value".to_string()),
@@ -701,7 +701,7 @@ fn run_action(app: &AppHandle, action: UiAction) {
 fn build_window(app: &AppHandle) -> Result<tauri::WebviewWindow, AppError> {
     let window =
         WebviewWindowBuilder::new(app, GRAMMAR_LABEL, WebviewUrl::App("grammar.html".into()))
-            .title("Lexora Writing Check")
+            .title(crate::i18n::text(app, "Lexora Writing Check"))
             .inner_size(BADGE_SIZE, BADGE_SIZE)
             .decorations(false)
             .transparent(true)

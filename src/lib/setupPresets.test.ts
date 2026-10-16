@@ -83,6 +83,9 @@ describe('preset catalog', () => {
 });
 
 describe('buildPresetSettings', () => {
+    it('preserves an explicitly empty sticker source selection', () => {
+        expect(buildPresetSettings(baseSettings({ stickerSources: [] }), 'zero').stickerSources).toEqual([]);
+    });
     it('keeps personal preferences untouched for every preset', () => {
         for (const p of ALL_PRESETS) {
             const s = buildPresetSettings(baseSettings(), p.id);

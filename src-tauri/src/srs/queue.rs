@@ -13,7 +13,7 @@ pub struct QueueBuilder;
 
 /// Optional extra WHERE clause + bind values for sticker/study source filters.
 /// `include_mine == None` means "do not filter by source" (study page).
-fn source_filter_sql(include_mine: Option<bool>, collection_ids: &[i64]) -> (String, Vec<i64>) {
+fn source_filter_sql(include_mine: Option<bool>, collection_ids: &[i64], category_ids: &[i64]) -> (String, Vec<i64>) {
     let Some(include_mine) = include_mine else {
         return (String::new(), Vec::new());
     };
@@ -23,6 +23,11 @@ fn source_filter_sql(include_mine: Option<bool>, collection_ids: &[i64]) -> (Str
 
     if include_mine {
         clauses.push("(uv.source IS NULL OR uv.source != 'collection')".to_string());
+    }
+    if !include_mine && !category_ids.is_empty() {
+        let placeholders = category_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        clauses.push(format!("((uv.source IS NULL OR uv.source != 'collection') AND uv.category_id IN ({placeholders}))"));
+        params.extend(category_ids.iter().copied());
     }
     if !collection_ids.is_empty() {
         let placeholders = collection_ids
@@ -78,7 +83,7 @@ impl QueueBuilder {
         let now_sec = chrono::Utc::now().timestamp();
         let limit = filters.limit.clamp(5, 100);
         let (source_sql, source_params) =
-            source_filter_sql(filters.include_mine, &filters.collection_ids);
+            source_filter_sql(filters.include_mine, &filters.collection_ids, &filters.category_ids);
 
         // Fetch due cards (ordered by overdue duration)
         let mut due_params: Vec<Value> = vec![now_sec.into(), filters.language_id.into()];
@@ -277,6 +282,7 @@ mod tests {
             include_mature_refresh,
             include_mine: None,
             collection_ids: Vec::new(),
+            category_ids: Vec::new(),
         }
     }
 
@@ -549,6 +555,33 @@ mod tests {
         let queue = QueueBuilder::build_queue(&conn, &only_b).expect("queue");
         let ids: Vec<i64> = queue.iter().map(|e| e.id).collect();
         assert_eq!(ids, vec![from_b]);
+    }
+
+    #[test]
+    fn category_filter_applies_to_due_new_and_mature_without_fallback() {
+        let pool = setup_db();
+        let conn = pool.get().expect("conn");
+        let now = chrono::Utc::now().timestamp();
+        conn.execute("INSERT INTO vocabulary_category (language_id,name,normalized_name) VALUES (1,'Travel','travel')", []).expect("category");
+        let category = conn.last_insert_rowid();
+        let due = insert_word(&conn, "topic_due", "learning", 1, now - 100, now);
+        let new = insert_word(&conn, "topic_new", "new", 0, now + 1000, now);
+        let mature = insert_word(&conn, "topic_mature", "mature", 30, now + 1000, now - 1000);
+        let unrelated = insert_word(&conn, "general_due", "learning", 1, now - 200, now);
+        for id in [due, new, mature] {
+            conn.execute("UPDATE user_vocabulary SET category_id=?1 WHERE id=?2", rusqlite::params![category,id]).expect("assign");
+        }
+        let mut selected = filters(10, true, true);
+        selected.include_mine = Some(false);
+        selected.category_ids = vec![category];
+        let ids = QueueBuilder::build_queue_ids(&conn, &selected).expect("queue");
+        assert_eq!(ids, vec![due,new,mature]);
+        assert!(!ids.contains(&unrelated));
+        conn.execute("UPDATE user_vocabulary SET source='collection' WHERE id=?1", [due]).expect("collection source");
+        let ids = QueueBuilder::build_queue_ids(&conn, &selected).expect("queue");
+        assert!(!ids.contains(&due));
+        selected.category_ids = vec![999999];
+        assert!(QueueBuilder::build_queue_ids(&conn, &selected).expect("empty category").is_empty());
     }
 
     #[test]

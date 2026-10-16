@@ -1,3 +1,5 @@
+import { t as tUi } from "../../i18n";
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — RoleRouteEditor (Settings → AI-модели → Расширенные)
 // Main + fallback model of one role. Providers may be mixed here;
@@ -58,23 +60,24 @@ function chainKeyOf(chain: RouteTarget[]): string {
   return chain.map(targetKey).join('|');
 }
 
-function modelOptions(catalog: ModelSpec[], status: RoleStatus): SelectOption[] {
+function modelOptions(catalog: ModelSpec[], status: RoleStatus, locale: string): SelectOption[] {
   const options: SelectOption[] = modelsForRole(catalog, status.role).map((m) => ({
     value: targetKey({ provider: m.provider, model: m.id }),
-    label: `${providerLabel(m.provider)} · ${m.label}`,
-    badge: statusNote(m.status) ?? TIER_LABELS[m.tier],
+    label: `${providerLabel(m.provider)} · ${tUi(m.label)}`,
+    badge: tUi(statusNote(m.status, locale) ?? TIER_LABELS[m.tier]),
   }));
   // Saved custom ids stay visible even though the catalog does not know them.
   for (const target of status.chain) {
     const key = targetKey(target);
     if (!options.some((o) => o.value === key)) {
-      options.push({ value: key, label: targetLabel(catalog, target), badge: 'Своя' });
+      options.push({ value: key, label: targetLabel(catalog, target), badge: tUi("Своя") });
     }
   }
   return options;
 }
 
 export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorProps) {
+  const { t: tUi, locale } = useI18n();
   const setRoute = useSetRoleRoute();
   const savedKey = chainKeyOf(status.chain);
   const [primary, setPrimary] = useState<SlotDraft>(() => slotFrom(status.chain[0]));
@@ -90,9 +93,9 @@ export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorPro
     setFallback(slotFrom(status.chain[1]));
   }
 
-  const roleLabel = ROLE_LABELS[status.role];
+  const roleLabel = tUi(ROLE_LABELS[status.role]);
   const idBase = `ai-route-${status.role}`;
-  const options = modelOptions(catalog, status);
+  const options = modelOptions(catalog, status, locale);
   const engineOptions: SelectOption[] = ROLE_ENGINES[status.role].map((p) => ({
     value: p,
     label: providerLabel(p),
@@ -117,7 +120,7 @@ export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorPro
       onSaved(setup.settings);
       setJustSaved(true);
     } catch (err) {
-      setError(formatIpcError(err, 'Не удалось сохранить модель'));
+      setError(formatIpcError(err, tUi("Не удалось сохранить модель")));
     }
   };
 
@@ -131,7 +134,7 @@ export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorPro
     const slotOptions: SelectOption[] = [
       { value: NONE, label: noneLabel },
       ...options,
-      { value: OTHER, label: 'Другая модель…' },
+      { value: OTHER, label: tUi("Другая модель…") },
     ];
     const choose = (value: string) => {
       setJustSaved(false);
@@ -149,13 +152,13 @@ export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorPro
     return (
       <div className="ai-route-slot">
         <span className="ai-route-slot-label" id={`${idBase}-${name}`}>
-          {label}
+          {tUi(label)}
         </span>
         <Select
           options={slotOptions}
           value={slot.choice}
           onChange={choose}
-          ariaLabel={`${label} модель: ${roleLabel}`}
+          ariaLabel={tUi("{label} модель: {roleLabel}", { label: label, roleLabel: roleLabel })}
         />
         {slot.choice === OTHER && (
           <div className="ai-route-other">
@@ -163,16 +166,16 @@ export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorPro
               options={engineOptions}
               value={slot.provider}
               onChange={(provider) => setSlot({ ...slot, provider })}
-              ariaLabel={`Провайдер (${label.toLowerCase()}): ${roleLabel}`}
+              ariaLabel={tUi("Провайдер ({value1}): {roleLabel}", { value1: label.toLowerCase(), roleLabel: roleLabel })}
             />
-            <input
+            <input dir="auto"
               type="text"
               className="settings-input settings-input--mono"
               value={slot.model}
-              placeholder="ID модели, например qwen3:8b"
+              placeholder={tUi("ID модели, например qwen3:8b")}
               autoComplete="off"
               spellCheck={false}
-              aria-label={`ID модели (${label.toLowerCase()}): ${roleLabel}`}
+              aria-label={tUi("ID модели ({value1}): {roleLabel}", { value1: label.toLowerCase(), roleLabel: roleLabel })}
               onChange={(e) => {
                 setJustSaved(false);
                 setSlot({ ...slot, model: e.target.value });
@@ -188,13 +191,13 @@ export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorPro
     <div className="ai-route" role="group" aria-labelledby={`${idBase}-title`}>
       <div className="ai-route-head">
         <span id={`${idBase}-title`} className="ai-route-title">
-          {roleLabel}
+          {tUi(roleLabel)}
         </span>
-        <span className="ai-route-hint">{ROLE_HINTS[status.role]}</span>
+        <span className="ai-route-hint">{tUi(ROLE_HINTS[status.role])}</span>
       </div>
       <div className="ai-route-slots">
-        {renderSlot('primary', 'Основная', '— выключено —', primary, setPrimary)}
-        {renderSlot('fallback', 'Запасная', '— нет —', fallback, setFallback)}
+        {renderSlot('primary', tUi("Основная"), tUi("— выключено —"), primary, setPrimary)}
+        {renderSlot('fallback', tUi("Запасная"), tUi("— нет —"), fallback, setFallback)}
       </div>
       <div className="ai-route-actions">
         <Button
@@ -203,14 +206,10 @@ export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorPro
           onClick={save}
           disabled={!dirty || incomplete}
           isLoading={setRoute.isPending}
-          aria-label={`Сохранить модель: ${roleLabel}`}
-        >
-          Сохранить
-        </Button>
+          aria-label={tUi("Сохранить модель: {roleLabel}", { roleLabel: roleLabel })}
+        >{tUi("Сохранить")}</Button>
         {justSaved && !dirty && (
-          <span className="ai-route-saved" role="status">
-            ✓ Сохранено
-          </span>
+          <span className="ai-route-saved" role="status">{tUi("✓ Сохранено")}</span>
         )}
       </div>
       {error && (

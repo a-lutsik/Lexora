@@ -1,6 +1,7 @@
+import { setLocale } from '../../i18n';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SetupWizard } from './SetupWizard';
 import { invokeMock } from '../../test/mocks';
 import { renderWithQueryClient } from '../../test/render';
@@ -39,6 +40,7 @@ function renderWizard() {
 }
 
 beforeEach(() => {
+  setLocale('ru');
   invokeMock.mockImplementation(async (cmd: string) => {
     if (cmd === 'apply_model_package') {
       return { routes: { package: 'gemini', illustrations: false, roles: [] }, settings: SETTINGS };
@@ -59,7 +61,7 @@ describe('SetupWizard', () => {
     expect(first).toHaveTextContent('Рекомендуем');
 
     await user.click(first);
-    await user.type(screen.getByLabelText(/API KEY — Gemini/), GEMINI_KEY);
+    await user.type(screen.getByLabelText(/API-КЛЮЧ — Gemini/), GEMINI_KEY);
     await user.click(screen.getByRole('button', { name: 'Продолжить к проверке' }));
     expect(screen.getByText('AI-перевод (Gemini)')).toBeInTheDocument();
     expect(screen.getByText('Нейроголос (Gemini)')).toBeInTheDocument();
@@ -98,7 +100,7 @@ describe('SetupWizard', () => {
     renderWizard();
     await user.click(screen.getByRole('button', { name: 'Выбрать сценарий: Платно' }));
     await user.click(screen.getByRole('button', { name: /^Google Gemini \+ AI-иллюстрации:/ }));
-    await user.type(screen.getByLabelText(/API KEY — Gemini/), GEMINI_KEY);
+    await user.type(screen.getByLabelText(/API-КЛЮЧ — Gemini/), GEMINI_KEY);
     await user.click(screen.getByRole('button', { name: 'Продолжить к проверке' }));
     expect(screen.getByText('AI-картинки (Gemini)')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Сохранить ключ и включить сценарий' }));
@@ -132,7 +134,7 @@ describe('SetupWizard', () => {
     const [first] = screen.getAllByRole('button', { name: /:/ });
     if (!first) throw new Error('no scenario variants rendered');
     await user.click(first);
-    await user.type(screen.getByLabelText(/API KEY — Gemini/), GEMINI_KEY);
+    await user.type(screen.getByLabelText(/API-КЛЮЧ — Gemini/), GEMINI_KEY);
     await user.click(screen.getByRole('button', { name: 'Продолжить к проверке' }));
     await user.click(screen.getByRole('button', { name: 'Сохранить ключ и включить сценарий' }));
 
@@ -158,3 +160,6 @@ describe('SetupWizard', () => {
     }
   });
 });
+
+// These existing interaction scenarios exercise the Russian UI explicitly.
+afterEach(() => setLocale('en'));

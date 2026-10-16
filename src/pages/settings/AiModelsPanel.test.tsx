@@ -1,6 +1,7 @@
+import { setLocale } from '../../i18n';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AiModelsPanel } from './AiModelsPanel';
 import { invokeMock } from '../../test/mocks';
 import { renderWithQueryClient } from '../../test/render';
@@ -134,6 +135,7 @@ function renderPanel(keysStatus: Record<string, boolean> = {}, onSettingsChanged
 }
 
 beforeEach(() => {
+  setLocale('ru');
   // jsdom has no layout: the custom Select scrolls the highlighted option into view.
   Element.prototype.scrollIntoView = vi.fn();
   currentRoutes = routes('needs_key');
@@ -299,3 +301,6 @@ describe('AiModelsPanel', () => {
     );
   });
 });
+
+// These existing interaction scenarios exercise the Russian UI explicitly.
+afterEach(() => setLocale('en'));

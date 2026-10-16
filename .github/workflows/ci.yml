@@ -30,6 +30,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: I18n coverage and source guard
+        run: npm run i18n:audit && node --test scripts/i18n-source-check.mjs
+
       - name: Test
         run: npm run test:run
 

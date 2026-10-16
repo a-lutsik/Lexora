@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setLocale } from '../../i18n';
 import { LanguageSelect } from './LanguageSelect';
 
 const options = [
@@ -16,6 +17,15 @@ function activeOption(): HTMLElement | null {
 }
 
 describe('LanguageSelect', () => {
+  afterEach(() => setLocale('en'));
+
+  it('updates the compact language name when the interface locale changes', () => {
+    render(<LanguageSelect compact value="en" options={options} onChange={() => undefined} ariaLabel="language" />);
+    expect(screen.getByRole('combobox')).toHaveTextContent('English');
+    act(() => setLocale('fr'));
+    expect(screen.getByRole('combobox')).toHaveTextContent('anglais');
+  });
+
   it('shows a compact Auto trigger instead of Auto-detect', () => {
     render(
       <LanguageSelect

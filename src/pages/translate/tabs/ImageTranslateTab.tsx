@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Image & OCR Translate Tab
 // Supports file upload, Drag-and-Drop, and direct Clipboard
@@ -32,6 +33,7 @@ export function ImageTranslateTab({
   lexicalDomain,
   onDetectedDomain,
 }: ImageTranslateTabProps) {
+  const { t: tUi } = useI18n();
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -143,7 +145,7 @@ export function ImageTranslateTab({
           window.setTimeout(() => setVocabNotice(null), 2500);
         },
         onError: (err) => {
-          setUploadError(formatIpcError(err, 'Could not save the vocabulary card.'));
+          setUploadError(formatIpcError(err, tUi("Could not save the vocabulary card.")));
         },
       },
     );
@@ -152,13 +154,13 @@ export function ImageTranslateTab({
   return (
     <div className="image-translate-tab animate-fade-in">
       {/* Hidden file input */}
-      <input
+      <input dir="auto"
         ref={fileInputRef}
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
         className="sr-only"
         onChange={handleFileChange}
-        aria-label="Upload image or photo for translation"
+        aria-label={tUi("Upload image or photo for translation")}
       />
 
       {/* If no image selected, show drag-and-drop dropzone with clipboard paste hint */}
@@ -179,19 +181,15 @@ export function ImageTranslateTab({
               fileInputRef.current?.click();
             }
           }}
-          aria-label="Upload or paste image"
+          aria-label={tUi("Upload or paste image")}
         >
           <div className="image-dropzone-icon" aria-hidden="true">
             <IconPhoto size={40} />
           </div>
-          <h3 className="image-dropzone-title">Upload Image or Paste Screenshot</h3>
-          <p className="image-dropzone-desc text-secondary text-sm">
-            Drag & drop an image here, click to browse (PNG, JPG, WebP),
-          </p>
+          <h3 className="image-dropzone-title">{tUi("Upload Image or Paste Screenshot")}</h3>
+          <p className="image-dropzone-desc text-secondary text-sm">{tUi("Drag & drop an image here, click to browse (PNG, JPG, WebP),")}</p>
           <div className="image-dropzone-paste-badge">
-            <IconClipboard size={14} />
-            Press <strong>Cmd+V</strong> or <strong>Ctrl+V</strong> to paste from clipboard
-          </div>
+            <IconClipboard size={14} />{tUi("Press ")}<strong>{tUi("Cmd+V")}</strong>{tUi(" or ")}<strong>{tUi("Ctrl+V")}</strong>{tUi(" to paste from clipboard")}</div>
         </div>
       )}
 
@@ -207,8 +205,8 @@ export function ImageTranslateTab({
           {/* Action bar to clear or replace */}
           <div className="image-translate-top-bar">
             <div className="image-file-info text-secondary text-xs">
-              <span>{imageFile?.name ?? 'Pasted Screenshot'}</span>
-              {imageFile && <span>• {(imageFile.size / 1024).toFixed(1)} KB</span>}
+              <span>{imageFile?.name ?? tUi("Pasted Screenshot")}</span>
+              {imageFile && <span>• {(imageFile.size / 1024).toFixed(1)}{tUi(" KB")}</span>}
             </div>
 
             <div className="image-top-actions">
@@ -217,9 +215,7 @@ export function ImageTranslateTab({
                 variant="ghost"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
-              >
-                Choose Another Image
-              </Button>
+              >{tUi("Choose Another Image")}</Button>
               <Button
                 type="button"
                 variant="ghost"
@@ -229,9 +225,7 @@ export function ImageTranslateTab({
                   setImagePreviewUrl(null);
                   translateMutation.reset();
                 }}
-              >
-                ✕ Clear
-              </Button>
+              >{tUi("✕ Clear")}</Button>
             </div>
           </div>
 
@@ -239,7 +233,7 @@ export function ImageTranslateTab({
           {translateMutation.isPending && (
             <div className="image-loading-banner animate-pulse">
               <span className="loading-spinner mr-2" />
-              <span>Scanning image and translating text with AI Vision...</span>
+              <span>{tUi("Scanning image and translating text with AI Vision...")}</span>
             </div>
           )}
 
@@ -248,7 +242,7 @@ export function ImageTranslateTab({
             <div className="image-error-banner text-danger text-sm" role="alert">
               {formatIpcError(
                 translateMutation.error,
-                'Could not translate this image. Check the AI provider in Settings.',
+                tUi("Could not translate this image. Check the AI provider in Settings."),
               )}
             </div>
           )}

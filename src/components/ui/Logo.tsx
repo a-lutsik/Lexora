@@ -41,7 +41,7 @@ export function BrandBadge({ size = 16, className = '' }: BrandBadgeProps) {
   return (
     <div className={`lexora-brand-badge ${className}`.trim()} data-tauri-drag-region>
       <LogoMark size={size} />
-      <span className="lexora-brand-badge-name">Lexora</span>
+      <span className="lexora-brand-badge-name">{"Lexora"}</span>
     </div>
   );
 }

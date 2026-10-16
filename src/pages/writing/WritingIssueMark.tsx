@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Clickable highlighted fragment + issue popover
 // ============================================================
@@ -33,6 +34,7 @@ export function WritingIssueMark({
   onAccept,
   onReject,
 }: WritingIssueMarkProps) {
+  const { t: tUi } = useI18n();
   const wrapRef = useRef<HTMLSpanElement | null>(null);
   const popoverId = useId();
   const tone = severityVariant(issue.severity);
@@ -74,7 +76,7 @@ export function WritingIssueMark({
         className={`writing-mark writing-mark--${tone}${isOpen ? ' is-open' : ''}${statusClass}`}
         aria-expanded={isOpen}
         aria-controls={popoverId}
-        aria-label={`Issue in “${issue.originalFragment}”. Suggested: ${issue.suggestedFix}`}
+        aria-label={tUi("Issue in “{value1}”. Suggested: {value2}", { value1: issue.originalFragment, value2: issue.suggestedFix })}
         onClick={onToggle}
       >
         {text}
@@ -84,7 +86,7 @@ export function WritingIssueMark({
           id={popoverId}
           className="writing-issue-popover"
           role="dialog"
-          aria-label={`Fix for ${issue.originalFragment}`}
+          aria-label={tUi("Fix for {value1}", { value1: issue.originalFragment })}
         >
           <WritingIssuePanel
             issue={issue}

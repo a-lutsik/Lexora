@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Badge Component
 // ============================================================
@@ -23,6 +24,7 @@ export function Badge({ children, variant = 'neutral', size = 'sm' }: BadgeProps
 
 // Convenience components
 export function SrsStatusBadge({ status }: { status: SrsStatus }) {
+  const { t: tUi } = useI18n();
   const labels: Record<SrsStatus, string> = {
     new:       'New',
     learning:  'Learning',
@@ -31,7 +33,7 @@ export function SrsStatusBadge({ status }: { status: SrsStatus }) {
     suspended: 'Suspended',
   };
 
-  return <Badge variant={status}>{labels[status]}</Badge>;
+  return <Badge variant={status}>{tUi(labels[status])}</Badge>;
 }
 
 export function PosBadge({ pos }: { pos: string | null }) {

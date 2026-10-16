@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Definition/Synonyms Study Mode
 // The user sees a word definition and/or its synonyms and has
@@ -20,6 +21,7 @@ type DefinitionModeProps = {
 };
 
 export function DefinitionMode({ entry, onComplete, onSkip }: DefinitionModeProps) {
+  const { t: tUi } = useI18n();
   const [input, setInput] = useState('');
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const startTime = useRef<number>(Date.now());
@@ -77,14 +79,10 @@ export function DefinitionMode({ entry, onComplete, onSkip }: DefinitionModeProp
       <div className="typing-card">
         <PosBadge pos={lexeme.partOfSpeech} />
         <div className="typing-prompt">
-          <div className="typing-prompt-label">Definition &amp; Synonyms</div>
-          <div className="study-fallback-text">
-            No definition or synonyms are available for “{lexeme.text}” yet.
-          </div>
+          <div className="typing-prompt-label">{tUi("Definition & Synonyms")}</div>
+          <div className="study-fallback-text">{tUi("No definition or synonyms are available for “")}{lexeme.text}{tUi("” yet.")}</div>
         </div>
-        <Button variant="secondary" size="md" onClick={onSkip}>
-          Skip Card (→)
-        </Button>
+        <Button variant="secondary" size="md" onClick={onSkip}>{tUi("Skip Card (→)")}</Button>
       </div>
     );
   }
@@ -95,17 +93,13 @@ export function DefinitionMode({ entry, onComplete, onSkip }: DefinitionModeProp
 
       {/* Prompt: definition and/or synonyms of the target word */}
       <div className="definition-prompt">
-        <div className="definition-prompt-label">
-          Guess the word from its definition:
-        </div>
+        <div className="definition-prompt-label">{tUi("Guess the word from its definition:")}</div>
         {definition && (
           <p className="definition-text">{definition}</p>
         )}
         {synonyms.length > 0 && (
           <div className="definition-synonyms">
-            <span className="definition-synonyms-label" id="definition-synonyms-label">
-              Synonyms
-            </span>
+            <span className="definition-synonyms-label" id="definition-synonyms-label">{tUi("Synonyms")}</span>
             <ul
               className="definition-synonym-list"
               aria-labelledby="definition-synonyms-label"
@@ -122,18 +116,18 @@ export function DefinitionMode({ entry, onComplete, onSkip }: DefinitionModeProp
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="typing-form">
-        <input
+        <input dir="auto"
           ref={inputRef}
           type="text"
           className="typing-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type the word…"
+          placeholder={tUi("Type the word…")}
           disabled={result !== null}
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          aria-label="Word matching the definition"
+          aria-label={tUi("Word matching the definition")}
         />
 
         {!result && (
@@ -143,9 +137,7 @@ export function DefinitionMode({ entry, onComplete, onSkip }: DefinitionModeProp
               variant="primary"
               size="md"
               isLoading={evaluateMutation.isPending}
-            >
-              Check Answer (↵)
-            </Button>
+            >{tUi("Check Answer (↵)")}</Button>
           </div>
         )}
       </form>
@@ -163,7 +155,7 @@ export function DefinitionMode({ entry, onComplete, onSkip }: DefinitionModeProp
           }`}
         >
           <div className="typing-feedback-title">
-            {result.isCorrect ? '✓ Excellent!' : `Expected: ${result.correctAnswer}`}
+            {result.isCorrect ? tUi("✓ Excellent!") : tUi("Expected: {value1}", { value1: result.correctAnswer })}
           </div>
           <div className="definition-feedback-word">{lexeme.text}</div>
           {result.explanation && (
@@ -174,9 +166,7 @@ export function DefinitionMode({ entry, onComplete, onSkip }: DefinitionModeProp
           )}
 
           <div className="typing-feedback-actions">
-            <Button variant="secondary" size="md" onClick={handleNext}>
-              Continue (Space)
-            </Button>
+            <Button variant="secondary" size="md" onClick={handleNext}>{tUi("Continue (Space)")}</Button>
           </div>
         </div>
       )}

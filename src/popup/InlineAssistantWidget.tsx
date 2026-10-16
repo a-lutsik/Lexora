@@ -1,3 +1,5 @@
+import { t as tUi } from "../i18n";
+import { useI18n } from "../hooks/useI18n";
 // ============================================================
 // LEXORA — Inline AI Assistant Widget
 // Compact popup for translate / fix / rewrite of selected sentences.
@@ -86,8 +88,8 @@ const PASTE_RISK_LABELS: Record<PasteRisk, string> = {
 };
 
 function pasteRiskMessage(risks: PasteRisk[]): string {
-  const added = risks.map((risk) => PASTE_RISK_LABELS[risk]).join(' and ');
-  return `The result adds ${added} that your text did not have. Review it, then press Accept.`;
+  const added = risks.map((risk) => tUi(PASTE_RISK_LABELS[risk])).join(tUi(" and "));
+  return tUi("The result adds {added} that your text did not have. Review it, then press Accept.", { added });
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -99,6 +101,7 @@ export function InlineAssistantWidget({
   targetLanguage: targetLanguageProp,
   onSwitchToDictionary,
 }: InlineAssistantWidgetProps) {
+  const { t: tUi } = useI18n();
   const { data: settings } = useSettings();
   const targetLanguage = targetLanguageProp ?? settings?.interfaceLanguage ?? 'ru';
   const { lexicalDomain, setLexicalDomain } = useSessionLexicalDomain('auto');
@@ -159,7 +162,7 @@ export function InlineAssistantWidget({
       if (now < rateLimitUntilRef.current) {
         const waitSec = Math.ceil((rateLimitUntilRef.current - now) / 1000);
         setError(
-          `Too many requests. Wait ${waitSec}s, then try again.`
+          tUi("Too many requests. Wait {waitSec}s, then try again.", { waitSec: waitSec })
         );
         return;
       }
@@ -240,7 +243,7 @@ export function InlineAssistantWidget({
         }
       }
     },
-    [sourceText, targetLanguage]
+    [sourceText, targetLanguage, tUi]
   );
 
   useEffect(() => {
@@ -430,7 +433,11 @@ export function InlineAssistantWidget({
 
   const kicker = assistantKickerTitle(mode, targetLanguage, textRegister);
   const acceptLabel =
-    mode === 'fix' && fixCount > 0 ? `Accept ${fixCount} ${fixCount === 1 ? 'fix' : 'fixes'}` : 'Accept';
+    mode === 'fix' && fixCount > 0
+      ? fixCount === 1
+        ? tUi("Accept {count} fix", { count: fixCount })
+        : tUi("Accept {count} fixes", { count: fixCount })
+      : tUi("Accept");
 
   const handleResizeDrag = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -448,13 +455,13 @@ export function InlineAssistantWidget({
           type="button"
           className="inline-close-btn"
           onClick={handleClose}
-          aria-label="Close window"
+          aria-label={tUi("Close window")}
         >
           <CloseIcon />
         </button>
       </div>
 
-      <div className="inline-mode-bar" role="tablist" aria-label="AI actions">
+      <div className="inline-mode-bar" role="tablist" aria-label={tUi("AI actions")}>
         <div className="inline-mode-tabs">
           {INLINE_MODE_TABS.map((tab) => (
             <button
@@ -462,11 +469,11 @@ export function InlineAssistantWidget({
               type="button"
               role="tab"
               aria-selected={mode === tab.id}
-              aria-label={`${tab.label} (${tab.shortcut})`}
+              aria-label={`${tUi(tab.label)} (${tab.shortcut})`}
               className={`inline-mode-btn${mode === tab.id ? ' is-active' : ''}`}
               onClick={() => setMode(tab.id)}
             >
-              {tab.label}
+              {tUi(tab.label)}
             </button>
           ))}
         </div>
@@ -499,7 +506,7 @@ export function InlineAssistantWidget({
 
           {mode === 'text' && (
             <>
-              <div className="inline-register-row" role="radiogroup" aria-label="Translation register">
+              <div className="inline-register-row" role="radiogroup" aria-label={tUi("Translation register")}>
                 {TEXT_REGISTER_OPTIONS.map((option) => (
                   <button
                     key={option.id}
@@ -509,18 +516,18 @@ export function InlineAssistantWidget({
                     className={`inline-register-btn${textRegister === option.id ? ' is-active' : ''}`}
                     onClick={() => setTextRegister(option.id)}
                   >
-                    {option.label}
+                    {tUi(option.label)}
                   </button>
                 ))}
               </div>
               <div className="inline-compose-wrap">
-                <textarea
+                <textarea dir="auto"
                   ref={composeRef}
                   className="inline-compose"
                   value={composeText}
                   onChange={(event) => setComposeText(event.target.value)}
-                  placeholder="Type in Russian or any language…"
-                  aria-label="Text to translate"
+                  placeholder={tUi("Type in Russian or any language…")}
+                  aria-label={tUi("Text to translate")}
                   rows={3}
                 />
                 {composeText.length > 0 && (
@@ -528,7 +535,7 @@ export function InlineAssistantWidget({
                     type="button"
                     className="inline-field-clear"
                     onClick={handleClearCompose}
-                    aria-label="Clear text"
+                    aria-label={tUi("Clear text")}
                   >
                     <ClearFieldIcon />
                   </button>
@@ -574,8 +581,8 @@ export function InlineAssistantWidget({
           {!isLoading && !error && (mode === 'fix' ? !fixCheck : !outputText) && (
             <p className="inline-placeholder">
               {mode === 'text'
-                ? 'Type a message to get an English translation.'
-                : 'Waiting for AI…'}
+                ? tUi("Type a message to get an English translation.")
+                : tUi("Waiting for AI…")}
             </p>
           )}
         </div>
@@ -587,9 +594,9 @@ export function InlineAssistantWidget({
           className="inline-accept"
           onClick={() => void handleAccept()}
           disabled={!outputText || isLoading}
-          aria-label={applied ? 'Applied' : acceptLabel}
+          aria-label={applied ? tUi("Applied") : acceptLabel}
         >
-          {applied ? '✓ Applied' : acceptLabel}
+          {applied ? tUi("✓ Applied") : acceptLabel}
         </button>
 
         <div className="inline-info-pill">
@@ -598,19 +605,15 @@ export function InlineAssistantWidget({
             className="inline-info-btn"
             onClick={() => void handleAccept()}
             disabled={!outputText || isLoading}
-            aria-label="Accept all changes to your text"
-          >
-            Accept all changes to your text
-          </button>
+            aria-label={tUi("Accept all changes to your text")}
+          >{tUi("Accept all changes to your text")}</button>
           <button
             type="button"
             className="inline-info-btn"
             onClick={handleNextVariant}
             disabled={variants.length === 0}
-            aria-label="Next variant"
-          >
-            Next
-          </button>
+            aria-label={tUi("Next variant")}
+          >{tUi("Next")}</button>
         </div>
 
         <div className="inline-footer-spacer" />
@@ -620,9 +623,9 @@ export function InlineAssistantWidget({
           className="inline-util-btn"
           onClick={() => void handleCopy()}
           disabled={!outputText}
-          aria-label={copied ? 'Copied' : 'Copy'}
+          aria-label={copied ? tUi("Copied") : tUi("Copy")}
         >
-          {copied ? '✓ Copied' : 'Copy'}
+          {copied ? tUi("✓ Copied") : tUi("Copy")}
         </button>
 
         <div className="inline-menu-wrap" ref={menuRef}>
@@ -630,7 +633,7 @@ export function InlineAssistantWidget({
             type="button"
             className="inline-util-btn"
             onClick={() => setMenuOpen((open) => !open)}
-            aria-label="More actions"
+            aria-label={tUi("More actions")}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
           >
@@ -646,9 +649,7 @@ export function InlineAssistantWidget({
                   setMenuOpen(false);
                   onSwitchToDictionary();
                 }}
-              >
-                Dictionary card
-              </button>
+              >{tUi("Dictionary card")}</button>
               <button
                 type="button"
                 className="inline-menu-item"
@@ -657,9 +658,7 @@ export function InlineAssistantWidget({
                   setMenuOpen(false);
                   handleSaveNotes();
                 }}
-              >
-                Save to notes
-              </button>
+              >{tUi("Save to notes")}</button>
             </div>
           )}
         </div>
@@ -669,7 +668,7 @@ export function InlineAssistantWidget({
           className="inline-util-btn"
           onClick={() => void runGeneration(mode, true)}
           disabled={!canRegenerate}
-          aria-label="Regenerate"
+          aria-label={tUi("Regenerate")}
         >
           <RefreshIcon />
         </button>
@@ -678,7 +677,7 @@ export function InlineAssistantWidget({
       <button
         type="button"
         className="inline-resize-grip"
-        aria-label="Resize window"
+        aria-label={tUi("Resize window")}
         onMouseDown={handleResizeDrag}
       />
     </div>

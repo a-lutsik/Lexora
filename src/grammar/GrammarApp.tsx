@@ -1,3 +1,4 @@
+import { useI18n } from "../hooks/useI18n";
 // ============================================================
 // LEXORA — Writing-check window («Grammarly mode»)
 // The backend watches the focused field in other apps and sends
@@ -5,7 +6,7 @@
 // shows the badge, and on click the suggestion panel.
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useApplyGrammarFix, useGrammarCheck } from '../hooks/useGrammarCheck';
 import { APP_EVENTS } from '../lib/constants';
@@ -39,10 +40,12 @@ function checkKey(field: GrammarFieldPayload): string | null {
 }
 
 export function GrammarApp() {
+  const { t: tUi } = useI18n();
   const [field, setField] = useState<GrammarFieldPayload>({ kind: 'hidden' });
   const [panelOpen, setPanelOpen] = useState(false);
   const [working, setWorking] = useState<WorkingCheck | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const closeTimer = useRef<number | undefined>(undefined);
 
   const receiveField = useCallback((payload: unknown) => {
     if (!isFieldPayload(payload)) return;
@@ -70,6 +73,7 @@ export function GrammarApp() {
     void listen<unknown>(APP_EVENTS.GRAMMAR_PANEL, () => setPanelOpen(false)).then(keep);
     return () => {
       disposed = true;
+      window.clearTimeout(closeTimer.current);
       unlisteners.forEach((unlisten) => unlisten());
     };
   }, [receiveField]);
@@ -126,10 +130,11 @@ export function GrammarApp() {
         onSuccess: () => {
           setWorking({ key: view.key, text: result.correctedText, issues: result.remaining });
           if (openIssues(result.correctedText, result.remaining).length === 0) {
-            window.setTimeout(closePanel, ALL_FIXED_CLOSE_MS);
+            window.clearTimeout(closeTimer.current);
+            closeTimer.current = window.setTimeout(closePanel, ALL_FIXED_CLOSE_MS);
           }
         },
-        onError: (error) => setApplyError(formatIpcError(error, 'Could not apply the fix.')),
+        onError: (error) => setApplyError(formatIpcError(error, tUi("Could not apply the fix."))),
       },
     );
   };

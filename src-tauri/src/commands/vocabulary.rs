@@ -97,6 +97,7 @@ pub struct VocabularyEntryDto {
     pub id: i64,
     pub user_id: i64,
     pub lexeme_id: i64,
+    pub category_id: i64,
     pub added_at: i64,
     pub is_favorite: bool,
     pub notes: Option<String>,
@@ -131,6 +132,7 @@ pub struct VocabularyFilters {
     pub language_id: Option<i64>,
     pub status: Option<String>,
     pub collection_id: Option<i64>,
+    pub category_id: Option<i64>,
     pub sort_by: Option<String>,
     pub sort_dir: Option<String>,
     pub page: Option<i64>,
@@ -145,6 +147,7 @@ pub struct AddVocabularyInput {
     pub source_language: String,
     pub notes: Option<String>,
     pub source: Option<String>,
+    pub category_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -153,6 +156,7 @@ pub struct AddVocabularyBatchInput {
     pub texts: Vec<String>,
     pub source_language: String,
     pub source: Option<String>,
+    pub category_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -161,6 +165,7 @@ pub struct ImportWordListInput {
     pub path: String,
     pub source_language: String,
     pub source: Option<String>,
+    pub category_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -306,6 +311,7 @@ fn add_vocabulary_batch_inner(
     texts: Vec<String>,
     source_language: &str,
     source: Option<&str>,
+    category_id: Option<i64>,
 ) -> Result<AddVocabularyBatchResult, AppError> {
     let words = validate_batch_texts(&texts)?;
     let source_label = source.unwrap_or("bulk");
@@ -359,7 +365,7 @@ fn add_vocabulary_batch_inner(
                 .map(|c| c > 0)
                 .unwrap_or(false);
 
-            if already_active {
+            if already_active && category_id.is_none() {
                 skip += 1;
                 continue;
             }
@@ -370,8 +376,13 @@ fn add_vocabulary_batch_inner(
                 source_language: source_language.to_string(),
                 notes: None,
                 source: Some(source_label.to_string()),
+                category_id,
             };
             VocabularyRepo::add(&tx, &input)?;
+            if already_active {
+                skip += 1;
+                continue;
+            }
             added.push(BatchAddedItem {
                 text: text.clone(),
                 lexeme_id,
@@ -407,6 +418,7 @@ fn add_vocabulary_batch_inner(
         false
     };
 
+    crate::commands::categories::notify_categories_changed(app);
     Ok(AddVocabularyBatchResult {
         added: added_items.len() as i64,
         skipped,
@@ -425,101 +437,7 @@ pub async fn list_vocabulary(
     let pool = db.inner().clone();
     let conn = pool.get()?;
 
-    let language_id = filters.language_id.unwrap_or(1);
-    let page = filters.page.unwrap_or(1).max(1);
-    let per_page = filters.per_page.unwrap_or(50).min(200);
-    let offset = (page - 1) * per_page;
-    let search = filters.search.unwrap_or_default();
-
-    let mut stmt = conn
-        .prepare(
-            "SELECT
-            uv.id, uv.user_id, uv.lexeme_id, uv.added_at,
-            uv.is_favorite, uv.notes, uv.source,
-            l.id, l.language_id, l.text, l.normalized_text,
-            l.part_of_speech, l.phonetic, l.frequency_rank, l.created_at,
-            rs.id, rs.status, rs.ease, rs.interval, rs.due_at,
-            rs.lapses, rs.repetitions
-         FROM user_vocabulary uv
-         JOIN lexeme l ON l.id = uv.lexeme_id
-         LEFT JOIN review_state rs ON rs.user_vocabulary_id = uv.id
-         WHERE uv.deleted_at IS NULL
-           AND l.language_id = ?1
-           AND l.deleted_at IS NULL
-           AND (?2 = '' OR l.normalized_text LIKE '%' || LOWER(TRIM(?2)) || '%')
-           AND (?3 IS NULL OR rs.status = ?3)
-         ORDER BY uv.added_at DESC
-         LIMIT ?4 OFFSET ?5",
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?;
-
-    let status_filter: Option<String> = filters.status.filter(|s| s != "all");
-
-    let entries: Vec<_> = stmt
-        .query_map(
-            rusqlite::params![language_id, search, status_filter, per_page, offset],
-            |row| {
-                let review_state = match row.get::<_, Option<i64>>(15)? {
-                    Some(rs_id) => Some(ReviewStateDto {
-                        id: rs_id,
-                        user_vocabulary_id: row.get(0)?,
-                        status: row.get(16)?,
-                        ease: row.get(17)?,
-                        interval: row.get(18)?,
-                        due_at: row.get(19)?,
-                        lapses: row.get(20)?,
-                        repetitions: row.get(21)?,
-                    }),
-                    None => None,
-                };
-
-                Ok(VocabularyEntryDto {
-                    id: row.get(0)?,
-                    user_id: row.get(1)?,
-                    lexeme_id: row.get(2)?,
-                    added_at: row.get(3)?,
-                    is_favorite: row.get::<_, i64>(4)? != 0,
-                    notes: row.get(5)?,
-                    source: row.get(6)?,
-                    lexeme: LexemeDto {
-                        id: row.get(7)?,
-                        language_id: row.get(8)?,
-                        text: row.get(9)?,
-                        normalized_text: row.get(10)?,
-                        part_of_speech: row.get(11)?,
-                        phonetic: row.get(12)?,
-                        frequency_rank: row.get(13)?,
-                        created_at: row.get(14)?,
-                    },
-                    translations: vec![], // Loaded separately
-                    examples: vec![],     // Loaded separately
-                    synonyms: vec![],     // Loaded separately
-                    review_state,
-                    image_path: None,
-                })
-            },
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .collect::<Result<_, _>>()
-        .map_err(|e| AppError::Database(e.to_string()))?;
-
-    // Load translations, examples and synonyms for entries
-    let mut enriched = entries;
-    for entry in &mut enriched {
-        entry.translations =
-            crate::db::repos::lexeme::LexemeRepo::get_translations(&conn, entry.lexeme.id, None)?;
-        entry.examples =
-            crate::db::repos::lexeme::LexemeRepo::get_examples(&conn, entry.lexeme.id)?;
-        entry.synonyms = crate::db::repos::lexeme::LexemeRepo::get_synonyms(
-            &conn,
-            entry.lexeme.id,
-            entry.lexeme.language_id,
-        )?;
-        entry.image_path =
-            crate::db::repos::lexeme::LexemeRepo::get_image_path(&conn, entry.lexeme.id)?;
-    }
-
-    Ok(enriched)
+    VocabularyRepo::list(&conn, &filters)
 }
 
 pub fn get_vocabulary_entry_by_id(
@@ -533,7 +451,7 @@ pub fn get_vocabulary_entry_by_id(
                     l.id, l.language_id, l.text, l.normalized_text,
                     l.part_of_speech, l.phonetic, l.frequency_rank, l.created_at,
                     rs.id, rs.status, rs.ease, rs.interval, rs.due_at,
-                    rs.lapses, rs.repetitions
+                    rs.lapses, rs.repetitions, uv.category_id
              FROM user_vocabulary uv
              JOIN lexeme l ON l.id = uv.lexeme_id
              LEFT JOIN review_state rs ON rs.user_vocabulary_id = uv.id
@@ -557,6 +475,7 @@ pub fn get_vocabulary_entry_by_id(
                     id: row.get(0)?,
                     user_id: row.get(1)?,
                     lexeme_id: row.get(2)?,
+                    category_id: row.get(22)?,
                     added_at: row.get(3)?,
                     is_favorite: row.get::<_, i64>(4)? != 0,
                     notes: row.get(5)?,
@@ -613,62 +532,13 @@ pub async fn add_to_vocabulary(
     let pool = db.inner().clone();
     let conn = pool.get()?;
 
-    let normalized = input.text.trim().to_lowercase();
-
-    // Find language by code
-    let language_id: i64 = conn
-        .query_row(
-            "SELECT id FROM language WHERE code = ?1",
-            rusqlite::params![input.source_language],
-            |row| row.get(0),
-        )
-        .map_err(|_| {
-            AppError::NotFound(format!("Language '{}' not found", input.source_language))
-        })?;
-
-    // Upsert lexeme (deduplication by normalized_text + language)
-    let lexeme_id = if let Some(id) = input.lexeme_id {
-        id
-    } else {
-        conn.execute(
-            "INSERT OR IGNORE INTO lexeme (language_id, text, normalized_text, is_system)
-             VALUES (?1, ?2, ?3, 0)",
-            rusqlite::params![language_id, input.text.trim(), normalized],
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?;
-
-        conn.query_row(
-            "SELECT id FROM lexeme WHERE language_id = ?1 AND normalized_text = ?2",
-            rusqlite::params![language_id, normalized],
-            |row| row.get(0),
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?
-    };
-    crate::db::repos::lexeme::LexemeRepo::apply_seed_frequency(&conn, lexeme_id)?;
-
-    // Add to user_vocabulary (transaction)
-    conn.execute(
-        "INSERT OR IGNORE INTO user_vocabulary (user_id, lexeme_id, source, notes)
-         VALUES (1, ?1, ?2, ?3)",
-        rusqlite::params![lexeme_id, input.source, input.notes],
-    )
-    .map_err(|e| AppError::Database(e.to_string()))?;
-
-    let uv_id: i64 = conn
-        .query_row(
-            "SELECT id FROM user_vocabulary WHERE user_id = 1 AND lexeme_id = ?1",
-            rusqlite::params![lexeme_id],
-            |row| row.get(0),
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?;
-
-    // Create initial SRS review state if not exists
-    conn.execute(
-        "INSERT OR IGNORE INTO review_state (user_vocabulary_id, status, due_at)
-         VALUES (?1, 'new', unixepoch())",
-        rusqlite::params![uv_id],
-    )
-    .map_err(|e| AppError::Database(e.to_string()))?;
+    // VocabularyRepo performs lexeme, category, vocabulary and SRS writes atomically.
+    let uv_id = VocabularyRepo::add(&conn, &input)?;
+    let lexeme_id: i64 = conn.query_row(
+        "SELECT lexeme_id FROM user_vocabulary WHERE id = ?1",
+        [uv_id],
+        |row| row.get(0),
+    )?;
 
     // Popup/modal already started card enrich via translate_text when lexeme_id
     // is known. Re-running it here (and blocking on photo generation) reloaded
@@ -710,6 +580,8 @@ pub async fn add_to_vocabulary(
     };
     drop(conn);
 
+    crate::commands::categories::notify_categories_changed(&app);
+
     if let Some((lexeme_text, source_lang, target_lang, main_translation)) = enrich_job {
         crate::commands::translate::spawn_enrich(
             app,
@@ -745,6 +617,16 @@ pub async fn remove_from_vocabulary(id: i64, db: State<'_, Arc<DbPool>>) -> Resu
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_vocabulary_batch(
+    ids: Vec<i64>,
+    db: State<'_, Arc<DbPool>>,
+) -> Result<(), AppError> {
+    let pool = db.inner().clone();
+    let mut conn = pool.get()?;
+    VocabularyRepo::remove_batch(&mut conn, &ids)
 }
 
 #[tauri::command]
@@ -995,6 +877,7 @@ pub async fn add_vocabulary_batch(
         input.texts,
         &input.source_language,
         input.source.as_deref(),
+        input.category_id,
     )
 }
 
@@ -1021,6 +904,7 @@ pub async fn import_word_list(
         words,
         &input.source_language,
         input.source.as_deref().or(Some("file")),
+        input.category_id,
     )
 }
 
@@ -1085,6 +969,7 @@ mod tests {
             source_language: "en".to_string(),
             notes: None,
             source: Some("manual".to_string()),
+            category_id: None,
         };
         VocabularyRepo::add(&conn, &input).expect("add")
     }
@@ -1193,6 +1078,7 @@ mod tests {
                     source_language: "en".to_string(),
                     notes: None,
                     source: Some("bulk".to_string()),
+                    category_id: None,
                 };
                 VocabularyRepo::add(&tx, &input).expect("add");
             }

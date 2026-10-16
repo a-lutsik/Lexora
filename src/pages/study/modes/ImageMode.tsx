@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Image Association Study Mode
 // Local image as the prompt; recall and type the word.
@@ -22,6 +23,7 @@ type ImageModeProps = {
 };
 
 export function ImageMode({ entry, onComplete }: ImageModeProps) {
+  const { t: tUi } = useI18n();
   const [input, setInput] = useState('');
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const startTime = useRef<number>(Date.now());
@@ -81,13 +83,11 @@ export function ImageMode({ entry, onComplete }: ImageModeProps) {
 
       {/* Prompt: image or translation fallback */}
       <div className="typing-prompt">
-        <div className="typing-prompt-label">
-          What is this in the target language?
-        </div>
+        <div className="typing-prompt-label">{tUi("What is this in the target language?")}</div>
 
         {isImageLoading ? (
           <div className="study-image-frame study-image-frame--loading" aria-busy="true">
-            <span className="text-muted">Loading image…</span>
+            <span className="text-muted">{tUi("Loading image…")}</span>
           </div>
         ) : imageUrl ? (
           <div className="study-image-frame">
@@ -96,27 +96,25 @@ export function ImageMode({ entry, onComplete }: ImageModeProps) {
         ) : (
           <>
             <div className="typing-prompt-word">{mainTranslation}</div>
-            <div className="study-media-note">
-              Image not available — using translation hint instead.
-            </div>
+            <div className="study-media-note">{tUi("Image not available — using translation hint instead.")}</div>
           </>
         )}
       </div>
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="typing-form">
-        <input
+        <input dir="auto"
           ref={inputRef}
           type="text"
           className="typing-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type the word in English…"
+          placeholder={tUi("Type the word in English…")}
           disabled={result !== null}
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          aria-label="Your answer"
+          aria-label={tUi("Your answer")}
         />
 
         {!result && (
@@ -126,9 +124,7 @@ export function ImageMode({ entry, onComplete }: ImageModeProps) {
               variant="primary"
               size="md"
               isLoading={evaluateMutation.isPending}
-            >
-              Check Answer (↵)
-            </Button>
+            >{tUi("Check Answer (↵)")}</Button>
           </div>
         )}
       </form>
@@ -146,7 +142,7 @@ export function ImageMode({ entry, onComplete }: ImageModeProps) {
           }`}
         >
           <div className="typing-feedback-title">
-            {result.isCorrect ? '✓ Excellent!' : `Expected: ${result.correctAnswer}`}
+            {result.isCorrect ? tUi("✓ Excellent!") : tUi("Expected: {value1}", { value1: result.correctAnswer })}
           </div>
           {result.explanation && (
             <SafeHtml html={result.explanation} className="typing-feedback-explanation" />
@@ -156,9 +152,7 @@ export function ImageMode({ entry, onComplete }: ImageModeProps) {
           )}
 
           <div className="typing-feedback-actions">
-            <Button variant="secondary" size="md" onClick={handleNext}>
-              Continue (Space)
-            </Button>
+            <Button variant="secondary" size="md" onClick={handleNext}>{tUi("Continue (Space)")}</Button>
           </div>
         </div>
       )}

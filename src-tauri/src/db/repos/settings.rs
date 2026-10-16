@@ -9,7 +9,6 @@ use rusqlite::{params, Connection};
 fn parse_sticker_sources(raw: String) -> Vec<String> {
     serde_json::from_str::<Vec<String>>(&raw)
         .ok()
-        .filter(|sources| !sources.is_empty())
         .unwrap_or_else(|| vec!["all".to_string()])
 }
 
@@ -354,5 +353,16 @@ mod tests {
         settings.fallback_enabled = true;
         let on = SettingsRepo::update(&conn, &settings).expect("re-enable");
         assert!(on.fallback_enabled);
+    }
+}
+
+#[cfg(test)]
+mod sticker_source_tests {
+    use super::*;
+    #[test]
+    fn explicit_empty_sources_survive_settings_round_trip() {
+        assert!(parse_sticker_sources(serialize_sticker_sources(&[])).is_empty());
+        assert_eq!(parse_sticker_sources("invalid".into()), vec!["all"]);
+        assert_eq!(parse_sticker_sources("[\"cat:2\"]".into()), vec!["cat:2"]);
     }
 }

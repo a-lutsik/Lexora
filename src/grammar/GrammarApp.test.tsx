@@ -1,6 +1,6 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GrammarApp } from './GrammarApp';
 import { invokeMock, listenMock } from '../test/mocks';
 import { renderWithQueryClient } from '../test/render';
@@ -188,4 +188,21 @@ describe('GrammarApp', () => {
     act(() => fieldListener?.[1]({ payload: { kind: 'bogus' } }));
     expect(screen.getByRole('button', { name: /2 writing suggestions/i })).toBeInTheDocument();
   });
+});
+
+
+it('cancels the delayed panel close when its window unmounts', async () => {
+  const view = renderWithQueryClient(<GrammarApp />);
+  await openPanel();
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(screen.getByRole('button', { name: /Apply all/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(argsOf('apply_grammar_fix')).toHaveLength(1);
+    view.unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(argsOf('set_grammar_panel_open')).toEqual([{ open: true }]);
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -1,3 +1,5 @@
+import { writingLabel } from '../../lib/interfaceText';
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Writing issue panel (Apply / Ignore / + Card)
 // Shared by the Grammarly-style popover and the issues list.
@@ -16,10 +18,7 @@ type WritingIssuePanelProps = {
   onReject: () => void;
 };
 
-function formatCategory(category: string): string {
-  const spaced = category.replace(/_/g, ' ');
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
+
 
 function severityVariant(severity: string): 'danger' | 'warn' | 'accent' {
   if (severity === 'error') return 'danger';
@@ -33,6 +32,7 @@ export function WritingIssuePanel({
   onAccept,
   onReject,
 }: WritingIssuePanelProps) {
+  const { t: tUi } = useI18n();
   const [savedCard, setSavedCard] = useState(false);
   const addMutation = useAddToVocabulary();
   const isPending = issue.status === 'pending';
@@ -58,10 +58,10 @@ export function WritingIssuePanel({
   return (
     <>
       <div className="writing-issue-meta">
-        <Badge variant={severityVariant(issue.severity)}>{formatCategory(issue.category)}</Badge>
-        <Badge variant="neutral">{issue.severity}</Badge>
+        <Badge variant={severityVariant(issue.severity)}>{writingLabel(issue.category)}</Badge>
+        <Badge variant="neutral">{writingLabel(issue.severity)}</Badge>
         {!isPending && (
-          <span className="text-muted text-xs">{issue.status}</span>
+          <span className="text-muted text-xs">{writingLabel(issue.status)}</span>
         )}
       </div>
       <p className="writing-issue-swap">
@@ -78,18 +78,14 @@ export function WritingIssuePanel({
               variant="primary"
               size="sm"
               onClick={onAccept}
-              aria-label={`Apply fix for ${issue.originalFragment}`}
-            >
-              Apply
-            </Button>
+              aria-label={tUi("Apply fix for {value1}", { value1: issue.originalFragment })}
+            >{tUi("Apply")}</Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={onReject}
-              aria-label={`Ignore issue ${issue.originalFragment}`}
-            >
-              Ignore
-            </Button>
+              aria-label={tUi("Ignore issue {value1}", { value1: issue.originalFragment })}
+            >{tUi("Ignore")}</Button>
           </>
         )}
         <Button
@@ -97,9 +93,9 @@ export function WritingIssuePanel({
           size="sm"
           onClick={handleSaveCard}
           disabled={addMutation.isPending || savedCard}
-          aria-label={`Save ${issue.originalFragment} as flashcard`}
+          aria-label={tUi("Save {value1} as flashcard", { value1: issue.originalFragment })}
         >
-          {savedCard ? '✓ Saved' : '+ Card'}
+          {savedCard ? tUi("✓ Saved") : tUi("+ Card")}
         </Button>
       </div>
     </>

@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Settings section navigation
 // The page is one long scroll (~10 sections); this sticky bar
@@ -28,6 +29,7 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
 ];
 
 export function SettingsNav() {
+  const { t: tUi } = useI18n();
   const reducedMotion = usePrefersReducedMotion();
   const navRef = useRef<HTMLElement>(null);
 
@@ -47,10 +49,10 @@ export function SettingsNav() {
   };
 
   return (
-    <nav ref={navRef} className="settings-nav" aria-label="Settings sections">
+    <nav ref={navRef} className="settings-nav" aria-label={tUi("Settings sections")}>
       {SETTINGS_NAV_ITEMS.map((item) => (
         <button key={item.id} type="button" className="settings-nav-link" onClick={() => jumpTo(item.id)}>
-          {item.label}
+          {tUi(item.label)}
         </button>
       ))}
     </nav>

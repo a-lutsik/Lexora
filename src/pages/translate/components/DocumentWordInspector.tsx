@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Document word inspector
 // Click a token in the bilingual editor → synonyms, example,
@@ -25,6 +26,7 @@ export function DocumentWordInspector({
   targetLanguage,
   onClose,
 }: DocumentWordInspectorProps) {
+  const { t: tUi } = useI18n();
   const translateMutation = useTranslate();
   const addMutation = useAddToVocabulary();
 
@@ -69,7 +71,7 @@ export function DocumentWordInspector({
       <div className="doc-inspector-header">
         <div className="doc-inspector-header-left">
           <div className="doc-inspector-kicker-row">
-            <span className="doc-inspector-kicker-badge">WORD CARD</span>
+            <span className="doc-inspector-kicker-badge">{tUi("WORD CARD")}</span>
             {data?.partOfSpeech && (
               <span className="doc-inspector-pos-badge">{data.partOfSpeech}</span>
             )}
@@ -82,13 +84,13 @@ export function DocumentWordInspector({
           <AudioButton
             text={word}
             language={data?.sourceLanguage || (sourceLanguage === 'auto' ? undefined : sourceLanguage)}
-            ariaLabel={`Pronounce ${word}`}
+            ariaLabel={tUi("Pronounce {word}", { word: word })}
           />
           <button
             type="button"
             className="doc-inspector-close-btn"
             onClick={onClose}
-            aria-label="Close word inspector"
+            aria-label={tUi("Close word inspector")}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M1 1L13 13M1 13L13 1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
@@ -100,7 +102,7 @@ export function DocumentWordInspector({
       {translateMutation.isPending && (
         <div className="doc-inspector-loading">
           <span className="doc-inspector-spinner" aria-hidden="true" />
-          <p className="text-muted text-sm">Looking up <strong>{word}</strong>…</p>
+          <p className="text-muted text-sm">{tUi("Looking up ")}<strong>{word}</strong>…</p>
         </div>
       )}
 
@@ -108,7 +110,7 @@ export function DocumentWordInspector({
         <p className="text-danger text-sm" role="alert">
           {formatIpcError(
             translateMutation.error,
-            'Could not look up this word. Check the AI provider in Settings.',
+            tUi("Could not look up this word. Check the AI provider in Settings."),
           )}
         </p>
       )}
@@ -116,13 +118,13 @@ export function DocumentWordInspector({
       {data && (
         <div className="doc-inspector-body">
           <div className="doc-inspector-translation-box">
-            <p className="doc-inspector-translation-label text-xs text-muted">TRANSLATION</p>
+            <p className="doc-inspector-translation-label text-xs text-muted">{tUi("TRANSLATION")}</p>
             <p className="doc-inspector-translation">{translation}</p>
           </div>
 
           {synonyms.length > 0 && (
             <div className="doc-inspector-section">
-              <p className="doc-inspector-section-title text-xs text-muted">SYNONYMS</p>
+              <p className="doc-inspector-section-title text-xs text-muted">{tUi("SYNONYMS")}</p>
               <div className="doc-inspector-chips">
                 {synonyms.map((syn) => (
                   <span key={syn} className="doc-inspector-chip">
@@ -135,7 +137,7 @@ export function DocumentWordInspector({
 
           {alternatives.length > 0 && (
             <div className="doc-inspector-section">
-              <p className="doc-inspector-section-title text-xs text-muted">ALSO TRANSLATED AS</p>
+              <p className="doc-inspector-section-title text-xs text-muted">{tUi("ALSO TRANSLATED AS")}</p>
               <div className="doc-inspector-chips">
                 {alternatives.map((alt) => (
                   <span key={alt} className="doc-inspector-chip doc-inspector-chip--alt">
@@ -148,7 +150,7 @@ export function DocumentWordInspector({
 
           {data.exampleSentence && (
             <div className="doc-inspector-section">
-              <p className="doc-inspector-section-title text-xs text-muted">EXAMPLE</p>
+              <p className="doc-inspector-section-title text-xs text-muted">{tUi("EXAMPLE")}</p>
               <blockquote className="doc-inspector-example">
                 {data.exampleSentence}
               </blockquote>
@@ -170,12 +172,12 @@ export function DocumentWordInspector({
               {addMutation.isSuccess ? (
                 <>
                   <IconCheck size={16} />
-                  <span>Added to Vocabulary</span>
+                  <span>{tUi("Added to Vocabulary")}</span>
                 </>
               ) : (
                 <>
                   <IconBookmark size={16} />
-                  <span>Add to Vocabulary</span>
+                  <span>{tUi("Add to Vocabulary")}</span>
                 </>
               )}
             </Button>

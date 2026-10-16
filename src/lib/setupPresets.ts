@@ -212,10 +212,7 @@ export function buildPresetSettings(
         ttsVoice: current.ttsVoice || 'default',
         stickerCount: current.stickerCount ?? 2,
         stickerOpacity: current.stickerOpacity ?? 0.9,
-        stickerSources:
-            current.stickerSources && current.stickerSources.length > 0
-                ? current.stickerSources
-                : ['all'],
+        stickerSources: current.stickerSources ?? ['all'],
         quietHoursStart: current.quietHoursStart ?? null,
         quietHoursEnd: current.quietHoursEnd ?? null,
         writingPrivacyMode: current.writingPrivacyMode ?? false,

@@ -1,3 +1,5 @@
+import { useI18n } from "../../hooks/useI18n";
+import { t as tUi } from "../../i18n";
 // ============================================================
 // LEXORA — Minimal Pairs studio panel (neon design)
 // ============================================================
@@ -41,15 +43,15 @@ function contrastLabel(pair: MinimalPairDto): string {
 }
 
 function contrastTypeLabel(type: string): string {
-  if (type === 'vowel') return 'Vowels';
-  if (type === 'consonant') return 'Consonants';
+  if (type === 'vowel') return tUi("Vowels");
+  if (type === 'consonant') return tUi("Consonants");
   return type;
 }
 
 function mutationErrorMessage(error: unknown): string {
   return formatIpcError(
     error,
-    'Could not score this pair. Check the AI provider in Settings.',
+    tUi("Could not score this pair. Check the AI provider in Settings."),
   );
 }
 
@@ -72,6 +74,7 @@ function PairWordCard({
   onSelect,
   onListen,
 }: PairWordCardProps) {
+  const { t: tUi } = useI18n();
   const { data: imageUrl, isLoading } = useWordImage(word, language);
   const initial = word.trim().charAt(0).toUpperCase() || phoneme;
 
@@ -82,7 +85,7 @@ function PairWordCard({
           type="button"
           className="pairs-card-select"
           aria-pressed={isTarget}
-          aria-label={`${word}, /${phoneme}/${isTarget ? ', target' : ''}`}
+          aria-label={isTarget ? tUi("{word}, /{phoneme}/, target", { word, phoneme }) : `${word}, /${phoneme}/`}
           onClick={onSelect}
         >
           <span className="pairs-card-phoneme">/{phoneme}/</span>
@@ -92,17 +95,15 @@ function PairWordCard({
         <button
           type="button"
           className="pairs-listen-btn"
-          aria-label={`Listen to ${word}`}
+          aria-label={tUi("Listen to {word}", { word: word })}
           onClick={onListen}
         >
-          <IconSpeaker size={14} />
-          Listen
-        </button>
+          <IconSpeaker size={14} />{tUi("Listen")}</button>
       </div>
       <button
         type="button"
         className="pairs-card-media-btn"
-        aria-label={`Select ${word} as target`}
+        aria-label={tUi("Select {word} as target", { word: word })}
         aria-pressed={isTarget}
         onClick={onSelect}
       >
@@ -120,9 +121,7 @@ function PairWordCard({
           )}
           {isTarget && (
             <span className="pairs-target-badge">
-              <span className="pairs-target-dot" aria-hidden="true" />
-              Target
-            </span>
+              <span className="pairs-target-dot" aria-hidden="true" />{tUi("Target")}</span>
           )}
         </div>
       </button>
@@ -131,6 +130,7 @@ function PairWordCard({
 }
 
 export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
+  const { t: tUi } = useI18n();
   const [contrastFilter, setContrastFilter] = useState<ContrastKey | 'all'>('all');
   const [pairIndex, setPairIndex] = useState(0);
   const [pairTarget, setPairTarget] = useState<'a' | 'b'>('a');
@@ -281,7 +281,7 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
   const worstPhoneme = latest?.phonemes.find((p) => p.status !== 'ok') ?? latest?.phonemes[0];
 
   const selectOptions = [
-    { value: 'all', label: 'All contrasts' },
+    { value: 'all', label: tUi("All contrasts") },
     ...contrastOptions,
   ];
 
@@ -301,19 +301,18 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
     <div className="pairs-studio">
       <header className="pairs-studio-header">
         <div>
-          <h2 className="pairs-studio-title">Pronunciation: Minimal Pairs</h2>
+          <h2 className="pairs-studio-title">{tUi("Pronunciation: Minimal Pairs")}</h2>
           {currentPair ? (
-            <p className="pairs-studio-subtitle">
-              Phoneme Contrast: {contrastLabel(currentPair)} (
+            <p className="pairs-studio-subtitle">{tUi("Phoneme Contrast: ")}{contrastLabel(currentPair)} (
               {contrastTypeLabel(currentPair.contrastType)})
             </p>
           ) : (
-            <p className="pairs-studio-subtitle">Load phoneme contrasts to begin.</p>
+            <p className="pairs-studio-subtitle">{tUi("Load phoneme contrasts to begin.")}</p>
           )}
         </div>
         <div className="pairs-studio-toolbar">
           <Select
-            ariaLabel="Phoneme contrast"
+            ariaLabel={tUi("Phoneme contrast")}
             value={selectValue}
             onChange={(value) => {
               setContrastFilter(value === 'all' ? 'all' : value);
@@ -323,9 +322,7 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
             }}
             options={selectOptions}
           />
-          <Button type="button" variant="ghost" size="sm" onClick={goNextPair}>
-            Next pair
-          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={goNextPair}>{tUi("Next pair")}</Button>
         </div>
       </header>
 
@@ -335,7 +332,7 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
         </p>
       )}
 
-      {!currentPair && <p className="text-muted">No minimal pairs loaded yet.</p>}
+      {!currentPair && <p className="text-muted">{tUi("No minimal pairs loaded yet.")}</p>}
 
       {currentPair && (
         <div className="pairs-studio-grid">
@@ -373,16 +370,15 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
 
             <div className="pairs-action-bar">
               <p className="pairs-space-pill" aria-live="polite">
-                <kbd className="pairs-space-kbd">Space</kbd>
-                {' '}
-                Press or hold to say <strong>{targetWord}</strong>
+                <kbd className="pairs-space-kbd">{tUi("Space")}</kbd>
+                {' '}{tUi("Press or hold to say ")}<strong>{targetWord}</strong>
               </p>
               <div className="pairs-record-wrap">
                 <button
                   type="button"
                   className={`pairs-record-btn${isRecording ? ' is-recording' : ''}`}
                   disabled={isBusy && !isRecording}
-                  aria-label={isRecording ? 'Stop recording' : 'Say / Record'}
+                  aria-label={isRecording ? tUi("Stop recording") : tUi("Say / Record")}
                   onClick={() => {
                     if (isRecording) {
                       void stopRecording();
@@ -391,13 +387,11 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
                     }
                   }}
                 >
-                  <span>{isRecording ? 'Stop' : busy ? 'Scoring…' : 'Say / Record'}</span>
+                  <span>{isRecording ? tUi("Stop") : busy ? tUi("Scoring…") : tUi("Say / Record")}</span>
                   <IconMic size={18} />
                 </button>
                 {isRecording && (
-                  <span className="record-control-live" aria-live="polite">
-                    Recording…
-                  </span>
+                  <span className="record-control-live" aria-live="polite">{tUi("Recording…")}</span>
                 )}
               </div>
             </div>
@@ -410,19 +404,19 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
 
           <aside className="pairs-studio-sidebar">
             <section className="pairs-side-card">
-              <h3 className="pairs-side-heading">Current Match</h3>
+              <h3 className="pairs-side-heading">{tUi("Current Match")}</h3>
               <MatchRing score={matchScore} />
               <p className="pairs-side-match-text" aria-live="polite">
                 {latest ? (
                   <>
-                    {recognized ? `${recognized} recognized` : `${targetWord} scored`}
+                    {recognized ? tUi("{recognized} recognized", { recognized: recognized }) : tUi("{targetWord} scored", { targetWord: targetWord })}
                     <br />
                     <span className="pairs-side-match-detail">
-                      {matchScore}% match, /{targetPhoneme}/
+                      {matchScore}{tUi("% match, /")}{targetPhoneme}/
                     </span>
                   </>
                 ) : (
-                  <span className="text-muted">Say the target word</span>
+                  <span className="text-muted">{tUi("Say the target word")}</span>
                 )}
               </p>
               {latest && latest.phonemes.length > 0 && (
@@ -438,18 +432,17 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
                     onClick={() =>
                       tipMutation.mutate({ phoneme: worstPhoneme.targetPhoneme, language })
                     }
-                    aria-label={`Get articulation tip for ${worstPhoneme.targetPhoneme}`}
-                  >
-                    Tip for /{worstPhoneme.targetPhoneme}/
+                    aria-label={tUi("Get articulation tip for {value1}", { value1: worstPhoneme.targetPhoneme })}
+                  >{tUi("Tip for /")}{worstPhoneme.targetPhoneme}/
                   </Button>
                   {tipMutation.data && (
                     <p className="text-sm">
                       {tipMutation.data.tip}
                       {tipMutation.data.tonguePosition
-                        ? ` Tongue: ${tipMutation.data.tonguePosition}`
+                        ? tUi(" Tongue: {value1}", { value1: tipMutation.data.tonguePosition })
                         : ''}
                       {tipMutation.data.lipPosition
-                        ? ` Lips: ${tipMutation.data.lipPosition}`
+                        ? tUi(" Lips: {value1}", { value1: tipMutation.data.lipPosition })
                         : ''}
                     </p>
                   )}
@@ -460,7 +453,7 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
                   className="pronunciation-playback"
                   controls
                   src={playbackUrl}
-                  aria-label="Your recording"
+                  aria-label={tUi("Your recording")}
                 >
                   <track kind="captions" />
                 </audio>
@@ -468,8 +461,7 @@ export function MinimalPairsPanel({ language }: MinimalPairsPanelProps) {
             </section>
 
             <section className="pairs-side-card">
-              <h3 className="pairs-side-heading">
-                Total Session Score:{' '}
+              <h3 className="pairs-side-heading">{tUi("Total Session Score:")}{' '}
                 <span className="pairs-session-pct">{sessionAvg}%</span>
               </h3>
               <SessionWaveCompare

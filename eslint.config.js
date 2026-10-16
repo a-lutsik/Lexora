@@ -8,7 +8,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 
 export default [
   // docs/ — tooling для PDF-гайда (Playwright-скрипты), не app-код
-  { ignores: ['dist', 'src-tauri', 'docs'] },
+  { ignores: ['dist', 'src-tauri', 'docs', 'test-results', 'playwright-report'] },
   js.configs.recommended,
   {
     // Node-скрипты (tooling, не app-код)

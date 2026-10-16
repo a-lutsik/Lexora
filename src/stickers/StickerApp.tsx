@@ -1,3 +1,5 @@
+import { useCategories } from '../hooks/useCategories';
+import { useI18n } from "../hooks/useI18n";
 // ============================================================
 // LEXORA — Desktop Sticker App Component
 // Floating ambient card with multiple visual states matching mockup:
@@ -28,6 +30,7 @@ import {
   STICKER_SYNC_VISIBILITY_EVENT,
   isEarlyStickerReview,
 } from './stickerSlots';
+import { stickerSlotFromLabel } from './stickerSlots';
 import './sticker.css';
 
 const MS_PER_SECOND = 1000;
@@ -92,6 +95,7 @@ function ExampleSentence({ sentence, word }: { sentence: string; word: string })
 }
 
 export function StickerApp() {
+  const { t: tUi } = useI18n();
   const queryClient = useQueryClient();
   const activeLanguageId = useSettingsStore((s) => s.activeLanguageId);
   const { data: settings } = useSettings();
@@ -101,6 +105,7 @@ export function StickerApp() {
   // смену языка в главном окне до перезагрузки.
   const languageId = resolveLanguageId(languages, settings?.primaryLanguage) ?? activeLanguageId;
   const { data: collections = [] } = useCollections(languageId);
+  const { data: categories = [] } = useCategories(languageId);
 
   const stickerSources = settings?.stickerSources ?? DEFAULT_STICKER_SOURCES;
   const { data: entry, isLoading } = useStickerCard();
@@ -124,6 +129,8 @@ export function StickerApp() {
   const example = entry?.examples[0] ?? null;
   const contextSentence = example?.sentence ?? entry?.translations[0]?.sense ?? null;
   const queueReady = !isLoading;
+  const showEmptyTopic = queueReady && !entry && stickerSlotFromLabel(getCurrentWindow().label) === 0
+    && (stickerSources.length === 0 || stickerSources.some((source) => source.startsWith('cat:')));
 
   useEffect(() => {
     void ipc.window.setStickerPinned(false);
@@ -162,6 +169,13 @@ export function StickerApp() {
   }, [queryClient]);
 
   useEffect(() => {
+    const unlisten = listen('lexora:categories-changed', () => {
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.CATEGORIES] });
+    });
+    return () => { void unlisten.then((stop) => stop()); };
+  }, [queryClient]);
+
+  useEffect(() => {
     const nextId = entry?.id ?? null;
     if (nextId !== lastEntryIdRef.current) {
       lastEntryIdRef.current = nextId;
@@ -174,7 +188,7 @@ export function StickerApp() {
   useEffect(() => {
     if (!queueReady) return;
     const win = getCurrentWindow();
-    if (!entry) {
+    if (!entry && !showEmptyTopic) {
       void win.hide();
       return;
     }
@@ -182,7 +196,7 @@ export function StickerApp() {
     // show() на macOS активирует всё приложение — карточка должна
     // всплывать поверх других окон, не поднимая дашборд Lexora.
     void ipc.window.showSticker();
-  }, [entry, queueReady, userHidden, syncToken]);
+  }, [entry, queueReady, userHidden, syncToken, showEmptyTopic]);
 
   const isDueNow = entry?.reviewState
     ? entry.reviewState.dueAt * MS_PER_SECOND <= Date.now()
@@ -261,7 +275,22 @@ export function StickerApp() {
   }
 
   if (!entry) {
-    return null;
+    if (!showEmptyTopic) return null;
+    return (
+      <div className="sticker-container">
+        <div className="sticker-card sticker-empty-topic">
+          <p role="status" data-tauri-drag-region>{tUi('No words in selected sources. Choose other categories or add words in Vocabulary.')}</p>
+          <div className="sticker-empty-actions">
+            <button type="button" className="sticker-source-empty-button" onClick={() => setShowFilter(!showFilter)}>{tUi('Sources')}</button>
+            <button type="button" className="sticker-source-empty-button" onClick={handleClose} aria-label={tUi('Close sticker')}><CloseIcon /></button>
+          </div>
+          {showFilter && <div className="sticker-filter-panel">
+            <button type="button" className="sticker-source-empty-button" onClick={() => setShowFilter(false)}>{tUi('Close source filter')}</button>
+            <StickerSourcePicker sources={stickerSources} categories={categories} collections={collections} onChange={handleSourcesChange} compact />
+          </div>}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -270,12 +299,12 @@ export function StickerApp() {
         {showFilter && (
           <div className="sticker-filter-panel">
             <div className="sticker-filter-panel-header">
-              <span>Sources</span>
+              <span>{tUi("Sources")}</span>
               <button
                 type="button"
                 className="sticker-icon-btn"
                 onClick={() => setShowFilter(false)}
-                aria-label="Close source filter"
+                aria-label={tUi("Close source filter")}
               >
                 <CloseIcon />
               </button>
@@ -283,6 +312,7 @@ export function StickerApp() {
             <StickerSourcePicker
               sources={stickerSources}
               collections={collections}
+              categories={categories}
               onChange={handleSourcesChange}
               compact
             />
@@ -305,7 +335,7 @@ export function StickerApp() {
               type="button"
               className="sticker-icon-btn"
               onClick={handleToggleReveal}
-              aria-label="Toggle translation visibility"
+              aria-label={tUi("Toggle translation visibility")}
               aria-pressed={revealed}
             >
               <EyeIcon />
@@ -318,9 +348,9 @@ export function StickerApp() {
               aria-label={
                 contextSentence
                   ? showContext
-                    ? 'Hide example in context'
-                    : 'Show example in context'
-                  : 'No examples available'
+                    ? tUi("Hide example in context")
+                    : tUi("Show example in context")
+                  : tUi("No examples available")
               }
               aria-pressed={showContext}
             >
@@ -330,7 +360,7 @@ export function StickerApp() {
               type="button"
               className={`sticker-icon-btn${showFilter ? ' sticker-icon-btn--active' : ''}`}
               onClick={() => setShowFilter((prev) => !prev)}
-              aria-label="Filter sticker sources"
+              aria-label={tUi("Filter sticker sources")}
               aria-pressed={showFilter}
             >
               <FilterIcon />
@@ -339,7 +369,7 @@ export function StickerApp() {
               type="button"
               className={`sticker-icon-btn${pinned ? ' pinned' : ''}`}
               onClick={handleTogglePin}
-              aria-label="Pin on top"
+              aria-label={tUi("Pin on top")}
               aria-pressed={pinned}
             >
               <PinIcon />
@@ -348,7 +378,7 @@ export function StickerApp() {
               type="button"
               className="sticker-icon-btn sticker-icon-btn--close"
               onClick={handleClose}
-              aria-label="Close sticker"
+              aria-label={tUi("Close sticker")}
             >
               <CloseIcon />
             </button>
@@ -357,9 +387,7 @@ export function StickerApp() {
 
         <div className={`sticker-sub-row${showContext ? ' sticker-sub-row--context' : ''}`}>
           {gradeFailed ? (
-            <span className="sticker-error" role="alert">
-              Оценка не сохранена — попробуйте ещё раз
-            </span>
+            <span className="sticker-error" role="alert">{tUi("Оценка не сохранена — попробуйте ещё раз")}</span>
           ) : showContext && contextSentence ? (
             <ExampleSentence sentence={contextSentence} word={entry.lexeme.text} />
           ) : revealed && translation ? (
@@ -370,7 +398,7 @@ export function StickerApp() {
           {isDueNow && (
             <div className="sticker-due-pill">
               <div className="sticker-due-dot" />
-              <span>Due now</span>
+              <span>{tUi("Due now")}</span>
             </div>
           )}
         </div>
@@ -381,25 +409,19 @@ export function StickerApp() {
             className="sticker-btn sticker-btn--good"
             onClick={() => handleGrade(true)}
             disabled={actionPending}
-          >
-            Помню ✓
-          </button>
+          >{tUi("Помню ✓")}</button>
           <button
             type="button"
             className="sticker-btn sticker-btn--again"
             onClick={() => handleGrade(false)}
             disabled={actionPending}
-          >
-            Не помню ✕
-          </button>
+          >{tUi("Не помню ✕")}</button>
           <button
             type="button"
             className="sticker-btn sticker-btn--later"
             onClick={handleLater}
             disabled={actionPending}
-          >
-            Позже
-          </button>
+          >{tUi("Позже")}</button>
         </div>
       </div>
     </div>

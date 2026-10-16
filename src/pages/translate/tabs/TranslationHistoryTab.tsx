@@ -1,3 +1,5 @@
+import { getLocale } from '../../../i18n';
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Translation History Tab
 // Lists previous text, image, document, and audio translations
@@ -24,6 +26,7 @@ import {
 } from '../components/TranslateIcons';
 
 export function TranslationHistoryTab() {
+  const { t: tUi } = useI18n();
   const [filterMode, setFilterMode] = useState<TranslationHubMode | 'all'>('all');
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
@@ -64,42 +67,36 @@ export function TranslationHistoryTab() {
   return (
     <div className="translation-history-tab animate-fade-in">
       <div className="history-toolbar">
-        <div className="history-filters" role="group" aria-label="Filter history by mode">
+        <div className="history-filters" role="group" aria-label={tUi("Filter history by mode")}>
           <button
             type="button"
             className={`btn-toggle ${filterMode === 'all' ? 'is-active' : ''}`}
             onClick={() => setFilterMode('all')}
-          >
-            All
-          </button>
+          >{tUi("All")}</button>
           <button
             type="button"
             className={`btn-toggle ${filterMode === 'text' ? 'is-active' : ''}`}
             onClick={() => setFilterMode('text')}
           >
-            <IconTabText size={14} /> Text
-          </button>
+            <IconTabText size={14} />{tUi(" Text")}</button>
           <button
             type="button"
             className={`btn-toggle ${filterMode === 'image' ? 'is-active' : ''}`}
             onClick={() => setFilterMode('image')}
           >
-            <IconTabImage size={14} /> Image
-          </button>
+            <IconTabImage size={14} />{tUi(" Image")}</button>
           <button
             type="button"
             className={`btn-toggle ${filterMode === 'document' ? 'is-active' : ''}`}
             onClick={() => setFilterMode('document')}
           >
-            <IconTabDocument size={14} /> Document
-          </button>
+            <IconTabDocument size={14} />{tUi(" Document")}</button>
           <button
             type="button"
             className={`btn-toggle ${filterMode === 'audio' ? 'is-active' : ''}`}
             onClick={() => setFilterMode('audio')}
           >
-            <IconTabAudio size={14} /> Audio
-          </button>
+            <IconTabAudio size={14} />{tUi(" Audio")}</button>
         </div>
 
         {historyQuery.data && historyQuery.data.length > 0 && (
@@ -109,20 +106,18 @@ export function TranslationHistoryTab() {
             size="sm"
             onClick={() => clearMutation.mutate(filterMode === 'all' ? undefined : filterMode)}
             isLoading={clearMutation.isPending}
-          >
-            Clear History
-          </Button>
+          >{tUi("Clear History")}</Button>
         )}
       </div>
 
       {historyQuery.isLoading && (
-        <div className="text-secondary text-sm p-6">Loading translation history...</div>
+        <div className="text-secondary text-sm p-6">{tUi("Loading translation history...")}</div>
       )}
 
       {historyQuery.data && historyQuery.data.length === 0 && (
         <div className="empty-history text-center text-muted p-12">
           <IconTabHistory size={32} />
-          <p>No translation history yet.</p>
+          <p>{tUi("No translation history yet.")}</p>
         </div>
       )}
 
@@ -137,7 +132,7 @@ export function TranslationHistoryTab() {
                     {item.sourceLanguage} → {item.targetLanguage}
                   </span>
                   <span className="text-xs text-muted">
-                    {new Date(item.createdAt * 1000).toLocaleString()}
+                    {new Date(item.createdAt * 1000).toLocaleString(getLocale())}
                   </span>
                 </div>
 
@@ -146,7 +141,7 @@ export function TranslationHistoryTab() {
                     type="button"
                     className={`btn-star ${item.isFavorite ? 'is-fav' : ''}`}
                     onClick={() => toggleFavMutation.mutate(item.id)}
-                    aria-label={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                    aria-label={item.isFavorite ? tUi("Remove from favorites") : tUi("Add to favorites")}
                   >
                     <IconStar filled={item.isFavorite} />
                   </button>
@@ -154,16 +149,16 @@ export function TranslationHistoryTab() {
                     type="button"
                     className="btn-copy text-xs"
                     onClick={() => handleCopy(item.id, item.translatedText)}
-                    aria-label="Copy translation"
+                    aria-label={tUi("Copy translation")}
                   >
                     {copiedId === item.id ? <IconCheck size={14} /> : <IconCopy size={14} />}
-                    {copiedId === item.id ? 'Copied' : 'Copy'}
+                    {copiedId === item.id ? tUi("Copied") : tUi("Copy")}
                   </button>
                   <button
                     type="button"
                     className="btn-delete text-xs text-muted hover:text-danger"
                     onClick={() => deleteMutation.mutate(item.id)}
-                    aria-label="Delete history entry"
+                    aria-label={tUi("Delete history entry")}
                   >
                     ✕
                   </button>

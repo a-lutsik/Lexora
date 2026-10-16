@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — RecordControl
 // Hold-free start/stop microphone capture (max 8s).
@@ -22,9 +23,10 @@ type RecordControlProps = {
 
 export const RecordControl = forwardRef<RecordControlHandle, RecordControlProps>(
   function RecordControl(
-    { disabled = false, onRecorded, idleLabel = 'Record', vadAutoStop = false },
+    { disabled = false, onRecorded, idleLabel, vadAutoStop = false },
     ref,
   ) {
+    const { t: tUi } = useI18n();
     const { status, error, start, stop } = useMicrophoneRecorder({
       vadAutoStop,
       onAutoStop: onRecorded,
@@ -59,14 +61,12 @@ export const RecordControl = forwardRef<RecordControlHandle, RecordControlProps>
           onClick={() => {
             void handleToggle();
           }}
-          aria-label={isRecording ? 'Stop recording' : idleLabel}
+          aria-label={isRecording ? tUi("Stop recording") : (idleLabel ?? tUi("Record"))}
         >
-          {isRecording ? 'Stop' : idleLabel}
+          {isRecording ? tUi("Stop") : (idleLabel ?? tUi("Record"))}
         </Button>
         {isRecording && (
-          <span className="record-control-live" aria-live="polite">
-            Recording…
-          </span>
+          <span className="record-control-live" aria-live="polite">{tUi("Recording…")}</span>
         )}
         {error && (
           <p className="record-control-error" role="alert">

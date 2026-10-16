@@ -1,3 +1,5 @@
+import { localizeModelMessage } from '../../../lib/interfaceText';
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Live Interpreter Tab (speech → speech)
 // Gemini Live Translate: speak in any language, hear and read
@@ -22,6 +24,7 @@ function formatClock(totalSeconds: number): string {
 }
 
 export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTabProps) {
+  const { t: tUi, locale } = useI18n();
   const [speak, setSpeak] = useState(true);
   const [echo, setEcho] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -33,12 +36,12 @@ export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTa
   const live = useRealtimeSession({ playAudio: speak });
   const { status, start, stop } = live;
   const running = status === 'live' || status === 'connecting';
-  const targetName = languageLabel(targetLang);
+  const targetName = languageLabel(targetLang, false, locale);
 
   const role = modelRoutes?.roles.find((r) => r.role === 'live_interpreter');
   const unavailable =
     role && role.state !== 'ready'
-      ? `Live interpretation is unavailable: ${role.message || 'choose the Gemini package in Settings.'}`
+      ? tUi('Live interpretation is unavailable: {reason}', { reason: localizeModelMessage(role.message || 'Choose the Gemini package in Settings.') })
       : null;
 
   // The session's target language is fixed at setup — restart on change.
@@ -46,9 +49,9 @@ export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTa
     if (running && startedTarget.current !== null && startedTarget.current !== targetLang) {
       startedTarget.current = null;
       void stop();
-      setLanguageNotice(`Target language changed — press Start to interpret into ${targetName}.`);
+      setLanguageNotice(tUi("Target language changed — press Start to interpret into {language}.", { language: targetName }));
     }
-  }, [running, stop, targetLang, targetName]);
+  }, [running, stop, targetLang, targetName, tUi]);
 
   useEffect(() => {
     if (status !== 'live') return undefined;
@@ -82,7 +85,7 @@ export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTa
     void stop();
   };
 
-  let statusLabel = `Ready to interpret into ${targetName}`;
+  let statusLabel = tUi("Ready to interpret into {value1}", { value1: targetName });
   if (status === 'connecting') statusLabel = 'Connecting…';
   if (status === 'live') statusLabel = live.modelSpeaking ? 'Interpreting' : 'Listening';
 
@@ -92,7 +95,7 @@ export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTa
         className={`voice-studio-status${status === 'live' ? ' is-live' : ''}${status === 'connecting' ? ' is-processing' : ''}`}
         aria-live="polite"
       >
-        {statusLabel}
+        {tUi(statusLabel)}
       </p>
 
       <LiveSpeechWave
@@ -105,41 +108,35 @@ export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTa
         {formatClock(status === 'live' ? seconds : 0)}
       </p>
 
-      <div className="voice-studio-controls" role="group" aria-label="Live interpreter controls">
+      <div className="voice-studio-controls" role="group" aria-label={tUi("Live interpreter controls")}>
         <span className={`voice-record-ring${running ? ' is-recording' : ''}`}>
           <button
             type="button"
             className="voice-record-btn"
             onClick={running ? handleStop : handleStart}
             disabled={!running && unavailable !== null}
-            aria-label={running ? 'Stop live interpretation' : `Start live interpretation into ${targetName}`}
+            aria-label={running ? tUi("Stop live interpretation") : tUi("Start live interpretation into {targetName}", { targetName: targetName })}
           >
             <span className={`voice-record-dot${running ? ' is-recording' : ''}`} aria-hidden="true" />
-            {running ? 'Stop' : 'Start interpreting'}
+            {running ? tUi("Stop") : tUi("Start interpreting")}
           </button>
         </span>
       </div>
 
       <div className="interpreter-options">
         <label className="interpreter-option">
-          <input type="checkbox" checked={speak} onChange={(e) => setSpeak(e.target.checked)} />
-          Speak the translation aloud
-        </label>
+          <input dir="auto" type="checkbox" checked={speak} onChange={(e) => setSpeak(e.target.checked)} />{tUi("Speak the translation aloud")}</label>
         <label className="interpreter-option">
-          <input
+          <input dir="auto"
             type="checkbox"
             checked={echo}
             onChange={(e) => setEcho(e.target.checked)}
             disabled={running}
-          />
-          Repeat speech that is already in {targetName}
+          />{tUi("Repeat speech that is already in ")}{targetName}
         </label>
       </div>
 
-      <p className="interpreter-hint text-xs text-muted">
-        Use headphones — on speakers the microphone hears the translation. A session lasts up to 15
-        minutes; the transcript is saved to History when you stop.
-      </p>
+      <p className="interpreter-hint text-xs text-muted">{tUi("Use headphones — on speakers the microphone hears the translation. A session lasts up to 15 minutes; the transcript is saved to History when you stop.")}</p>
 
       {unavailable && !running && (
         <p className="interpreter-hint text-sm text-secondary" role="status">
@@ -157,11 +154,9 @@ export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTa
         </p>
       )}
 
-      <ol className="interpreter-transcript" ref={transcriptRef} aria-label="Live transcript">
+      <ol className="interpreter-transcript" ref={transcriptRef} aria-label={tUi("Live transcript")}>
         {live.turns.length === 0 ? (
-          <li className="interpreter-empty text-sm text-muted">
-            Speak in any language — the original and the {targetName} translation appear here.
-          </li>
+          <li className="interpreter-empty text-sm text-muted">{tUi("Speak in any language — the original and the ")}{targetName}{tUi(" translation appear here.")}</li>
         ) : (
           live.turns.map((turn) => (
             <li key={turn.id} className={`interpreter-turn${turn.final ? '' : ' is-open'}`}>

@@ -1,3 +1,5 @@
+import { toneLabel } from '../../../lib/interfaceText';
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Text Translate Tab (DeepL Pro Style)
 // Dual-pane text translation with language reverse, clipboard
@@ -37,6 +39,7 @@ export function TextTranslateTab({
   onDetectedDomain,
   onSwapLanguages,
 }: TextTranslateTabProps) {
+  const { t: tUi } = useI18n();
   const [inputText, setInputText] = useState('');
   const [tone, setTone] = useState<ToneOption>('default');
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
@@ -179,7 +182,7 @@ export function TextTranslateTab({
           <div className="translate-panel-header">
             <div className="translate-source-meta">
               <span className="lang-indicator-pill">
-                {sourceLang === 'auto' ? 'Auto-detect language' : sourceLang.toUpperCase()}
+                {sourceLang === 'auto' ? tUi("Auto-detect language") : sourceLang.toUpperCase()}
               </span>
             </div>
             {inputText && (
@@ -187,17 +190,15 @@ export function TextTranslateTab({
                 type="button"
                 className="btn-clear"
                 onClick={() => setInputText('')}
-                aria-label="Clear input text"
-              >
-                ✕ Clear
-              </button>
+                aria-label={tUi("Clear input text")}
+              >{tUi("✕ Clear")}</button>
             )}
           </div>
 
-          <textarea
+          <textarea dir="auto"
             id="text-translate-input"
             className="translate-textarea"
-            placeholder="Type or paste text to translate... (Cmd+Enter to translate)"
+            placeholder={tUi("Type or paste text to translate... (Cmd+Enter to translate)")}
             value={inputText}
             onChange={(e) => {
               setInputText(e.target.value);
@@ -205,11 +206,11 @@ export function TextTranslateTab({
             }}
             onKeyDown={handleKeyDown}
             rows={7}
-            aria-label="Source text to translate"
+            aria-label={tUi("Source text to translate")}
           />
 
           <div className="translate-panel-footer">
-            <span className="text-xs text-muted font-mono">{inputText.length} characters</span>
+            <span className="text-xs text-muted font-mono">{inputText.length}{tUi(" characters")}</span>
             <div className="translate-footer-actions">
               {inputText.trim() && (
                 <button
@@ -217,8 +218,8 @@ export function TextTranslateTab({
                   className="btn-icon"
                   onClick={() => void handlePlayTts('source')}
                   disabled={playingTts === 'source'}
-                  aria-label="Listen to source text"
-                  title="Listen to source text"
+                  aria-label={tUi("Listen to source text")}
+                  title={tUi("Listen to source text")}
                 >
                   <IconSpeaker />
                 </button>
@@ -230,10 +231,8 @@ export function TextTranslateTab({
                 onClick={() => handleTranslate()}
                 isLoading={translateMutation.isPending}
                 disabled={!inputText.trim()}
-                aria-label="Translate text"
-              >
-                Translate
-              </Button>
+                aria-label={tUi("Translate text")}
+              >{tUi("Translate")}</Button>
             </div>
           </div>
         </div>
@@ -242,8 +241,8 @@ export function TextTranslateTab({
           type="button"
           className="btn-swap-panels"
           onClick={handleReverse}
-          aria-label="Reverse translation direction"
-          title="Reverse translation"
+          aria-label={tUi("Reverse translation direction")}
+          title={tUi("Reverse translation")}
         >
           <IconSwap />
         </button>
@@ -255,8 +254,7 @@ export function TextTranslateTab({
                 {targetLang.toUpperCase()}
               </span>
               {sourceLang === 'auto' && result?.sourceLanguage && (
-                <span className="text-xs text-muted">
-                  Detected: {result.sourceLanguage.toUpperCase()}
+                <span className="text-xs text-muted">{tUi("Detected: ")}{result.sourceLanguage.toUpperCase()}
                 </span>
               )}
             </div>
@@ -267,8 +265,8 @@ export function TextTranslateTab({
                   className="btn-icon"
                   onClick={() => void handlePlayTts('target')}
                   disabled={playingTts === 'target'}
-                  aria-label="Listen to translation"
-                  title="Listen to translation"
+                  aria-label={tUi("Listen to translation")}
+                  title={tUi("Listen to translation")}
                 >
                   <IconSpeaker />
                 </button>
@@ -278,8 +276,8 @@ export function TextTranslateTab({
                 className={`btn-copy-icon${copied ? ' is-copied' : ''}`}
                 onClick={() => void handleCopy()}
                 disabled={!canCopy}
-                aria-label={copied ? 'Translation copied' : 'Copy translation to clipboard'}
-                title={copied ? 'Copied' : 'Copy translation'}
+                aria-label={copied ? tUi("Translation copied") : tUi("Copy translation to clipboard")}
+                title={copied ? tUi("Copied") : tUi("Copy translation")}
               >
                 {copied ? <IconCheck /> : <IconCopy />}
               </button>
@@ -288,9 +286,7 @@ export function TextTranslateTab({
 
           <div className="translate-output-container" aria-live="polite">
             {translateMutation.isPending ? (
-              <div className="translate-output-loading text-secondary text-sm">
-                Translating…
-              </div>
+              <div className="translate-output-loading text-secondary text-sm">{tUi("Translating…")}</div>
             ) : outputText ? (
               <div className="translate-output-result">
                 <div className="translate-interactive-output">
@@ -304,7 +300,7 @@ export function TextTranslateTab({
                         key={i}
                         className={`interactive-word${isSelected ? ' is-selected' : ''}`}
                         onClick={() => setSelectedWord(isSelected ? null : cleanWord)}
-                        title="Click to inspect word details"
+                        title={tUi("Click to inspect word details")}
                         role="button"
                         tabIndex={0}
                         onKeyDown={(e) => {
@@ -321,8 +317,8 @@ export function TextTranslateTab({
                 </div>
 
                 <div className="tone-switcher-container">
-                  <span className="text-xs text-secondary">Tone:</span>
-                  <div className="tone-chips" role="group" aria-label="Tone Switcher">
+                  <span className="text-xs text-secondary">{tUi("Tone:")}</span>
+                  <div className="tone-chips" role="group" aria-label={tUi("Tone Switcher")}>
                     {(['default', 'formal', 'casual', 'academic'] as const).map((t) => (
                       <button
                         key={t}
@@ -330,7 +326,7 @@ export function TextTranslateTab({
                         className={`btn-tone${tone === t ? ' is-active' : ''}`}
                         onClick={() => handleToneChange(t)}
                       >
-                        {t === 'default' ? 'Standard' : t.charAt(0).toUpperCase() + t.slice(1)}
+                        {toneLabel(t)}
                       </button>
                     ))}
                   </div>
@@ -345,14 +341,12 @@ export function TextTranslateTab({
                     isLoading={addToVocabMutation.isPending}
                     disabled={cardSaved || !inputText.trim()}
                   >
-                    {cardSaved ? '✓ Saved to Vocabulary' : '+ Save to Vocabulary'}
+                    {cardSaved ? tUi("✓ Saved to Vocabulary") : tUi("+ Save to Vocabulary")}
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="translate-output-placeholder text-muted text-sm">
-                Translation will appear here. Use the arrows to reverse direction, or copy when ready.
-              </div>
+              <div className="translate-output-placeholder text-muted text-sm">{tUi("Translation will appear here. Use the arrows to reverse direction, or copy when ready.")}</div>
             )}
           </div>
 
@@ -360,9 +354,7 @@ export function TextTranslateTab({
             <div className="translate-enrichment-box animate-slide-up">
               {result.alternatives.length > 0 && (
                 <div className="translate-alternatives">
-                  <span className="text-xs text-secondary font-medium">
-                    Alternative Phrasings:
-                  </span>
+                  <span className="text-xs text-secondary font-medium">{tUi("Alternative Phrasings:")}</span>
                   <div className="translate-chips">
                     {result.alternatives.map((alt) => (
                       <span key={alt} className="translate-chip">

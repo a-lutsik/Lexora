@@ -3,6 +3,7 @@
 // Server language list via TanStack Query + catalog helpers.
 // ============================================================
 
+import { useI18n } from './useI18n';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ipc } from '../lib/ipc';
@@ -26,6 +27,7 @@ export function useLanguages() {
 /** Prefer DB list; fall back to static catalog so Settings works offline. */
 export function useLanguageOptions(pinCodes: string[] = []): SelectOption[] {
   const { data } = useLanguages();
+  const { locale } = useI18n();
   const pinKey = pinCodes.join(',');
 
   return useMemo(() => {
@@ -59,9 +61,9 @@ export function useLanguageOptions(pinCodes: string[] = []): SelectOption[] {
 
     return all.map((lang) => ({
       value: lang.code,
-      label: languageSelectLabel(lang.code),
+      label: languageSelectLabel(lang.code, locale),
     }));
-  }, [data, pinKey]);
+  }, [data, pinKey, locale]);
 }
 
 export function resolveLanguageId(

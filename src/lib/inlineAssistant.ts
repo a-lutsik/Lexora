@@ -1,3 +1,4 @@
+import { getLocale, t } from '../i18n';
 // ============================================================
 // LEXORA — Inline AI assistant helpers (popup routing + modes)
 // ============================================================
@@ -54,9 +55,9 @@ export function formatImageProviderError(error: unknown): string {
   }
   const wait = raw.match(/wait about (\d+) seconds/i);
   if (wait?.[1]) {
-    return `Image provider is busy. Wait about ${wait[1]} seconds, then tap refresh once. Or add an OpenAI API key in Settings to generate without waiting.`;
+    return t("Image provider is busy. Wait about {seconds} seconds, then tap refresh once. Or add an OpenAI API key in Settings to generate without waiting.", { seconds: wait[1] });
   }
-  return IMAGE_RATE_LIMIT_MESSAGE;
+  return t(IMAGE_RATE_LIMIT_MESSAGE);
 }
 
 export const POPUP_DICTIONARY_SIZE = { width: 460, height: 600 } as const;
@@ -147,6 +148,14 @@ export function textRegisterInstruction(register: TextRegister): string {
 
 export function languageDisplayName(code: string): string {
   const normalized = code.trim().toLowerCase();
+  if (typeof Intl.DisplayNames === 'function') {
+    try {
+      return new Intl.DisplayNames([getLocale()], { type: 'language' }).of(normalized)
+        ?? code.toUpperCase();
+    } catch {
+      // Keep malformed provider language codes readable.
+    }
+  }
   return LANGUAGE_NAMES[normalized] ?? code.toUpperCase();
 }
 
@@ -157,23 +166,23 @@ export function assistantKickerTitle(
 ): string {
   switch (mode) {
     case 'translate':
-      return `Translate to ${languageDisplayName(targetLanguage)} (${targetLanguage.toUpperCase()})`;
+      return t("Translate to {language} ({code})", { language: languageDisplayName(targetLanguage), code: targetLanguage.toUpperCase() });
     case 'fix':
-      return 'Grammar & Spelling';
+      return t('Grammar & Spelling');
     case 'improve':
-      return 'Improvement Suggestions';
+      return t('Improvement Suggestions');
     case 'rephrase':
-      return 'Rephrase';
+      return t('Rephrase');
     case 'shorten':
-      return 'Shorter Version';
+      return t('Shorter Version');
     case 'friendly':
-      return 'Friendly Tone Rewrite';
+      return t('Friendly Tone Rewrite');
     case 'formal':
-      return 'Formal Tone Rewrite';
+      return t('Formal Tone Rewrite');
     case 'text':
-      return `Translate to English (EN) · ${textRegisterLabel(register)}`;
+      return t("Translate to English (EN) · {register}", { register: t(textRegisterLabel(register)) });
     case 'custom':
-      return 'Custom Rewrite';
+      return t('Custom Rewrite');
   }
 }
 

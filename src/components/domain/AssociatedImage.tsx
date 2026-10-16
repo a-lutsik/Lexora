@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Associated photograph for a lexeme
 // Concrete photo (cached locally), never abstract placeholder art.
@@ -46,6 +47,7 @@ export function AssociatedImage({
   onRegenerate,
   cacheNonce,
 }: AssociatedImageProps) {
+  const { t: tUi } = useI18n();
   const url = path
     ? cacheNonce
       ? `${convertFileSrc(path)}?v=${cacheNonce}`
@@ -84,7 +86,7 @@ export function AssociatedImage({
               <PhotoSearchIcon />
             </span>
           ) : null}
-          {findingPhoto ? 'Finding a photo…' : 'No photo yet'}
+          {findingPhoto ? tUi("Finding a photo…") : tUi("No photo yet")}
         </span>
       )}
       {showRefresh && (
@@ -97,7 +99,7 @@ export function AssociatedImage({
             onRegenerate();
           }}
           disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Finding another photo' : 'Regenerate photo'}
+          aria-label={isRefreshing ? tUi("Finding another photo") : tUi("Regenerate photo")}
         >
           <RefreshIcon />
         </button>

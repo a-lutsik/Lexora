@@ -2,8 +2,7 @@
 -- LEXORA — Master Database Schema (reference only)
 -- Версия: 1.0 | Применяется через refinery migrations
 -- ВНИМАНИЕ: этот файл не исполняется напрямую. Актуальная
--- миграция — db/migrations/V001__init_schema.sql; держать
--- содержимое (кроме PRAGMA-блока ниже) синхронным с ней.
+-- миграции — db/migrations/V*.sql; этот файл — справочник схемы.
 -- PRAGMA применяются per-connection в db::create_pool.
 -- Правила: snake_case, soft delete, нормализованный текст,
 --          транзакции для всех мутаций, индексы для JOIN/WHERE
@@ -152,6 +151,23 @@ CREATE TABLE IF NOT EXISTS collection_item (
 CREATE INDEX IF NOT EXISTS idx_collection_item_collection
     ON collection_item(collection_id, sort_order);
 
+-- ── Vocabulary Categories (V029) ───────────────────────────
+
+CREATE TABLE IF NOT EXISTS vocabulary_category (
+    id INTEGER PRIMARY KEY,
+    language_id INTEGER NOT NULL REFERENCES language(id),
+    name TEXT NOT NULL,
+    normalized_name TEXT NOT NULL,
+    is_general INTEGER NOT NULL DEFAULT 0 CHECK (is_general IN (0, 1)),
+    created_at DATETIME DEFAULT (unixepoch()),
+    deleted_at DATETIME
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_category_language_name
+    ON vocabulary_category(language_id, normalized_name) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_category_general
+    ON vocabulary_category(language_id) WHERE is_general = 1 AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_category_deleted ON vocabulary_category(deleted_at);
+
 -- ── User Vocabulary ───────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS user_vocabulary (
@@ -162,6 +178,7 @@ CREATE TABLE IF NOT EXISTS user_vocabulary (
     is_favorite INTEGER NOT NULL DEFAULT 0,
     notes       TEXT,
     source      TEXT,    -- 'popup'|'manual'|'import'
+    category_id INTEGER REFERENCES vocabulary_category(id),
     deleted_at  DATETIME, -- Soft delete
     UNIQUE(user_id, lexeme_id)
 );
@@ -171,6 +188,8 @@ CREATE INDEX IF NOT EXISTS idx_uv_user_lexeme
 
 CREATE INDEX IF NOT EXISTS idx_uv_user_added
     ON user_vocabulary(user_id, added_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_uv_category ON user_vocabulary(category_id, deleted_at);
 
 -- ── Review State (SRS) ────────────────────────────────────
 
