@@ -271,9 +271,11 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
         }
         return;
       }
-      // Parent PopupApp routes sentences to the assistant; do not start a
-      // dictionary lookup that would flash the word card over the selection.
-      if (onOpenAssistantRef.current && classifyPopupText(text) === 'assistant') {
+      // Parent PopupApp routes sentences to the assistant and voice sessions to
+      // the recorder; do not start a dictionary lookup that would flash the card.
+      const kind = classifyPopupText(text);
+      if (kind === 'voice') return;
+      if (onOpenAssistantRef.current && kind === 'assistant') {
         return;
       }
       const alreadyShowing =

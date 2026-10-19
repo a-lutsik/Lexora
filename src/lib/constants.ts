@@ -60,6 +60,7 @@ export const QUERY_KEYS = {
   DIALOGUE_SESSION: 'dialogue-session',
   MODEL_ROUTES: 'model-routes',
   MODEL_CATALOG: 'model-catalog',
+  PROVIDER_MODELS: 'provider-models',
   AI_USAGE: 'ai-usage',
   GRAMMAR_WATCH_SETTINGS: 'grammar-watch-settings',
   GRAMMAR_WATCH_STATUS: 'grammar-watch-status',

@@ -62,8 +62,12 @@ export function formatImageProviderError(error: unknown): string {
 
 export const POPUP_DICTIONARY_SIZE = { width: 460, height: 600 } as const;
 export const POPUP_ASSISTANT_SIZE = { width: 720, height: 420 } as const;
+export const POPUP_VOICE_SIZE = { width: 420, height: 380 } as const;
 
-export type PopupViewMode = 'dictionary' | 'assistant';
+/** Pending-text prefix of a voice session; mirrors `VOICE_POPUP_PREFIX` in popup.rs. */
+export const VOICE_POPUP_PREFIX = '\u0001lexora:voice:';
+
+export type PopupViewMode = 'dictionary' | 'assistant' | 'voice';
 
 export const INLINE_MODE_TABS = [
   { id: 'translate', label: 'Translate', shortcut: '1' },
@@ -103,6 +107,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 
 /** 1–2 words → dictionary card; a sentence or paragraph → inline assistant. */
 export function classifyPopupText(text: string): PopupViewMode {
+  if (text.startsWith(VOICE_POPUP_PREFIX)) return 'voice';
   const trimmed = text.trim();
   if (!trimmed) return 'dictionary';
   const words = trimmed.split(/\s+/).filter((word) => word.length > 0);

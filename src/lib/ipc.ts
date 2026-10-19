@@ -11,6 +11,7 @@ import type {
   GrammarMarkActionKind,
   GrammarMarksPayload,
   SetGrammarMarksInput,
+  RemoteModel,
   GrammarFieldPayload,
   GrammarWatchSettings,
   GrammarWatchStatus,
@@ -322,6 +323,12 @@ export const ipc = {
 
     setRoleRoute: (role: ModelRole, targets: RouteTarget[]) =>
       invoke<ModelSetup>('set_role_route', { input: { role, targets } }),
+
+    providerModels: (provider: string) =>
+      invoke<RemoteModel[]>('list_provider_models', { provider }),
+
+    setAdvanced: (enabled: boolean) =>
+      invoke<AppSettings>('set_advanced_models', { enabled }),
 
     testRole: (role: ModelRole) =>
       invoke<TestConnectionResult>('test_model_role', { role }),

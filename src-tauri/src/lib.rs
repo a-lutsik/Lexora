@@ -50,6 +50,9 @@ pub fn run() {
                         Some(hotkeys::HotkeyAction::TranslateSelection) => {
                             hotkeys::translate_selection(app);
                         }
+                        Some(hotkeys::HotkeyAction::VoiceTranslate) => {
+                            hotkeys::voice_translate(app);
+                        }
                         Some(hotkeys::HotkeyAction::ToggleStickers) => {
                             if let Err(e) = stickers::toggle_stickers_inner(app) {
                                 log::warn!("Failed to toggle stickers from hotkey: {e}");
@@ -184,7 +187,7 @@ pub fn run() {
             // HotkeyState должен быть managed до регистрации — register_shortcuts
             // обновляет в нём привязки для диспетчеризации в обработчике плагина.
             app.manage(hotkeys::HotkeyState::default());
-            let (hotkey_translate, hotkey_stickers) = {
+            let shortcuts = {
                 let pool = app.state::<Arc<db::DbPool>>();
                 match pool
                     .get()
@@ -194,16 +197,11 @@ pub fn run() {
                     Ok(settings) => hotkeys::current_shortcuts(&settings),
                     Err(e) => {
                         log::warn!("Failed to load hotkey settings, using defaults: {e}");
-                        (
-                            hotkeys::TRANSLATE_SHORTCUT.to_string(),
-                            hotkeys::STICKERS_SHORTCUT.to_string(),
-                        )
+                        hotkeys::ShortcutStrings::default()
                     }
                 }
             };
-            if let Err(e) =
-                hotkeys::register_shortcuts(app.handle(), &hotkey_translate, &hotkey_stickers)
-            {
+            if let Err(e) = hotkeys::register_shortcuts(app.handle(), &shortcuts) {
                 log::warn!("Failed to register global shortcuts: {e}");
             }
 
@@ -267,12 +265,12 @@ pub fn run() {
             commands::grammar_watch::update_grammar_watch_settings,
             commands::grammar_watch::get_grammar_watch_status,
             commands::grammar_watch::request_grammar_watch_access,
+            commands::grammar_watch::get_grammar_field,
+            commands::grammar_watch::apply_grammar_fix,
             commands::grammar_watch::set_grammar_marks,
             commands::grammar_watch::get_grammar_marks,
             commands::grammar_watch::get_grammar_card,
             commands::grammar_watch::grammar_card_action,
-            commands::grammar_watch::get_grammar_field,
-            commands::grammar_watch::apply_grammar_fix,
             commands::grammar_watch::set_grammar_panel_open,
             commands::grammar_watch::snooze_grammar_field,
             commands::grammar_watch::exclude_grammar_app,
@@ -319,6 +317,8 @@ pub fn run() {
             commands::models::get_ai_usage,
             commands::models::apply_model_package,
             commands::models::set_role_route,
+            commands::models::set_advanced_models,
+            commands::models::list_provider_models,
             commands::models::test_model_role,
             // Realtime voice (Gemini Live)
             commands::realtime::realtime_start,

@@ -10,6 +10,7 @@ pub mod lexical_domain;
 pub mod openai;
 pub mod rate_limit;
 
+use crate::providers::models::health::{ChainHealth, HealthFailure};
 use crate::providers::models::usage::ChainUsage;
 use crate::commands::study::EvaluationResult;
 use crate::commands::translate::TranslationResult;
@@ -1663,6 +1664,8 @@ pub struct ProviderRegistry {
     attempt_timeout: Option<std::time::Duration>,
     /// Counts each attempt per role/model (Settings → «Расходы AI»).
     usage: Option<ChainUsage>,
+    /// Remembers models that stopped working and tries them last.
+    health: Option<ChainHealth>,
 }
 
 /// What a failed model attempt means for the rest of the chain.
@@ -1672,6 +1675,8 @@ pub(crate) enum FailureKind {
     Auth,
     /// Quota / 429: the next model has its own limits.
     RateLimit,
+    /// The provider no longer serves this model (removed, decommissioned).
+    Gone,
     /// Timeout, missing capability, server error: try the next model.
     Other,
 }
@@ -1685,6 +1690,17 @@ const AUTH_FAILURE_MARKERS: &[&str] = &[
     "incorrect api key",
     "invalid x-api-key",
     "authentication_error",
+];
+
+const GONE_MODEL_MARKERS: &[&str] = &[
+    "model_not_found",
+    "not_found_error",
+    "does not exist",
+    "decommissioned",
+    "no longer available",
+    "no longer supported",
+    "no endpoints found",
+    "is not found for api version",
 ];
 
 const RATE_LIMIT_MARKERS: &[&str] = &[
@@ -1710,17 +1726,40 @@ pub(crate) fn classify_failure(err: &AppError) -> FailureKind {
         FailureKind::Auth
     } else if has_status_code(&text, "429") || RATE_LIMIT_MARKERS.iter().any(|m| text.contains(m)) {
         FailureKind::RateLimit
+    } else if has_status_code(&text, "404") || GONE_MODEL_MARKERS.iter().any(|m| text.contains(m)) {
+        FailureKind::Gone
     } else {
         FailureKind::Other
     }
 }
 
-/// Try each provider of the chain in order; return the first success or the last error.
+/// Health impact of a failed attempt; local refusals (missing capability) are not the model's fault.
+fn health_failure(err: &AppError, kind: FailureKind) -> Option<HealthFailure> {
+    if !matches!(err, AppError::Provider(_) | AppError::Http(_)) {
+        return None;
+    }
+    match kind {
+        FailureKind::Auth => None,
+        FailureKind::Gone => Some(HealthFailure::Gone),
+        FailureKind::RateLimit => Some(HealthFailure::RateLimit),
+        FailureKind::Other => Some(HealthFailure::Transient),
+    }
+}
+
+/// Try each provider of the chain (models that stopped working last);
+/// return the first success or the last error.
 macro_rules! chain_call {
     ($self:ident, $method:ident, $req:expr) => {{
         let mut last_err: Option<AppError> = None;
         let total = $self.chain.len();
-        for (index, provider) in $self.chain.iter().enumerate() {
+        let order = match &$self.health {
+            Some(health) => health.attempt_order(total),
+            None => (0..total).collect::<Vec<_>>(),
+        };
+        for (position, index) in order.into_iter().enumerate() {
+            let Some(provider) = $self.chain.get(index) else {
+                continue;
+            };
             let attempt = provider.$method($req.clone());
             let outcome = match $self.attempt_timeout {
                 Some(limit) => match tokio::time::timeout(limit, attempt).await {
@@ -1737,9 +1776,18 @@ macro_rules! chain_call {
                 usage.record_attempt(index, outcome.is_ok());
             }
             match outcome {
-                Ok(value) => return Ok(value),
+                Ok(value) => {
+                    if let Some(health) = &$self.health {
+                        health.record(index, None);
+                    }
+                    return Ok(value);
+                }
                 Err(e) => {
-                    if classify_failure(&e) == FailureKind::Auth {
+                    let kind = classify_failure(&e);
+                    if let (Some(health), Some(failure)) = (&$self.health, health_failure(&e, kind)) {
+                        health.record(index, Some(failure));
+                    }
+                    if kind == FailureKind::Auth {
                         log::warn!(
                             "AI {} via {}: API key rejected, not falling back: {e}",
                             stringify!($method),
@@ -1747,7 +1795,7 @@ macro_rules! chain_call {
                         );
                         return Err(e);
                     }
-                    if index + 1 < total {
+                    if position + 1 < total {
                         log::warn!(
                             "AI {} via {} failed: {e}. Trying next model...",
                             stringify!($method),
@@ -1772,6 +1820,7 @@ impl ProviderRegistry {
             chain,
             attempt_timeout: None,
             usage: None,
+            health: None,
         }
     }
 
@@ -1783,12 +1832,19 @@ impl ProviderRegistry {
             chain,
             attempt_timeout,
             usage: None,
+            health: None,
         }
     }
 
     /// Count attempts; `usage.targets` must be parallel to the chain.
     pub fn with_usage(mut self, usage: ChainUsage) -> Self {
         self.usage = Some(usage);
+        self
+    }
+
+    /// Skip models that recently stopped working; `health.keys` must be parallel to the chain.
+    pub fn with_health(mut self, health: ChainHealth) -> Self {
+        self.health = Some(health);
         self
     }
 
@@ -1979,6 +2035,21 @@ pub fn create_provider(
                 key,
                 Some(model_name.to_string()),
                 Some("Groq".to_string()),
+            )))
+        }
+        "deepseek" => {
+            let key = crate::api_keys::get_api_key(app, "deepseek");
+            if key.is_none() {
+                return Err(AppError::Validation(
+                    "DeepSeek API Key is missing. Please enter and save your DeepSeek key in Settings."
+                        .to_string(),
+                ));
+            }
+            Ok(Arc::new(custom::CustomOpenAIProvider::new(
+                Some("https://api.deepseek.com/v1".to_string()),
+                key,
+                Some(model_name.to_string()),
+                Some("DeepSeek".to_string()),
             )))
         }
         "gemini" => {
@@ -3814,6 +3885,61 @@ mod tests {
         assert_eq!(res.main_translation, "fallback");
     }
 
+    fn health_for(names: &[&str]) -> (ChainHealth, Arc<crate::providers::models::health::ModelHealth>) {
+        let tracker = Arc::new(crate::providers::models::health::ModelHealth::default());
+        let health = ChainHealth {
+            tracker: tracker.clone(),
+            keys: names.iter().map(|n| n.to_string()).collect(),
+        };
+        (health, tracker)
+    }
+
+    #[tokio::test]
+    async fn removed_model_is_skipped_on_the_next_call() {
+        let removed = Arc::new(StubProvider::failing_with(
+            "primary",
+            "Gemini API error 404 Not Found: models/gemini-old is not found for API version v1beta",
+        ));
+        let fallback = Arc::new(StubProvider::ok("fallback"));
+        let (health, _) = health_for(&["gemini:old", "gemini:new"]);
+        let registry = ProviderRegistry::from_chain(vec![removed.clone(), fallback.clone()], None)
+            .with_health(health);
+
+        registry.translate(sample_translate_req()).await.unwrap();
+        let res = registry.translate(sample_translate_req()).await.unwrap();
+
+        assert_eq!(res.main_translation, "fallback");
+        assert_eq!(removed.call_count(), 1, "a removed model must not be retried right away");
+        assert_eq!(fallback.call_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn skipped_model_is_still_the_last_resort() {
+        let primary = Arc::new(StubProvider::ok("primary"));
+        let broken = Arc::new(StubProvider::failing("fallback"));
+        let (health, tracker) = health_for(&["a:primary", "b:fallback"]);
+        tracker.record_failure("a:primary", HealthFailure::Gone, std::time::Instant::now());
+        let registry = ProviderRegistry::from_chain(vec![primary.clone(), broken.clone()], None)
+            .with_health(health);
+
+        let res = registry.translate(sample_translate_req()).await.unwrap();
+
+        assert_eq!(res.main_translation, "primary");
+        assert_eq!(broken.call_count(), 1, "healthy models go first");
+        assert!(!tracker.is_cooling("a:primary", std::time::Instant::now()), "success heals the model");
+    }
+
+    #[tokio::test]
+    async fn missing_capability_does_not_mark_the_model_broken() {
+        let (health, tracker) = health_for(&["a:primary"]);
+        let registry = ProviderRegistry::from_chain(vec![Arc::new(StubProvider::ok("primary"))], None)
+            .with_health(health);
+        let err = AppError::Validation("cannot transcribe speech".to_string());
+        assert_eq!(health_failure(&err, classify_failure(&err)), None);
+        registry.translate(sample_translate_req()).await.unwrap();
+        assert!(!tracker.is_cooling("a:primary", std::time::Instant::now()));
+    }
+
     #[test]
     fn classifies_provider_failures() {
         let kind = |msg: &str| classify_failure(&AppError::Provider(msg.to_string()));
@@ -3824,6 +3950,9 @@ mod tests {
         assert_eq!(kind("429 Too Many Requests"), FailureKind::RateLimit);
         assert_eq!(kind("Gemini 429 RESOURCE_EXHAUSTED: quota exceeded"), FailureKind::RateLimit);
         assert_eq!(kind("gemini did not answer within 30s"), FailureKind::Other);
+        assert_eq!(kind("OpenAI error 404: The model `gpt-old` does not exist"), FailureKind::Gone);
+        assert_eq!(kind("Groq 400: The model `llama-x` has been decommissioned"), FailureKind::Gone);
+        assert_eq!(kind("OpenRouter 404: No endpoints found for x:free"), FailureKind::Gone);
         assert_eq!(kind("Gemini 403: User location is not supported"), FailureKind::Other);
         assert_eq!(
             kind("Input of 34012 tokens exceeds the 14290 limit"),

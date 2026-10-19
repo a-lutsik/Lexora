@@ -1,7 +1,8 @@
 // ============================================================
 // LEXORA — PopupApp Component
-// Routes 1–2 word selections to the dictionary card and
-// sentences to the inline AI assistant widget.
+// Routes 1–2 word selections to the dictionary card, sentences
+// to the inline AI assistant widget and the voice hotkey to the
+// speech translator.
 // ============================================================
 
 import { useCallback, useEffect, useState, useRef } from 'react';
@@ -12,10 +13,12 @@ import {
   classifyPopupText,
   POPUP_ASSISTANT_SIZE,
   POPUP_DICTIONARY_SIZE,
+  POPUP_VOICE_SIZE,
   type PopupViewMode,
 } from '../lib/inlineAssistant';
 import { InlineAssistantWidget } from './InlineAssistantWidget';
 import { PopupTranslator } from './PopupTranslator';
+import { VoiceTranslator } from './VoiceTranslator';
 import './popup.css';
 
 type AppliedPopupText = {
@@ -26,6 +29,10 @@ type AppliedPopupText = {
 function resizeForView(view: PopupViewMode): void {
   if (view === 'assistant') {
     void ipc.popup.resize(POPUP_ASSISTANT_SIZE.width, POPUP_ASSISTANT_SIZE.height, true);
+    return;
+  }
+  if (view === 'voice') {
+    void ipc.popup.resize(POPUP_VOICE_SIZE.width, POPUP_VOICE_SIZE.height, false);
     return;
   }
   void ipc.popup.resize(POPUP_DICTIONARY_SIZE.width, POPUP_DICTIONARY_SIZE.height, false);
@@ -56,6 +63,7 @@ export function PopupApp() {
       }
       return;
     }
+    // Voice markers start with U+0001, which trim() keeps.
     const nextView = classifyPopupText(text);
     const last = lastAppliedRef.current;
     if (
@@ -113,7 +121,10 @@ export function PopupApp() {
 
   return (
     <div className="popup-container">
-      {view === 'assistant' ? (
+      {view === 'voice' ? (
+        // A new marker per hotkey press remounts the recorder for a fresh take.
+        <VoiceTranslator key={assistantText} />
+      ) : view === 'assistant' ? (
         <InlineAssistantWidget
           sourceText={assistantText}
           onSwitchToDictionary={openDictionary}

@@ -147,6 +147,9 @@ pub static CATALOG: &[ModelSpec] = &[
     spec("groq", "llama-3.3-70b-versatile", "Llama 3.3 70B", TEXT_ONLY, Tier::FreeTier, ModelStatus::Stable),
     spec("groq", "whisper-large-v3-turbo", "Whisper Large v3 Turbo", &[Transcription], Tier::FreeTier, ModelStatus::Stable),
     spec("groq", "qwen/qwen3.6-27b", "Qwen 3.6 27B", TEXT_ONLY, Tier::FreeTier, ModelStatus::Retired),
+    // ── DeepSeek ───────────────────────────────────────────
+    spec("deepseek", "deepseek-chat", "DeepSeek Chat", TEXT_ONLY, Tier::Paid, ModelStatus::Stable),
+    spec("deepseek", "deepseek-reasoner", "DeepSeek Reasoner", TEXT_ONLY, Tier::Paid, ModelStatus::Stable),
     // ── Cloudflare Workers AI ──────────────────────────────
     spec("cloudflare", "@cf/meta/llama-3.1-8b-instruct", "Llama 3.1 8B", TEXT_ONLY, Tier::FreeTier, ModelStatus::Stable),
     spec("cloudflare", "@cf/black-forest-labs/flux-1-schnell", "FLUX.1 Schnell", &[ImageGeneration], Tier::FreeTier, ModelStatus::Stable),

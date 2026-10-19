@@ -1274,7 +1274,8 @@ mod macos {
         );
         ns_window.setHidesOnDeactivate(false);
         ns_window.setCanHide(false);
-        ns_window.setLevel(NSNormalWindowLevel);
+        // Уровень окна не трогаем: его задаёт apply_pin_level (при создании —
+        // незакреплённый), иначе каждый повторный показ снимал бы закрепление.
         Ok(())
     }
 

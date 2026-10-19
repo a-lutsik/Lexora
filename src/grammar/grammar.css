@@ -71,14 +71,18 @@ html.grammar-window #root {
 }
 
 .grammar-badge-dot.is-clean {
-  background: var(--color-accent-solid);
+  overflow: hidden;
+  background: var(--color-bg-primary);
   border-color: var(--color-accent-solid);
-  color: var(--color-text-primary);
 }
 
+/* The icon is a rounded tile: scaled up a little so the circle crops
+   its transparent corners. */
 .grammar-badge-logo {
-  width: var(--space-4);
-  height: var(--space-4);
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scale(1.18);
 }
 
 .grammar-badge-dot.is-error {

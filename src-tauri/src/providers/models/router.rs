@@ -6,6 +6,7 @@
 // ============================================================
 
 use super::catalog::{find, support, ModelStatus, Support};
+use super::health::ChainHealth;
 use super::packages::RouteTarget;
 use super::roles::{ModelRole, RoleGroup};
 use super::usage::{ChainUsage, UsageSink};
@@ -23,7 +24,14 @@ pub fn engine_supports(provider: &str, role: ModelRole) -> bool {
     match role {
         ModelRole::TextFast | ModelRole::TextQuality => matches!(
             provider,
-            "gemini" | "openai" | "anthropic" | "openrouter" | "groq" | "cloudflare" | "custom"
+            "gemini"
+                | "openai"
+                | "anthropic"
+                | "openrouter"
+                | "groq"
+                | "deepseek"
+                | "cloudflare"
+                | "custom"
         ),
         ModelRole::Vision => {
             matches!(provider, "gemini" | "openai" | "anthropic" | "openrouter" | "custom")
@@ -41,7 +49,7 @@ pub fn engine_supports(provider: &str, role: ModelRole) -> bool {
 pub fn needs_key(provider: &str) -> bool {
     matches!(
         provider,
-        "gemini" | "openai" | "anthropic" | "openrouter" | "groq" | "cloudflare"
+        "gemini" | "openai" | "anthropic" | "openrouter" | "groq" | "deepseek" | "cloudflare"
     )
 }
 
@@ -113,12 +121,13 @@ pub fn registry_for_role(
     if chain.is_empty() {
         return Err(last_err.unwrap_or_else(|| AppError::ai_not_connected(role.label_en())));
     }
-    Ok(
-        ProviderRegistry::from_chain(chain, Some(role.attempt_timeout())).with_usage(ChainUsage {
+    let health = ChainHealth::for_targets(&targets);
+    Ok(ProviderRegistry::from_chain(chain, Some(role.attempt_timeout()))
+        .with_usage(ChainUsage {
             sink: UsageSink::new(pool.clone(), role),
             targets,
-        }),
-    )
+        })
+        .with_health(health))
 }
 
 /// Primary usable target of a role for engines outside `AIProvider` (TTS, live voice).
@@ -165,6 +174,7 @@ fn provider_title(provider: &str) -> &str {
         "anthropic" => "Anthropic",
         "openrouter" => "OpenRouter",
         "groq" => "Groq",
+        "deepseek" => "DeepSeek",
         "cloudflare" => "Cloudflare",
         "custom" => "локальной модели",
         "system" => "системного голоса",
@@ -332,6 +342,18 @@ mod tests {
     fn openai_realtime_is_reported_as_unsupported_for_now() {
         let status = role_status(&routes(PackageId::Openai), ModelRole::RealtimeVoice, false, &|_| true);
         assert_eq!(status.state, RoleState::Unsupported);
+    }
+
+    #[test]
+    fn deepseek_can_serve_text_but_not_voice() {
+        let mut map = RoleRoutes::new();
+        map.insert(ModelRole::TextFast, vec![RouteTarget::new("deepseek", "deepseek-chat")]);
+        map.insert(ModelRole::SpeechToText, vec![RouteTarget::new("deepseek", "deepseek-chat")]);
+        let text = role_status(&map, ModelRole::TextFast, false, &|p| p == "deepseek");
+        assert_eq!(text.state, RoleState::Ready);
+        assert!(usable_targets(&map, ModelRole::SpeechToText).is_empty());
+        let no_key = role_status(&map, ModelRole::TextFast, false, &|_| false);
+        assert_eq!(no_key.message, "Нужен ключ DeepSeek");
     }
 
     #[test]

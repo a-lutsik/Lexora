@@ -58,6 +58,7 @@ html body {
   flex-direction: column;
   justify-content: space-between;
   position: relative;
+  cursor: move;
   overflow: hidden;
   animation: sticker-enter var(--transition-slow) both;
   transition:
@@ -92,7 +93,6 @@ html body {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  cursor: move;
 }
 
 .sticker-word-block {
@@ -286,6 +286,7 @@ html body {
   -webkit-backdrop-filter: var(--glass-blur);
   padding: var(--space-2) var(--space-3);
   overflow: auto;
+  cursor: default;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);

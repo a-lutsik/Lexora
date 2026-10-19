@@ -6,7 +6,8 @@ import { useI18n } from "../../hooks/useI18n";
 // Progressive disclosure:
 //  1. readiness of Текст / Картинки / Голос / Иллюстрации + «Проверить»;
 //  2. one package = one key (Gemini recommended);
-//  3. «Расширенные» — a model per role; mixing providers only here.
+//  3. «Продвинутый режим» — a separate switch: a model per role,
+//     mixing providers (translation via DeepSeek, voice via Gemini).
 // ============================================================
 
 import { useState } from 'react';
@@ -15,6 +16,7 @@ import {
   useApplyModelPackage,
   useModelCatalog,
   useModelRoutes,
+  useSetAdvancedModels,
   useTestModelRole,
 } from '../../hooks/useModelRoutes';
 import {
@@ -87,6 +89,7 @@ export function AiModelsPanel({
   const { data: catalog = [] } = useModelCatalog();
   const applyPackage = useApplyModelPackage();
   const testRole = useTestModelRole();
+  const setAdvanced = useSetAdvancedModels();
 
   const [selected, setSelected] = useState<ApplicablePackageId | null>(null);
   const [keyDraft, setKeyDraft] = useState('');
@@ -96,7 +99,8 @@ export function AiModelsPanel({
   const [applyError, setApplyError] = useState<string | null>(null);
   const [appliedNote, setAppliedNote] = useState<string | null>(null);
   const [tests, setTests] = useState<Partial<Record<ModelRole, RoleTest>>>({});
-  const [advancedToggle, setAdvancedToggle] = useState<boolean | null>(null);
+  const [advancedDraft, setAdvancedDraft] = useState<boolean | null>(null);
+  const [advancedError, setAdvancedError] = useState<string | null>(null);
 
   const current = routes?.package ?? null;
   const statuses: RoleStatus[] = routes?.roles ?? [];
@@ -105,7 +109,7 @@ export function AiModelsPanel({
     selected ?? (current && current !== 'custom' ? current : 'gemini');
   const meta = packageMeta(active) ?? MODEL_PACKAGES[0];
   const isCurrent = current === active;
-  const advancedOpen = advancedToggle ?? current === 'custom';
+  const advancedOn = advancedDraft ?? settings?.advancedModels ?? current === 'custom';
 
   if (!meta) return null;
 
@@ -163,6 +167,18 @@ export function AiModelsPanel({
       setAppliedNote(tUi("Пакет «{value1}» включён", { value1: meta.title }));
     } catch (err) {
       setApplyError(formatIpcError(err, tUi("Не удалось включить пакет")));
+    }
+  };
+
+  const toggleAdvanced = async (enabled: boolean) => {
+    setAdvancedError(null);
+    setAdvancedDraft(enabled);
+    try {
+      const saved = await setAdvanced.mutateAsync(enabled);
+      onSettingsChanged(saved);
+    } catch (err) {
+      setAdvancedDraft(null);
+      setAdvancedError(formatIpcError(err, tUi("Не удалось переключить продвинутый режим")));
     }
   };
 
@@ -278,7 +294,7 @@ export function AiModelsPanel({
 
       <fieldset className="ai-packages">
         <legend className="settings-label text-secondary text-xs font-medium">{tUi("ПАКЕТ МОДЕЛЕЙ")}</legend>
-        <p className="settings-field-hint text-muted text-xs">{tUi("Один ключ закрывает все роли пакета. Модели для отдельных ролей — в «Расширенных».")}</p>
+        <p className="settings-field-hint text-muted text-xs">{tUi("Один ключ закрывает все роли пакета. Свою модель для каждой функции можно выбрать в продвинутом режиме ниже.")}</p>
         <div className="ai-package-grid">
           {MODEL_PACKAGES.map((p) => (
             <label
@@ -369,7 +385,7 @@ export function AiModelsPanel({
                 placeholder={DEFAULT_OLLAMA_URL}
                 onChange={(e) => setUrlDraft(e.target.value)}
               />
-              <p className="settings-field-hint text-muted text-xs">{tUi("Модель по умолчанию — gemma4. Другую можно выбрать в «Расширенных».")}</p>
+              <p className="settings-field-hint text-muted text-xs">{tUi("Модель по умолчанию — gemma4. Другую можно выбрать в продвинутом режиме.")}</p>
             </div>
           )}
 
@@ -416,20 +432,30 @@ export function AiModelsPanel({
       </fieldset>
 
       <div className="ai-advanced">
-        <button
-          type="button"
-          className="btn btn--ghost btn--md ai-advanced-toggle"
-          onClick={() => setAdvancedToggle(!advancedOpen)}
-          aria-expanded={advancedOpen}
-          aria-controls="ai-advanced-body"
-        >
-          <span className="btn-content">
-            {advancedOpen ? tUi("Скрыть расширенные") : tUi("Расширенные: модель для каждой роли")}
-          </span>
-        </button>
-        {advancedOpen && (
+        <label className="ai-advanced-switch">
+          <input
+            type="checkbox"
+            role="switch"
+            className="settings-checkbox"
+            checked={advancedOn}
+            disabled={setAdvanced.isPending}
+            aria-controls="ai-advanced-body"
+            onChange={(e) => void toggleAdvanced(e.target.checked)}
+          />
+          <span className="ai-advanced-switch-title">{tUi("Продвинутый режим: своя модель для каждой функции")}</span>
+          <span className="ai-advanced-switch-desc text-muted text-xs">{tUi("Например, перевод через DeepSeek, а голос через Gemini. Каждому провайдеру нужен свой ключ и отдельная оплата.")}</span>
+        </label>
+        {advancedError && (
+          <p className="ai-notice ai-notice--error" role="alert">
+            {advancedError}
+          </p>
+        )}
+        {!advancedOn && current === 'custom' && (
+          <p className="ai-notice" role="status">{tUi("Сейчас работают модели, выбранные вручную. Чтобы вернуться к одному провайдеру, включите пакет выше.")}</p>
+        )}
+        {advancedOn && (
           <div id="ai-advanced-body" className="ai-advanced-body">
-            <p className="settings-field-hint text-muted text-xs">{tUi("Здесь можно смешивать провайдеров — например, текст через Claude, а голос через Gemini. Каждому провайдеру нужен свой ключ и отдельная оплата. Любое изменение переводит AI в режим «Свои модели».")}</p>
+            <p className="settings-field-hint text-muted text-xs">{tUi("Основная модель отвечает первой; если она перестала работать, запрос автоматически уходит запасной. Любое изменение переводит AI в режим «Свои модели».")}</p>
             <div className="ai-route-list">
               {MODEL_ROLES.map((role) => {
                 const status = statuses.find((s) => s.role === role);
@@ -438,6 +464,7 @@ export function AiModelsPanel({
                     key={role}
                     status={status}
                     catalog={catalog}
+                    keysStatus={keysStatus}
                     onSaved={onSettingsChanged}
                   />
                 ) : null;

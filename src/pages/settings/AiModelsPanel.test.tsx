@@ -48,6 +48,7 @@ const CATALOG: ModelSpec[] = [
   spec('gemini', 'gemini-3.8-flash', 'Gemini 3.8 Flash', ['text', 'vision', 'audio_input', 'transcription']),
   spec('gemini', 'gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite', ['text', 'vision', 'audio_input', 'transcription']),
   spec('anthropic', 'claude-sonnet-5-5', 'Claude Sonnet 5.5', ['text', 'vision'], 'paid'),
+  spec('deepseek', 'deepseek-chat', 'DeepSeek Chat', ['text'], 'paid'),
   spec('gemini', 'gemini-3.8-live', 'Gemini 3.8 Live', ['realtime_voice']),
   spec('gemini', 'gemini-3.5-live-translate-preview', 'Gemini 3.5 Live Translate', ['live_translation']),
   spec('gemini', 'gemini-3.8-flash-lite-tts', 'Gemini 3.8 Flash-Lite TTS', ['speech']),
@@ -152,6 +153,17 @@ beforeEach(() => {
       currentRoutes = routes('ready', { [input.role]: input.targets }, 'custom');
       return { routes: currentRoutes, settings: { ...SETTINGS, modelPackage: 'custom' } };
     }
+    if (cmd === 'list_provider_models') {
+      return args?.provider === 'gemini'
+        ? [
+            { id: 'gemini-4-flash-preview', label: 'Gemini 4 Flash Preview', capabilities: ['text', 'vision'] },
+            { id: 'gemini-4-flash-tts', label: null, capabilities: ['speech'] },
+          ]
+        : [];
+    }
+    if (cmd === 'set_advanced_models') {
+      return { ...SETTINGS, advancedModels: args?.enabled === true };
+    }
     if (cmd === 'test_model_role') {
       const role = args?.role as ModelRole;
       return role === 'text_fast'
@@ -251,7 +263,7 @@ describe('AiModelsPanel', () => {
     await screen.findByText('Пакет: Google Gemini');
     expect(screen.queryByRole('group', { name: 'Качественный текст' })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Расширенные: модель для каждой роли' }));
+    await user.click(screen.getByRole('switch', { name: /Продвинутый режим/ }));
     const editor = await screen.findByRole('group', { name: 'Качественный текст' });
     await user.click(within(editor).getByRole('combobox', { name: 'Основная модель: Качественный текст' }));
     await user.click(within(editor).getByRole('option', { name: /Anthropic · Claude Sonnet 5\.5/ }));
@@ -274,17 +286,71 @@ describe('AiModelsPanel', () => {
     expect(screen.getByText('нет ключа')).toBeInTheDocument();
   });
 
+  it('saves the advanced switch and offers DeepSeek for translation', async () => {
+    currentRoutes = routes('ready');
+    const user = userEvent.setup();
+    const onSettingsChanged = renderPanel({ gemini: true });
+    const toggle = await screen.findByRole('switch', { name: /Продвинутый режим/ });
+    expect(toggle).not.toBeChecked();
+
+    await user.click(toggle);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('set_advanced_models', { enabled: true }));
+    expect(onSettingsChanged).toHaveBeenCalledWith(expect.objectContaining({ advancedModels: true }));
+
+    const editor = await screen.findByRole('group', { name: 'Быстрый перевод' });
+    await user.click(within(editor).getByRole('combobox', { name: 'Основная модель: Быстрый перевод' }));
+    expect(within(editor).getByRole('option', { name: /DeepSeek · DeepSeek Chat/ })).toBeInTheDocument();
+  });
+
+  it('keeps manual models but hides their editors when the switch is off', async () => {
+    currentRoutes = routes('ready', {}, 'custom');
+    renderWithQueryClient(
+      <AiModelsPanel
+        settings={{ ...SETTINGS, modelPackage: 'custom', advancedModels: false }}
+        keysStatus={{ gemini: true }}
+        onOpenWizard={vi.fn()}
+        onSettingsChanged={vi.fn()}
+      />,
+    );
+    expect(await screen.findByRole('switch', { name: /Продвинутый режим/ })).not.toBeChecked();
+    expect(await screen.findByText(/Сейчас работают модели, выбранные вручную/)).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Быстрый перевод' })).not.toBeInTheDocument();
+  });
+
+  it('asks for a key before listing models of a keyed provider', async () => {
+    currentRoutes = routes('ready');
+    const user = userEvent.setup();
+    renderPanel({ gemini: true });
+    await user.click(await screen.findByRole('switch', { name: /Продвинутый режим/ }));
+
+    const editor = await screen.findByRole('group', { name: 'Быстрый перевод' });
+    await user.click(within(editor).getByRole('combobox', { name: 'Запасная модель: Быстрый перевод' }));
+    await user.click(within(editor).getByRole('option', { name: 'Любая модель провайдера…' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Провайдер (запасная): Быстрый перевод' }));
+    await user.click(within(editor).getByRole('option', { name: 'OpenAI' }));
+
+    expect(
+      within(editor).getByText('Сохраните ключ OpenAI, чтобы подтянуть список его моделей'),
+    ).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith('list_provider_models', { provider: 'openai' });
+  });
+
   it('accepts a model id that is not in the catalog', async () => {
     currentRoutes = routes('ready');
     const user = userEvent.setup();
     renderPanel({ gemini: true });
-    await user.click(await screen.findByRole('button', { name: 'Расширенные: модель для каждой роли' }));
+    await user.click(await screen.findByRole('switch', { name: /Продвинутый режим/ }));
 
     const editor = await screen.findByRole('group', { name: 'Перевод картинок' });
     await user.click(within(editor).getByRole('combobox', { name: 'Запасная модель: Перевод картинок' }));
-    await user.click(within(editor).getByRole('option', { name: 'Другая модель…' }));
+    await user.click(within(editor).getByRole('option', { name: 'Любая модель провайдера…' }));
     const save = within(editor).getByRole('button', { name: 'Сохранить модель: Перевод картинок' });
     expect(save).toBeDisabled();
+    // The provider's own list is offered, narrowed to models that can see images.
+    expect(await within(editor).findByText('Доступно моделей: 1 — начните вводить название')).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith('list_provider_models', { provider: 'gemini' });
+    const suggestions = editor.querySelectorAll('datalist option');
+    expect(Array.from(suggestions, (o) => o.getAttribute('value'))).toEqual(['gemini-4-flash-preview']);
 
     await user.type(within(editor).getByLabelText('ID модели (запасная): Перевод картинок'), 'gemini-4-flash-preview');
     await user.click(save);

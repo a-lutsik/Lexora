@@ -24,10 +24,13 @@ import {
 } from '../../lib/modelRouting';
 import { formatIpcError } from '../../lib/utils';
 import type { AppSettings, ModelSpec, RoleStatus, RouteTarget } from '../../lib/types';
+import { RemoteModelInput } from './RemoteModelInput';
 
 type RoleRouteEditorProps = {
   status: RoleStatus;
   catalog: ModelSpec[];
+  /** Saved keys: a keyed provider lists its models only with a key. */
+  keysStatus: Record<string, boolean>;
   onSaved: (settings: AppSettings) => void;
 };
 
@@ -76,7 +79,7 @@ function modelOptions(catalog: ModelSpec[], status: RoleStatus, locale: string):
   return options;
 }
 
-export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorProps) {
+export function RoleRouteEditor({ status, catalog, keysStatus, onSaved }: RoleRouteEditorProps) {
   const { t: tUi, locale } = useI18n();
   const setRoute = useSetRoleRoute();
   const savedKey = chainKeyOf(status.chain);
@@ -134,7 +137,7 @@ export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorPro
     const slotOptions: SelectOption[] = [
       { value: NONE, label: noneLabel },
       ...options,
-      { value: OTHER, label: tUi("Другая модель…") },
+      { value: OTHER, label: tUi("Любая модель провайдера…") },
     ];
     const choose = (value: string) => {
       setJustSaved(false);
@@ -168,17 +171,15 @@ export function RoleRouteEditor({ status, catalog, onSaved }: RoleRouteEditorPro
               onChange={(provider) => setSlot({ ...slot, provider })}
               ariaLabel={tUi("Провайдер ({value1}): {roleLabel}", { value1: label.toLowerCase(), roleLabel: roleLabel })}
             />
-            <input dir="auto"
-              type="text"
-              className="settings-input settings-input--mono"
+            <RemoteModelInput
+              provider={slot.provider}
+              role={status.role}
               value={slot.model}
-              placeholder={tUi("ID модели, например qwen3:8b")}
-              autoComplete="off"
-              spellCheck={false}
-              aria-label={tUi("ID модели ({value1}): {roleLabel}", { value1: label.toLowerCase(), roleLabel: roleLabel })}
-              onChange={(e) => {
+              keysStatus={keysStatus}
+              ariaLabel={tUi("ID модели ({value1}): {roleLabel}", { value1: label.toLowerCase(), roleLabel: roleLabel })}
+              onChange={(model) => {
                 setJustSaved(false);
-                setSlot({ ...slot, model: e.target.value });
+                setSlot({ ...slot, model });
               }}
             />
           </div>

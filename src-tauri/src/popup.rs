@@ -7,6 +7,7 @@
 #[cfg(not(target_os = "macos"))]
 use crate::display::{anchor_near_cursor_physical, LogicalBounds};
 use crate::error::AppError;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
@@ -35,6 +36,8 @@ const ASSISTANT_MIN_WIDTH: f64 = 680.0;
 const ASSISTANT_MIN_HEIGHT: f64 = 320.0;
 const ASSISTANT_MAX_WIDTH: f64 = 1440.0; // 2× default
 const ASSISTANT_MAX_HEIGHT: f64 = 840.0;
+const VOICE_WIDTH: f64 = 420.0;
+const VOICE_HEIGHT: f64 = 380.0;
 const MIN_POPUP_WIDTH: f64 = 320.0;
 const MAX_POPUP_WIDTH: f64 = ASSISTANT_MAX_WIDTH;
 const MIN_POPUP_HEIGHT: f64 = 240.0;
@@ -49,6 +52,25 @@ const POPUP_MARGIN: f64 = 12.0;
 
 /// Событие с захваченным выделенным текстом для popup-фронтенда.
 pub const POPUP_TEXT_EVENT: &str = "lexora:popup-text";
+
+/// Префикс pending-текста, который открывает popup в голосовом режиме.
+/// U+0001 не встречается в выделенном пользователем тексте. Должен совпадать с
+/// `VOICE_POPUP_PREFIX` в `src/lib/inlineAssistant.ts`.
+pub const VOICE_POPUP_PREFIX: &str = "\u{1}lexora:voice:";
+
+/// Счётчик голосовых сессий: каждый хоткей даёт новый маркер, чтобы фронт
+/// начал запись заново, а ретраи одного emit отбрасывались как дубли.
+static VOICE_SESSION_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Маркер новой голосовой сессии для `show_popup_anchored`.
+pub fn next_voice_popup_marker() -> String {
+    let seq = VOICE_SESSION_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    format!("{VOICE_POPUP_PREFIX}{seq}")
+}
+
+pub(crate) fn is_voice_popup_text(text: &str) -> bool {
+    text.starts_with(VOICE_POPUP_PREFIX)
+}
 
 /// Хранилище отложенного текста для окна перевода (гарантирует доставку даже до готовности React).
 #[derive(Default)]
@@ -260,7 +282,9 @@ pub(crate) fn is_inline_assistant_text(text: &str) -> bool {
 }
 
 fn popup_size_for_text(text: Option<&str>) -> (f64, f64) {
-    if text.is_some_and(is_inline_assistant_text) {
+    if text.is_some_and(is_voice_popup_text) {
+        (VOICE_WIDTH, VOICE_HEIGHT)
+    } else if text.is_some_and(is_inline_assistant_text) {
         (ASSISTANT_WIDTH, ASSISTANT_HEIGHT)
     } else {
         (DICTIONARY_WIDTH, DICTIONARY_HEIGHT)
@@ -902,8 +926,23 @@ mod tests {
             popup_size_for_text(Some("one two three four")),
             (ASSISTANT_WIDTH, ASSISTANT_HEIGHT)
         );
+        assert_eq!(
+            popup_size_for_text(Some(&next_voice_popup_marker())),
+            (VOICE_WIDTH, VOICE_HEIGHT)
+        );
         assert_eq!(ASSISTANT_MAX_WIDTH, ASSISTANT_WIDTH * 2.0);
         assert_eq!(ASSISTANT_MAX_HEIGHT, ASSISTANT_HEIGHT * 2.0);
+    }
+
+    #[test]
+    fn voice_markers_are_unique_and_never_classified_as_text() {
+        let first = next_voice_popup_marker();
+        let second = next_voice_popup_marker();
+        assert_ne!(first, second);
+        assert!(is_voice_popup_text(&first));
+        assert!(!is_inline_assistant_text(&first));
+        assert!(!is_voice_popup_text("lexora:voice:1"));
+        assert!(!is_voice_popup_text("hello world"));
     }
 
     #[test]

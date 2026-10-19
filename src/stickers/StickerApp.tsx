@@ -278,13 +278,13 @@ export function StickerApp() {
     if (!showEmptyTopic) return null;
     return (
       <div className="sticker-container">
-        <div className="sticker-card sticker-empty-topic">
-          <p role="status" data-tauri-drag-region>{tUi('No words in selected sources. Choose other categories or add words in Vocabulary.')}</p>
+        <div className="sticker-card sticker-empty-topic" data-tauri-drag-region="deep">
+          <p role="status">{tUi('No words in selected sources. Choose other categories or add words in Vocabulary.')}</p>
           <div className="sticker-empty-actions">
             <button type="button" className="sticker-source-empty-button" onClick={() => setShowFilter(!showFilter)}>{tUi('Sources')}</button>
             <button type="button" className="sticker-source-empty-button" onClick={handleClose} aria-label={tUi('Close sticker')}><CloseIcon /></button>
           </div>
-          {showFilter && <div className="sticker-filter-panel">
+          {showFilter && <div className="sticker-filter-panel" data-tauri-drag-region="false">
             <button type="button" className="sticker-source-empty-button" onClick={() => setShowFilter(false)}>{tUi('Close source filter')}</button>
             <StickerSourcePicker sources={stickerSources} categories={categories} collections={collections} onChange={handleSourcesChange} compact />
           </div>}
@@ -295,9 +295,11 @@ export function StickerApp() {
 
   return (
     <div className="sticker-container">
-      <div className={cardStateClass}>
+      {/* Стикер тянется за любую точку карточки: кнопки drag-скрипт Tauri
+          пропускает сам, а панель фильтра со скроллом исключена явно. */}
+      <div className={cardStateClass} data-tauri-drag-region="deep">
         {showFilter && (
-          <div className="sticker-filter-panel">
+          <div className="sticker-filter-panel" data-tauri-drag-region="false">
             <div className="sticker-filter-panel-header">
               <span>{tUi("Sources")}</span>
               <button
@@ -319,8 +321,8 @@ export function StickerApp() {
           </div>
         )}
 
-        <div className="sticker-top-row" data-tauri-drag-region>
-          <div className="sticker-word-block" data-tauri-drag-region>
+        <div className="sticker-top-row">
+          <div className="sticker-word-block">
             <div className="sticker-word-wrap" aria-live="polite">
               <span className="sticker-word">{entry.lexeme.text}</span>
             </div>

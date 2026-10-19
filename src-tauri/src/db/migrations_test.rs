@@ -222,3 +222,35 @@ fn v030_adds_collocation_cache_and_check_table() -> Result<(), AppError> {
     assert_eq!(marker, 1);
     Ok(())
 }
+
+#[test]
+fn v032_adds_advanced_models_switch_off_by_default() -> Result<(), AppError> {
+    let pool = create_pool_test_memory()?;
+    run_migrations(&pool)?;
+    run_migrations(&pool)?;
+
+    let conn = pool.get()?;
+    let advanced: i64 = conn.query_row(
+        "SELECT advanced_models FROM user_settings WHERE id = 1",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(advanced, 0);
+    Ok(())
+}
+
+#[test]
+fn v031_adds_voice_translate_hotkey_with_default() -> Result<(), AppError> {
+    let pool = create_pool_test_memory()?;
+    run_migrations(&pool)?;
+    run_migrations(&pool)?;
+
+    let conn = pool.get()?;
+    let hotkey: String = conn.query_row(
+        "SELECT hotkey_voice_translate FROM user_settings WHERE id = 1",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(hotkey, crate::hotkeys::VOICE_TRANSLATE_SHORTCUT);
+    Ok(())
+}

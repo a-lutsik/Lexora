@@ -1,7 +1,7 @@
 // ============================================================
 // LEXORA — Global Shortcuts & Selection Capture
 // Глобальные хоткеи (настраиваются в Settings, см. миграцию V004):
-// перевод выделения (popup) и переключение стикеров.
+// перевод выделения (popup), переключение стикеров и голосовой перевод.
 // Захват: AXSelectedText, затем Cmd+C через CGEvent после
 // отпускания модификаторов (не osascript — Shift ещё зажат).
 // Если выделения нет — открывается пустой переводчик, без clipboard.
@@ -22,6 +22,9 @@ pub const TRANSLATE_SHORTCUT: &str = "CmdOrCtrl+Shift+L";
 /// Хоткей переключения стикеров по умолчанию.
 pub const STICKERS_SHORTCUT: &str = "CmdOrCtrl+Shift+S";
 
+/// Хоткей голосового перевода (popup сразу слушает микрофон) по умолчанию.
+pub const VOICE_TRANSLATE_SHORTCUT: &str = "CmdOrCtrl+Shift+Space";
+
 /// Максимальная длина захваченного текста (по символам, не по байтам).
 #[cfg(any(target_os = "macos", target_os = "windows", test))]
 const MAX_CAPTURE_CHARS: usize = 8000;
@@ -33,6 +36,7 @@ const FOCUS_RETURN_DELAY: Duration = Duration::from_millis(90);
 pub enum HotkeyAction {
     TranslateSelection,
     ToggleStickers,
+    VoiceTranslate,
 }
 
 /// Текущие привязки «хоткей → действие» (managed state). Обновляются
@@ -53,22 +57,50 @@ impl HotkeyState {
             .map(|(_, action)| *action)
     }
 
-    fn set_bindings(&self, translate: Shortcut, stickers: Shortcut) {
+    fn set_bindings(&self, shortcuts: ValidShortcuts) {
         if let Ok(mut bindings) = self.bindings.write() {
             *bindings = vec![
-                (translate, HotkeyAction::TranslateSelection),
-                (stickers, HotkeyAction::ToggleStickers),
+                (shortcuts.translate, HotkeyAction::TranslateSelection),
+                (shortcuts.stickers, HotkeyAction::ToggleStickers),
+                (shortcuts.voice, HotkeyAction::VoiceTranslate),
             ];
         }
     }
 }
 
-/// Текущие строки хоткеев из настроек: (translate, stickers).
-pub fn current_shortcuts(settings: &AppSettings) -> (String, String) {
-    (
-        settings.hotkey_translate.clone(),
-        settings.hotkey_stickers.clone(),
-    )
+/// Строки хоткеев в формате плагина (как хранятся в настройках).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShortcutStrings {
+    pub translate: String,
+    pub stickers: String,
+    pub voice: String,
+}
+
+impl Default for ShortcutStrings {
+    fn default() -> Self {
+        Self {
+            translate: TRANSLATE_SHORTCUT.to_string(),
+            stickers: STICKERS_SHORTCUT.to_string(),
+            voice: VOICE_TRANSLATE_SHORTCUT.to_string(),
+        }
+    }
+}
+
+/// Распарсенные и попарно различные хоткеи.
+#[derive(Debug, Clone, Copy)]
+pub struct ValidShortcuts {
+    pub translate: Shortcut,
+    pub stickers: Shortcut,
+    pub voice: Shortcut,
+}
+
+/// Текущие строки хоткеев из настроек.
+pub fn current_shortcuts(settings: &AppSettings) -> ShortcutStrings {
+    ShortcutStrings {
+        translate: settings.hotkey_translate.clone(),
+        stickers: settings.hotkey_stickers.clone(),
+        voice: settings.hotkey_voice_translate.clone(),
+    }
 }
 
 /// Распарсить строку хоткея в Shortcut; невалидный формат — AppError::Validation.
@@ -78,44 +110,52 @@ fn parse_shortcut(value: &str, field: &str) -> Result<Shortcut, AppError> {
         .map_err(|e| AppError::Validation(format!("Invalid hotkey {field} ('{value}'): {e}")))
 }
 
-/// Проверить пару хоткеев: оба должны парситься и не совпадать.
+/// Проверить хоткеи: все должны парситься и попарно не совпадать.
 /// Вызывается ДО сохранения настроек — невалидные значения не пишутся в БД.
-pub fn validate_shortcuts(
-    translate: &str,
-    stickers: &str,
-) -> Result<(Shortcut, Shortcut), AppError> {
-    let translate = parse_shortcut(translate, "hotkeyTranslate")?;
-    let stickers = parse_shortcut(stickers, "hotkeyStickers")?;
-    if translate == stickers {
-        return Err(AppError::Validation(
-            "hotkeyTranslate and hotkeyStickers must be different".to_string(),
-        ));
+pub fn validate_shortcuts(shortcuts: &ShortcutStrings) -> Result<ValidShortcuts, AppError> {
+    let parsed = [
+        ("hotkeyTranslate", parse_shortcut(&shortcuts.translate, "hotkeyTranslate")?),
+        ("hotkeyStickers", parse_shortcut(&shortcuts.stickers, "hotkeyStickers")?),
+        ("hotkeyVoiceTranslate", parse_shortcut(&shortcuts.voice, "hotkeyVoiceTranslate")?),
+    ];
+    for (i, (field_a, a)) in parsed.iter().enumerate() {
+        for (field_b, b) in parsed.iter().skip(i + 1) {
+            if a == b {
+                return Err(AppError::Validation(format!(
+                    "{field_a} and {field_b} must be different"
+                )));
+            }
+        }
     }
-    Ok((translate, stickers))
+    let [(_, translate), (_, stickers), (_, voice)] = parsed;
+    Ok(ValidShortcuts {
+        translate,
+        stickers,
+        voice,
+    })
 }
 
 /// Перерегистрировать глобальные хоткеи: снять все старые, привязать новые
 /// и обновить HotkeyState для диспетчеризации в обработчике плагина.
-pub fn register_shortcuts(
-    app: &AppHandle,
-    translate: &str,
-    stickers: &str,
-) -> Result<(), AppError> {
-    let (translate, stickers) = validate_shortcuts(translate, stickers)?;
+pub fn register_shortcuts(app: &AppHandle, shortcuts: &ShortcutStrings) -> Result<(), AppError> {
+    let valid = validate_shortcuts(shortcuts)?;
 
     let manager = app.global_shortcut();
     manager
         .unregister_all()
         .map_err(|e| AppError::Validation(format!("Failed to reset global shortcuts: {e}")))?;
     manager
-        .register(translate)
+        .register(valid.translate)
         .map_err(|e| AppError::Validation(format!("Failed to register translate hotkey: {e}")))?;
     manager
-        .register(stickers)
+        .register(valid.stickers)
         .map_err(|e| AppError::Validation(format!("Failed to register stickers hotkey: {e}")))?;
+    manager.register(valid.voice).map_err(|e| {
+        AppError::Validation(format!("Failed to register voice translate hotkey: {e}"))
+    })?;
 
     if let Some(state) = app.try_state::<HotkeyState>() {
-        state.set_bindings(translate, stickers);
+        state.set_bindings(valid);
     }
     Ok(())
 }
@@ -198,6 +238,22 @@ pub fn translate_selection(app: &AppHandle) {
             log::warn!("Failed to dispatch popup to main thread: {e}");
         }
     });
+}
+
+/// Показать popup в голосовом режиме у курсора. Выделение не захватываем:
+/// курсор стоит в поле ввода, туда Accept и вставит перевод.
+pub fn voice_translate(app: &AppHandle) {
+    let cursor = crate::popup::snapshot_cursor_anchor();
+    crate::popup::remember_source_app();
+    let app_ui = app.clone();
+    if let Err(e) = app.run_on_main_thread(move || {
+        let marker = crate::popup::next_voice_popup_marker();
+        if let Err(err) = crate::popup::show_popup_anchored(&app_ui, Some(marker), cursor) {
+            log::warn!("Failed to show voice popup from hotkey: {err}");
+        }
+    }) {
+        log::warn!("Failed to dispatch voice popup to main thread: {e}");
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -713,24 +769,46 @@ mod tests {
         assert!(STICKERS_SHORTCUT.parse::<Shortcut>().is_ok());
     }
 
+    fn shortcuts(translate: &str, stickers: &str, voice: &str) -> ShortcutStrings {
+        ShortcutStrings {
+            translate: translate.to_string(),
+            stickers: stickers.to_string(),
+            voice: voice.to_string(),
+        }
+    }
+
+    #[test]
+    fn default_voice_shortcut_parses() {
+        assert!(VOICE_TRANSLATE_SHORTCUT.parse::<Shortcut>().is_ok());
+    }
+
     #[test]
     fn validate_accepts_distinct_defaults() {
-        let (translate, stickers) =
-            validate_shortcuts(TRANSLATE_SHORTCUT, STICKERS_SHORTCUT).expect("defaults are valid");
-        assert_ne!(translate, stickers);
+        let valid = validate_shortcuts(&ShortcutStrings::default()).expect("defaults are valid");
+        assert_ne!(valid.translate, valid.stickers);
+        assert_ne!(valid.translate, valid.voice);
+        assert_ne!(valid.stickers, valid.voice);
     }
 
     #[test]
     fn validate_rejects_duplicate_hotkeys() {
-        let result = validate_shortcuts(TRANSLATE_SHORTCUT, TRANSLATE_SHORTCUT);
-        assert!(matches!(result, Err(AppError::Validation(_))));
+        for set in [
+            shortcuts(TRANSLATE_SHORTCUT, TRANSLATE_SHORTCUT, VOICE_TRANSLATE_SHORTCUT),
+            shortcuts(TRANSLATE_SHORTCUT, STICKERS_SHORTCUT, TRANSLATE_SHORTCUT),
+            shortcuts(TRANSLATE_SHORTCUT, STICKERS_SHORTCUT, STICKERS_SHORTCUT),
+        ] {
+            let result = validate_shortcuts(&set);
+            assert!(matches!(result, Err(AppError::Validation(_))), "{set:?}");
+        }
     }
 
     #[test]
     fn validate_rejects_invalid_format() {
-        assert!(validate_shortcuts("NotAKey!!!", STICKERS_SHORTCUT).is_err());
-        assert!(validate_shortcuts(TRANSLATE_SHORTCUT, "").is_err());
-        assert!(validate_shortcuts("Ctrl+Shift+L+M", STICKERS_SHORTCUT).is_err());
+        let d = ShortcutStrings::default();
+        assert!(validate_shortcuts(&shortcuts("NotAKey!!!", &d.stickers, &d.voice)).is_err());
+        assert!(validate_shortcuts(&shortcuts(&d.translate, "", &d.voice)).is_err());
+        assert!(validate_shortcuts(&shortcuts("Ctrl+Shift+L+M", &d.stickers, &d.voice)).is_err());
+        assert!(validate_shortcuts(&shortcuts(&d.translate, &d.stickers, "")).is_err());
     }
 
     #[test]

@@ -21,6 +21,7 @@ use crate::providers::models::router::{
     engine_supports, load_routes, registry_for_role, role_status, RoleStatus,
 };
 use crate::providers::models::mirror_into_settings;
+use crate::providers::models::remote::{fetch_models, ListSource, RemoteModelDto};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -139,6 +140,36 @@ pub(crate) fn validate_targets(role: ModelRole, targets: &[RouteTarget]) -> Resu
     Ok(())
 }
 
+/// Settings «Продвинутый режим»: every model the saved key of `provider` can use.
+#[tauri::command]
+pub async fn list_provider_models(
+    provider: String,
+    app: AppHandle,
+    db: State<'_, Arc<DbPool>>,
+) -> Result<Vec<RemoteModelDto>, AppError> {
+    let provider = provider.trim().to_string();
+    let settings = {
+        let conn = db.inner().get()?;
+        SettingsRepo::get(&conn)?
+    };
+    let base = match provider.as_str() {
+        "custom" => Some(
+            settings
+                .custom_base_url
+                .clone()
+                .unwrap_or_else(|| "http://localhost:11434/v1".to_string()),
+        ),
+        "cloudflare" => settings.cloudflare_account_id.clone(),
+        _ => None,
+    };
+    let source = ListSource {
+        api_key: crate::api_keys::get_api_key(&app, &provider),
+        provider,
+        base,
+    };
+    fetch_models(&source).await
+}
+
 #[tauri::command]
 pub fn get_model_catalog() -> Vec<ModelSpec> {
     CATALOG.to_vec()
@@ -252,6 +283,8 @@ pub async fn set_role_route(
     }
     ModelRouteRepo::write_role(&tx, role, &targets)?;
     let saved = ModelRouteRepo::load(&tx)?;
+    // A per-role model is an advanced choice: keep its editors visible.
+    SettingsRepo::set_advanced_models(&tx, true)?;
 
     let mut settings = SettingsRepo::get(&tx)?;
     settings.model_package = Some(PackageId::Custom.as_str().to_string());
@@ -263,6 +296,18 @@ pub async fn set_role_route(
         routes: routes_dto(&app, &settings, &saved),
         settings,
     })
+}
+
+/// Settings «Продвинутый режим»: show or hide per-role model editors.
+/// Routes stay as they are — switching off never changes the models silently.
+#[tauri::command]
+pub async fn set_advanced_models(
+    enabled: bool,
+    db: State<'_, Arc<DbPool>>,
+) -> Result<AppSettings, AppError> {
+    let conn = db.inner().get()?;
+    SettingsRepo::set_advanced_models(&conn, enabled)?;
+    SettingsRepo::get(&conn)
 }
 
 /// 0.5 s of silence as a 16 kHz mono WAV, base64.

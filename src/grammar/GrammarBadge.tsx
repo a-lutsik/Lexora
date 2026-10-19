@@ -36,16 +36,9 @@ function badgeLabel(state: BadgeState): string {
   }
 }
 
-/** The Lexora «L» (same glyph as the app icon). */
+/** The app icon (public/favicon.svg): the Lexora «L» on its purple tile. */
 function LexoraMark() {
-  return (
-    <svg className="grammar-badge-logo" viewBox="96 112 320 300" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M168 128c18 0 36 12 44 36 14 42 18 78 18 118 0 28-2 54-8 78h92c28 0 48 12 56 36 4 12 2 26-8 36-10 10-24 16-40 16H156c-28 0-48-22-48-50V176c0-28 22-48 48-48h12z"
-      />
-    </svg>
-  );
+  return <img className="grammar-badge-logo" src="/favicon.svg" alt="" draggable={false} />;
 }
 
 function badgeContent(state: BadgeState): ReactNode {

@@ -306,6 +306,7 @@ export type AIProviderName =
   | 'cloudflare'
   | 'openrouter'
   | 'groq'
+  | 'deepseek'
   | 'custom'
   | 'openai'
   | 'gemini'
@@ -350,6 +351,8 @@ export type AppSettings = {
   // Global shortcuts (tauri-plugin-global-shortcut format, e.g. 'CmdOrCtrl+Shift+L')
   hotkeyTranslate: string;
   hotkeyStickers: string;
+  /** Opens the popup in voice mode: speak → translation → Accept inserts it. */
+  hotkeyVoiceTranslate?: string;
   // Fallback AI provider for automatic failover
   fallbackAiProvider?: AIProviderName | null;
   fallbackAiModel?: string | null;
@@ -364,6 +367,8 @@ export type AppSettings = {
   ttsEngine?: TtsEngine;
   /** Active model package (V023); `custom` = per-role overrides. */
   modelPackage?: ModelPackageId | null;
+  /** Advanced mode (V032): per-role model editors are shown. */
+  advancedModels?: boolean;
 };
 
 // ── AI model routing (V023) ───────────────────────────────
@@ -402,6 +407,13 @@ export type ModelStatus =
 export type UnitPrice = {
   unit: 'image' | 'minute';
   usd: number;
+};
+
+/** A model the provider reports for the saved key; empty capabilities = unknown. */
+export type RemoteModel = {
+  id: string;
+  label: string | null;
+  capabilities: ModelCapability[];
 };
 
 export type ModelSpec = {

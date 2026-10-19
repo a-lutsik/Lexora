@@ -26,6 +26,9 @@ pub struct AppSettings {
     pub offline_mode: bool,
     pub hotkey_translate: String,
     pub hotkey_stickers: String,
+    /// V031: хоткей голосового перевода (старые клиенты поле не шлют).
+    #[serde(default = "default_hotkey_voice_translate")]
+    pub hotkey_voice_translate: String,
     pub fallback_ai_provider: Option<String>,
     pub fallback_ai_model: Option<String>,
     pub fallback_enabled: bool,
@@ -45,6 +48,9 @@ pub struct AppSettings {
     /// V023: active model package (`gemini` | `openai` | `local` | `offline` | `cloudflare` | `custom`).
     #[serde(default)]
     pub model_package: Option<String>,
+    /// V032: advanced mode — the user picks a model per role (owned by `set_advanced_models`).
+    #[serde(default)]
+    pub advanced_models: bool,
 }
 
 fn default_sticker_sources() -> Vec<String> {
@@ -57,6 +63,10 @@ fn default_image_model() -> String {
 
 fn default_fallback_image_model() -> String {
     "gemini:gemini-3.1-flash-image".to_string()
+}
+
+fn default_hotkey_voice_translate() -> String {
+    crate::hotkeys::VOICE_TRANSLATE_SHORTCUT.to_string()
 }
 
 fn default_tts_engine() -> String {
@@ -80,6 +90,7 @@ impl Default for AppSettings {
             offline_mode: false,
             hotkey_translate: crate::hotkeys::TRANSLATE_SHORTCUT.to_string(),
             hotkey_stickers: crate::hotkeys::STICKERS_SHORTCUT.to_string(),
+            hotkey_voice_translate: default_hotkey_voice_translate(),
             fallback_ai_provider: Some("gemini".to_string()),
             fallback_ai_model: Some("gemini-3.5-flash-lite".to_string()),
             fallback_enabled: true,
@@ -91,6 +102,7 @@ impl Default for AppSettings {
             setup_profile: None,
             tts_engine: "system".to_string(),
             model_package: Some("gemini".to_string()),
+            advanced_models: false,
         }
     }
 }
@@ -111,7 +123,7 @@ pub(crate) fn persist_and_apply_side_effects(
 ) -> Result<AppSettings, AppError> {
     // Валидируем хоткеи ДО сохранения: невалидная комбинация или дубль —
     // AppError::Validation, настройки в БД не пишутся.
-    crate::hotkeys::validate_shortcuts(&settings.hotkey_translate, &settings.hotkey_stickers)?;
+    crate::hotkeys::validate_shortcuts(&crate::hotkeys::current_shortcuts(settings))?;
     crate::stickers::validate_quiet_hours(
         settings.quiet_hours_start.as_deref(),
         settings.quiet_hours_end.as_deref(),
@@ -124,19 +136,16 @@ pub(crate) fn persist_and_apply_side_effects(
     if settings.model_package.is_none() {
         settings.model_package = previous.model_package.clone();
     }
+    // The advanced-mode switch changes only through set_advanced_models / set_role_route.
+    settings.advanced_models = previous.advanced_models;
     // Models change only through routes (apply_model_package / set_role_route).
     crate::providers::models::align_with_routes(conn, &mut settings)?;
     let updated = SettingsRepo::update(conn, &settings)?;
 
     // Перерегистрируем глобальные хоткеи, только если они изменились
-    if previous.hotkey_translate != updated.hotkey_translate
-        || previous.hotkey_stickers != updated.hotkey_stickers
-    {
-        crate::hotkeys::register_shortcuts(
-            app,
-            &updated.hotkey_translate,
-            &updated.hotkey_stickers,
-        )?;
+    let updated_shortcuts = crate::hotkeys::current_shortcuts(&updated);
+    if crate::hotkeys::current_shortcuts(&previous) != updated_shortcuts {
+        crate::hotkeys::register_shortcuts(app, &updated_shortcuts)?;
     }
 
     // Сразу применить quiet hours / количество стикеров (не ждать poll).

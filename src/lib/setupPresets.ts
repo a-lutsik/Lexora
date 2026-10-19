@@ -193,6 +193,7 @@ export function presetPackage(id: SetupProfileId): {
 /** Дефолты, если в `current` чего-то не хватает (на случай старых строк БД). */
 const DEFAULT_HOTKEY_TRANSLATE = 'CmdOrCtrl+Shift+L';
 const DEFAULT_HOTKEY_STICKERS = 'CmdOrCtrl+Shift+S';
+const DEFAULT_HOTKEY_VOICE_TRANSLATE = 'CmdOrCtrl+Shift+Space';
 
 /**
  * Строит ПОЛНЫЙ AppSettings для сценария поверх текущих настроек — то же
@@ -219,6 +220,7 @@ export function buildPresetSettings(
         writingAutoCheck: current.writingAutoCheck ?? false,
         hotkeyTranslate: current.hotkeyTranslate || DEFAULT_HOTKEY_TRANSLATE,
         hotkeyStickers: current.hotkeyStickers || DEFAULT_HOTKEY_STICKERS,
+        hotkeyVoiceTranslate: current.hotkeyVoiceTranslate || DEFAULT_HOTKEY_VOICE_TRANSLATE,
 
         // AI-часть: дефолт «ничего не требует ключа», ниже переопределяется.
         aiProvider: 'offline',

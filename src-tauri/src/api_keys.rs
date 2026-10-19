@@ -20,6 +20,7 @@ const PROVIDER_ENV_VARS: &[(&str, &str)] = &[
     ("cloudflare", "CLOUDFLARE_API_KEY"),
     ("openrouter", "OPENROUTER_API_KEY"),
     ("groq", "GROQ_API_KEY"),
+    ("deepseek", "DEEPSEEK_API_KEY"),
     ("custom", "CUSTOM_API_KEY"),
     ("unsplash", "UNSPLASH_ACCESS_KEY"),
 ];

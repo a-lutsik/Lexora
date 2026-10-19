@@ -54,6 +54,26 @@ export function useSetRoleRoute() {
   });
 }
 
+/** «Продвинутый режим»: show per-role model editors (routes stay unchanged). */
+export function useSetAdvancedModels() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => ipc.models.setAdvanced(enabled),
+    onSuccess: (settings) => client.setQueryData([QUERY_KEYS.SETTINGS], settings),
+  });
+}
+
+/** Models the saved key of `provider` can use (Settings → Продвинутый режим). */
+export function useProviderModels(provider: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [QUERY_KEYS.PROVIDER_MODELS, provider],
+    queryFn: () => ipc.models.providerModels(provider),
+    enabled: enabled && provider !== '',
+    staleTime: STALE_TIME.LONG,
+    retry: false,
+  });
+}
+
 export function useAiUsage(days: number) {
   return useQuery({
     queryKey: [QUERY_KEYS.AI_USAGE, days],

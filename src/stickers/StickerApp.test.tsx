@@ -467,6 +467,7 @@ describe('StickerApp', () => {
     await screen.findByText('apple');
 
     const pin = screen.getByRole('button', { name: 'Pin on top' });
+    expect(invokeMock).toHaveBeenCalledWith('set_sticker_pinned', { pinned: false });
     expect(pin).toHaveAttribute('aria-pressed', 'false');
     expect(pin).not.toHaveClass('pinned');
 
@@ -480,6 +481,23 @@ describe('StickerApp', () => {
       'dismiss_sticker_card',
       expect.objectContaining({ entryId: 10 }),
     );
+  });
+
+  it('whole card is a drag region except the source filter panel', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sticker_card') return Promise.resolve(makeEntry());
+      if (cmd === 'list_categories' || cmd === 'list_collections') return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithQueryClient(<StickerApp />);
+
+    const word = await screen.findByText('apple');
+    expect(word.closest('.sticker-card')).toHaveAttribute('data-tauri-drag-region', 'deep');
+
+    await user.click(screen.getByRole('button', { name: 'Filter sticker sources' }));
+    const closeFilter = screen.getByRole('button', { name: 'Close source filter' });
+    expect(closeFilter.closest('.sticker-filter-panel')).toHaveAttribute('data-tauri-drag-region', 'false');
   });
 
   it('does not show another sticker\'s card after Помню', async () => {

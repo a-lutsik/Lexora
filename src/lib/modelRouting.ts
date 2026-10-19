@@ -67,8 +67,8 @@ export const ROLE_CAPABILITY: Record<ModelRole, ModelCapability> = {
 
 /** Providers Lexora can drive per role (router.rs `engine_supports`). */
 export const ROLE_ENGINES: Record<ModelRole, readonly string[]> = {
-  text_fast: ['gemini', 'openai', 'anthropic', 'openrouter', 'groq', 'cloudflare', 'custom'],
-  text_quality: ['gemini', 'openai', 'anthropic', 'openrouter', 'groq', 'cloudflare', 'custom'],
+  text_fast: ['gemini', 'openai', 'anthropic', 'deepseek', 'openrouter', 'groq', 'cloudflare', 'custom'],
+  text_quality: ['gemini', 'openai', 'anthropic', 'deepseek', 'openrouter', 'groq', 'cloudflare', 'custom'],
   vision: ['gemini', 'openai', 'anthropic', 'openrouter', 'custom'],
   speech_to_text: ['gemini', 'openai', 'groq', 'openrouter', 'custom'],
   realtime_voice: ['gemini'],
@@ -84,6 +84,7 @@ export const KEYED_PROVIDERS: readonly string[] = [
   'anthropic',
   'openrouter',
   'groq',
+  'deepseek',
   'cloudflare',
 ];
 
@@ -93,6 +94,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
   anthropic: 'Anthropic',
   openrouter: 'OpenRouter',
   groq: 'Groq',
+  deepseek: 'DeepSeek',
   cloudflare: 'Cloudflare',
   custom: 'Ollama / свой сервер',
   system: 'macOS',
@@ -375,4 +377,5 @@ export const KEY_HINTS: Record<string, string> = {
   anthropic: 'console.anthropic.com → API Keys',
   openrouter: 'openrouter.ai → Keys',
   groq: 'console.groq.com → API Keys',
+  deepseek: 'platform.deepseek.com → API keys',
 };

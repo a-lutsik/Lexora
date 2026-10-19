@@ -53,12 +53,39 @@ function normalizeTimeInput(value: string): string {
   return `${String(hours).padStart(2, '0')}:${match[2]}`;
 }
 
-function validateHotkeys(hotkeyTranslate: string, hotkeyStickers: string): string | null {
-  if (!isValidHotkey(hotkeyTranslate) || !isValidHotkey(hotkeyStickers)) {
+type HotkeyField = 'hotkeyTranslate' | 'hotkeyStickers' | 'hotkeyVoiceTranslate';
+
+const HOTKEY_FIELDS: readonly HotkeyField[] = ['hotkeyTranslate', 'hotkeyStickers', 'hotkeyVoiceTranslate'];
+
+const DEFAULT_HOTKEY_VOICE_TRANSLATE = 'CmdOrCtrl+Shift+Space';
+
+/** Older backends may omit the voice shortcut; show the default instead. */
+function voiceHotkey(settings: Pick<AppSettings, 'hotkeyVoiceTranslate'>): string {
+  return settings.hotkeyVoiceTranslate ?? DEFAULT_HOTKEY_VOICE_TRANSLATE;
+}
+
+function hotkeyValue(settings: AppSettings, field: HotkeyField): string {
+  return field === 'hotkeyVoiceTranslate' ? voiceHotkey(settings) : settings[field];
+}
+
+/** Fields whose shortcut is also used by another action. */
+function duplicateHotkeyFields(settings: AppSettings): Set<HotkeyField> {
+  const duplicates = new Set<HotkeyField>();
+  for (const field of HOTKEY_FIELDS) {
+    const value = hotkeyValue(settings, field);
+    if (HOTKEY_FIELDS.some((other) => other !== field && hotkeyValue(settings, other) === value)) {
+      duplicates.add(field);
+    }
+  }
+  return duplicates;
+}
+
+function validateHotkeys(settings: AppSettings): string | null {
+  if (HOTKEY_FIELDS.some((field) => !isValidHotkey(hotkeyValue(settings, field)))) {
     return 'Each shortcut needs at least one modifier (⌘, ⇧ or ⌥) plus a key.';
   }
-  if (hotkeyTranslate === hotkeyStickers) {
-    return 'Both actions use the same shortcut. Choose different combinations.';
+  if (duplicateHotkeyFields(settings).size > 0) {
+    return 'Two actions use the same shortcut. Choose different combinations.';
   }
   return null;
 }
@@ -80,6 +107,7 @@ function withSavedAiFields(draft: AppSettings, saved: AppSettings): AppSettings 
     cloudflareAccountId: saved.cloudflareAccountId,
     setupProfile: saved.setupProfile,
     modelPackage: saved.modelPackage,
+    advancedModels: saved.advancedModels,
   };
 }
 
@@ -115,6 +143,7 @@ export default function SettingsPage() {
     writingAutoCheck: false,
     hotkeyTranslate: 'CmdOrCtrl+Shift+L',
     hotkeyStickers: 'CmdOrCtrl+Shift+S',
+    hotkeyVoiceTranslate: DEFAULT_HOTKEY_VOICE_TRANSLATE,
     fallbackAiProvider: 'gemini',
     fallbackAiModel: 'gemini-3.5-flash-lite',
     fallbackEnabled: true,
@@ -176,7 +205,7 @@ export default function SettingsPage() {
     setSaveError(null);
 
     const current = formRef.current;
-    const hotkeyValidationError = validateHotkeys(current.hotkeyTranslate, current.hotkeyStickers);
+    const hotkeyValidationError = validateHotkeys(current);
     if (hotkeyValidationError) {
       setHotkeyError(hotkeyValidationError);
       return;
@@ -200,7 +229,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleHotkeyChange = (field: 'hotkeyTranslate' | 'hotkeyStickers', value: string) => {
+  const handleHotkeyChange = (field: HotkeyField, value: string) => {
     setHotkeyError(null);
     setSaveError(null);
     setForm({ ...form, [field]: value });
@@ -262,7 +291,7 @@ export default function SettingsPage() {
     );
   }
 
-  const hotkeysDuplicate = form.hotkeyTranslate === form.hotkeyStickers;
+  const duplicateHotkeys = duplicateHotkeyFields(form);
   const quietHoursEnabled = form.quietHoursStart != null && form.quietHoursEnd != null;
 
   const handleQuietHoursToggle = (enabled: boolean) => {
@@ -512,7 +541,7 @@ export default function SettingsPage() {
                     value={form.hotkeyTranslate}
                     onChange={(value) => handleHotkeyChange('hotkeyTranslate', value)}
                     label={t("Quick Translate Selected Text shortcut")}
-                    hasError={hotkeysDuplicate || !isValidHotkey(form.hotkeyTranslate)}
+                    hasError={duplicateHotkeys.has('hotkeyTranslate') || !isValidHotkey(form.hotkeyTranslate)}
                   />
                 </div>
               </div>
@@ -526,7 +555,21 @@ export default function SettingsPage() {
                     value={form.hotkeyStickers}
                     onChange={(value) => handleHotkeyChange('hotkeyStickers', value)}
                     label={t("Toggle Stickers shortcut")}
-                    hasError={hotkeysDuplicate || !isValidHotkey(form.hotkeyStickers)}
+                    hasError={duplicateHotkeys.has('hotkeyStickers') || !isValidHotkey(form.hotkeyStickers)}
+                  />
+                </div>
+              </div>
+              <div className="settings-hotkey-row">
+                <div className="settings-hotkey-info">
+                  <span>{t("Voice Translate")}</span>
+                  <span className="text-muted text-xs">{t("Put the cursor in a text field, press the shortcut and speak — Accept inserts the translation")}</span>
+                </div>
+                <div className="settings-hotkey-actions">
+                  <HotkeyInput
+                    value={voiceHotkey(form)}
+                    onChange={(value) => handleHotkeyChange('hotkeyVoiceTranslate', value)}
+                    label={t("Voice Translate shortcut")}
+                    hasError={duplicateHotkeys.has('hotkeyVoiceTranslate') || !isValidHotkey(voiceHotkey(form))}
                   />
                 </div>
               </div>
@@ -547,10 +590,10 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {(hotkeyError || hotkeysDuplicate) && (
+            {(hotkeyError || duplicateHotkeys.size > 0) && (
               <div className="settings-test-result settings-test-result--error animate-fade-in" role="alert">
                 <div className="settings-test-result-message">
-                  {t(hotkeyError ?? 'Both actions use the same shortcut. Choose different combinations.')}
+                  {t(hotkeyError ?? 'Two actions use the same shortcut. Choose different combinations.')}
                 </div>
               </div>
             )}
