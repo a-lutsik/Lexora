@@ -13,6 +13,10 @@ For EACH issue found, return a JSON object with these fields:
 - "offset_end": EXCLUSIVE end index. original_fragment MUST equal input.substring(offset_start, offset_end).
   Example: in "he go", fragment "go" is offset_start=3, offset_end=5 (NOT 4).
 
+Two kinds of issues:
+- Mistakes (spelling, grammar, punctuation, a wrong word or preposition): severity "error" or "warning". Keep original_fragment as short as possible — the wrong word or the few words around it.
+- Improvements to a text that is already correct (clarity, style, tone, unnatural, a clumsy or wordy phrase): severity "suggestion". Here original_fragment may be a whole phrase or sentence, and suggested_fix is its better rewording. Keep the meaning and the author's voice, change only what really reads better, and report at most a few of the most useful improvements — never rewrite every sentence.
+
 Text language: {language}
 
 Text to check:

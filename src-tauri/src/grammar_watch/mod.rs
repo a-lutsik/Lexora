@@ -12,6 +12,8 @@
 pub mod logic;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+mod marks;
 #[cfg(target_os = "windows")]
 mod win;
 
@@ -23,7 +25,7 @@ use win as platform;
 use crate::db::repos::grammar_watch::{GrammarWatchRepo, GrammarWatchSettings};
 use crate::db::DbPool;
 use crate::error::AppError;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, RwLock};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -39,6 +41,74 @@ pub const PANEL_EVENT: &str = "lexora:grammar-panel";
 pub const BADGE_SIZE: f64 = 44.0;
 pub const PANEL_WIDTH: f64 = 400.0;
 pub const PANEL_HEIGHT: f64 = 460.0;
+
+/// Underline window (as large as the watched field) and the hover card.
+pub const MARKS_LABEL: &str = "grammar-marks";
+pub const CARD_LABEL: &str = "grammar-card";
+/// Underline rectangles for the underline window (`MarksPayload`).
+pub const MARKS_EVENT: &str = "lexora:grammar-marks";
+/// The suggestion shown in the hover card (`MarkInput` or null).
+pub const CARD_EVENT: &str = "lexora:grammar-card";
+/// A button was pressed in the hover card.
+pub const MARK_ACTION_EVENT: &str = "lexora:grammar-mark-action";
+/// Hover card size in points; keep in sync with `src/grammar/grammar.css`.
+pub const CARD_WIDTH: f64 = 340.0;
+pub const CARD_HEIGHT: f64 = 200.0;
+pub use logic::CARD_GAP;
+/// Most underlines drawn at once; a longer text is cut by the check anyway.
+pub const MAX_MARKS: usize = 32;
+
+/// Red under a mistake, yellow under a phrase that reads better another way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MarkKind {
+    Error,
+    Improvement,
+}
+
+/// One suggestion to underline. `start`/`end` are UTF-16 offsets into the
+/// checked text (JavaScript string indices).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MarkInput {
+    pub id: i64,
+    pub start: usize,
+    pub end: usize,
+    pub kind: MarkKind,
+    pub title: String,
+    pub original: String,
+    pub suggestion: String,
+    pub explanation: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetMarksInput {
+    pub field_id: u64,
+    /// The checked (trimmed) text the offsets refer to.
+    pub text: String,
+    pub marks: Vec<MarkInput>,
+}
+
+/// Rectangle in CSS pixels, relative to the underline window.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct MarkRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MarkRegion {
+    pub id: i64,
+    pub kind: MarkKind,
+    pub rects: Vec<MarkRect>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct MarksPayload {
+    pub regions: Vec<MarkRegion>,
+}
 
 /// What the badge window shows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -248,7 +318,10 @@ pub fn start(app: &AppHandle) {
     }
     refresh_language(app);
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    platform::spawn_watcher(app.clone());
+    {
+        platform::spawn_watcher(app.clone());
+        marks::spawn_hover(app.clone());
+    }
 }
 
 /// Apply saved settings to the running watcher. Turning it off hides the badge.
@@ -264,6 +337,7 @@ pub fn apply_settings(app: &AppHandle, settings: &GrammarWatchSettings) {
 
 /// Hide the badge/panel (feature off, app excluded, …).
 pub fn hide(app: &AppHandle) {
+    clear_marks(app);
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     platform::reset(app);
     publish(app, FieldPayload::Hidden);
@@ -312,6 +386,87 @@ pub fn set_panel_open(app: &AppHandle, open: bool) -> Result<(), AppError> {
     {
         let _ = (app, open);
         Err(unsupported())
+    }
+}
+
+/// Underline the suggestions in the watched field; `None` clears them.
+/// Measuring words talks to the other app: call off the async runtime.
+pub fn set_marks(app: &AppHandle, input: Option<SetMarksInput>) -> Result<(), AppError> {
+    if let Some(input) = input.as_ref() {
+        validate_marks(input)?;
+    }
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        marks::set(app, input)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (app, input);
+        Ok(())
+    }
+}
+
+fn validate_marks(input: &SetMarksInput) -> Result<(), AppError> {
+    if input.marks.len() > MAX_MARKS {
+        return Err(AppError::Validation(format!(
+            "At most {MAX_MARKS} underlines at once"
+        )));
+    }
+    if input.text.chars().count() > logic::MAX_CHECK_CHARS {
+        return Err(AppError::Validation("Text is too long to underline".to_string()));
+    }
+    let units = input.text.encode_utf16().count();
+    for mark in &input.marks {
+        if mark.start >= mark.end || mark.end > units {
+            return Err(AppError::Validation(format!(
+                "Underline {} is outside the text",
+                mark.id
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Remove underlines and the hover card.
+pub(crate) fn clear_marks(app: &AppHandle) {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    marks::clear(app);
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let _ = app;
+}
+
+pub fn last_marks() -> MarksPayload {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        marks::last_payload()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        MarksPayload::default()
+    }
+}
+
+pub fn last_card() -> Option<MarkInput> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        marks::last_card()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        None
+    }
+}
+
+/// A button of the hover card (`apply` / `dismiss` / `open`).
+pub fn card_action(app: &AppHandle, issue_id: i64, action: &str) -> Result<(), AppError> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        marks::card_action(app, issue_id, action)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (app, issue_id, action);
+        Ok(())
     }
 }
 
@@ -372,5 +527,88 @@ mod tests {
             })
         );
         Ok(())
+    }
+
+    #[test]
+    fn marks_payload_serializes_for_the_underline_window() -> Result<(), serde_json::Error> {
+        let payload = MarksPayload {
+            regions: vec![MarkRegion {
+                id: 3,
+                kind: MarkKind::Improvement,
+                rects: vec![MarkRect {
+                    x: 1.0,
+                    y: 2.0,
+                    width: 30.0,
+                    height: 18.0,
+                }],
+            }],
+        };
+        assert_eq!(
+            serde_json::to_value(payload)?,
+            serde_json::json!({
+                "regions": [{
+                    "id": 3,
+                    "kind": "improvement",
+                    "rects": [{ "x": 1.0, "y": 2.0, "width": 30.0, "height": 18.0 }]
+                }]
+            })
+        );
+        Ok(())
+    }
+
+    fn mark(id: i64, start: usize, end: usize) -> MarkInput {
+        MarkInput {
+            id,
+            start,
+            end,
+            kind: MarkKind::Error,
+            title: "Grammar".to_string(),
+            original: "of".to_string(),
+            suggestion: "to".to_string(),
+            explanation: String::new(),
+        }
+    }
+
+    #[test]
+    fn set_marks_input_reads_the_frontend_shape() -> Result<(), serde_json::Error> {
+        let input: SetMarksInput = serde_json::from_value(serde_json::json!({
+            "fieldId": 7,
+            "text": "access of rtvn",
+            "marks": [{
+                "id": 1, "start": 7, "end": 9, "kind": "error", "title": "Grammar",
+                "original": "of", "suggestion": "to", "explanation": ""
+            }]
+        }))?;
+        assert_eq!(input.field_id, 7);
+        assert_eq!(input.marks, vec![mark(1, 7, 9)]);
+        Ok(())
+    }
+
+    #[test]
+    fn marks_are_validated_against_the_text() {
+        let ok = SetMarksInput {
+            field_id: 1,
+            text: "a😀 dont".to_string(),
+            marks: vec![mark(1, 4, 8)],
+        };
+        assert!(validate_marks(&ok).is_ok());
+
+        let outside = SetMarksInput {
+            marks: vec![mark(1, 4, 9)],
+            ..ok.clone()
+        };
+        assert!(validate_marks(&outside).is_err());
+
+        let empty_span = SetMarksInput {
+            marks: vec![mark(1, 4, 4)],
+            ..ok.clone()
+        };
+        assert!(validate_marks(&empty_span).is_err());
+
+        let too_many = SetMarksInput {
+            marks: (0..=MAX_MARKS as i64).map(|id| mark(id, 4, 8)).collect(),
+            ..ok
+        };
+        assert!(validate_marks(&too_many).is_err());
     }
 }

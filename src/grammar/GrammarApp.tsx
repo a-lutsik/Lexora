@@ -9,12 +9,18 @@ import { useI18n } from "../hooks/useI18n";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useApplyGrammarFix, useGrammarCheck } from '../hooks/useGrammarCheck';
-import { APP_EVENTS } from '../lib/constants';
-import { applyAllFixes, applyOneFix, openIssues, type FixResult } from '../lib/grammarFix';
+import { APP_EVENTS, MAX_GRAMMAR_MARKS } from '../lib/constants';
+import { applyAllFixes, applyOneFix, buildMarks, issueKind, openIssues, type FixResult } from '../lib/grammarFix';
+import { writingLabel } from '../lib/interfaceText';
 import { formatProviderError } from '../lib/inlineAssistant';
 import { ipc } from '../lib/ipc';
 import { formatIpcError } from '../lib/utils';
-import type { GrammarFieldPayload, WritingIssueDto } from '../lib/types';
+import type {
+  GrammarFieldPayload,
+  GrammarMarkAction,
+  SetGrammarMarksInput,
+  WritingIssueDto,
+} from '../lib/types';
 import { GrammarBadge, type BadgeState } from './GrammarBadge';
 import { GrammarPanel, type PanelStatus } from './GrammarPanel';
 import './grammar.css';
@@ -35,6 +41,14 @@ function isFieldPayload(value: unknown): value is GrammarFieldPayload {
   return kind === 'hidden' || kind === 'pending' || kind === 'check';
 }
 
+function isMarkAction(value: unknown): value is GrammarMarkAction {
+  if (typeof value !== 'object' || value === null) return false;
+  const { issueId, action } = value as { issueId?: unknown; action?: unknown };
+  return (
+    typeof issueId === 'number' && (action === 'apply' || action === 'dismiss' || action === 'open')
+  );
+}
+
 function checkKey(field: GrammarFieldPayload): string | null {
   return field.kind === 'check' ? `${field.fieldId}:${field.text}` : null;
 }
@@ -46,6 +60,8 @@ export function GrammarApp() {
   const [working, setWorking] = useState<WorkingCheck | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const closeTimer = useRef<number | undefined>(undefined);
+  // Latest handlers for the hover-card listener (registered once).
+  const cardActions = useRef<(action: GrammarMarkAction) => void>(() => undefined);
 
   const receiveField = useCallback((payload: unknown) => {
     if (!isFieldPayload(payload)) return;
@@ -71,6 +87,9 @@ export function GrammarApp() {
       .catch(() => undefined);
     void listen<unknown>(APP_EVENTS.GRAMMAR_FIELD, (event) => receiveField(event.payload)).then(keep);
     void listen<unknown>(APP_EVENTS.GRAMMAR_PANEL, () => setPanelOpen(false)).then(keep);
+    void listen<unknown>(APP_EVENTS.GRAMMAR_MARK_ACTION, (event) => {
+      if (isMarkAction(event.payload)) cardActions.current(event.payload);
+    }).then(keep);
     return () => {
       disposed = true;
       window.clearTimeout(closeTimer.current);
@@ -109,7 +128,30 @@ export function GrammarApp() {
         ? { kind: 'error' }
         : open.length === 0
           ? { kind: 'clean' }
-          : { kind: 'issues', count: open.length };
+          : {
+              kind: 'issues',
+              count: open.length,
+              hasErrors: open.some((issue) => issueKind(issue) === 'error'),
+            };
+
+  // Underlines in the user's field: only for a finished check of the text
+  // that is still in the field.
+  const marksInput: SetGrammarMarksInput | null =
+    field.kind === 'check' && status === 'ready' && view
+      ? {
+          fieldId: field.fieldId,
+          text: view.text,
+          marks: buildMarks(open, (issue) => writingLabel(issue.category)).slice(0, MAX_GRAMMAR_MARKS),
+        }
+      : null;
+  const marksKey = JSON.stringify(marksInput);
+  const latestMarks = useRef(marksInput);
+  useEffect(() => {
+    latestMarks.current = marksInput;
+  });
+  useEffect(() => {
+    void ipc.grammar.setMarks(latestMarks.current).catch(() => undefined);
+  }, [marksKey]);
 
   const closePanel = useCallback(() => {
     setPanelOpen(false);
@@ -159,6 +201,14 @@ export function GrammarApp() {
       ),
     });
   };
+
+  useEffect(() => {
+    cardActions.current = ({ issueId, action }) => {
+      if (action === 'apply') handleApply(issueId);
+      else if (action === 'dismiss') handleDismiss(issueId);
+      else openPanel();
+    };
+  });
 
   const handleIgnore = () => {
     if (field.kind !== 'check') return;

@@ -7,6 +7,11 @@ import type { CategoryDto } from './types';
 import { invoke, type Channel } from '@tauri-apps/api/core';
 import type {
   ApplyGrammarFixInput,
+  GrammarMark,
+  GrammarMarkActionKind,
+  GrammarMarksPayload,
+  SetGrammarMarksInput,
+  RemoteModel,
   GrammarFieldPayload,
   GrammarWatchSettings,
   GrammarWatchStatus,
@@ -471,6 +476,20 @@ export const ipc = {
 
   popup: {
     acceptAndReplace: (text: string) =>
+
+    /** Underline these suggestions in the watched field (null clears them). */
+    setMarks: (input: SetGrammarMarksInput | null) =>
+      invoke<void>('set_grammar_marks', { input }),
+
+    getMarks: () =>
+      invoke<GrammarMarksPayload>('get_grammar_marks'),
+
+    getCard: () =>
+      invoke<GrammarMark | null>('get_grammar_card'),
+
+    /** A button of the hover card: the writing-check window carries it out. */
+    cardAction: (issueId: number, action: GrammarMarkActionKind) =>
+      invoke<void>('grammar_card_action', { issueId, action }),
       invoke<void>('accept_and_replace', { text }),
 
     resize: (width: number, height: number, resizable = false) =>

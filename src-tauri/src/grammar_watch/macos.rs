@@ -6,7 +6,9 @@
 // ============================================================
 
 use super::logic::{self, Decision, Observation, Rect, TextEdit, WatchState};
+use super::marks::{MarkGeometry, Overlay};
 use super::{
+    MarkInput,
     config_snapshot, publish, refresh_language, report, ActivityCode, FieldPayload, WatchConfig,
     BADGE_SIZE, GRAMMAR_LABEL, PANEL_EVENT, PANEL_HEIGHT, PANEL_WIDTH,
 };
@@ -1127,3 +1129,29 @@ fn paste_fallback(
         ))
     }
 }
+
+// ── Underlines and hover card ────────────────────────────
+// Not available on macOS yet: the words are not measured, so nothing is
+// drawn and the badge/panel remain the way to apply suggestions.
+
+pub(super) fn prepare_thread() {}
+
+pub(super) fn mark_geometry(
+    _field_id: u64,
+    _text: &str,
+    _marks: &[MarkInput],
+) -> Option<MarkGeometry> {
+    None
+}
+
+pub(super) fn cursor_position() -> Option<(f64, f64)> {
+    None
+}
+
+pub(super) fn screen_at(_app: &AppHandle, _x: f64, _y: f64) -> Option<(Rect, f64)> {
+    None
+}
+
+pub(super) fn show_overlay(_app: &AppHandle, _overlay: Overlay, _frame: Rect) {}
+
+pub(super) fn hide_overlay(_app: &AppHandle, _overlay: Overlay) {}

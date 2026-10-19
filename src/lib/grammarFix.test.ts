@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyAllFixes, applyOneFix, issueContext, openIssues } from './grammarFix';
+import { applyAllFixes, applyOneFix, buildMarks, issueContext, issueKind, openIssues } from './grammarFix';
 import type { WritingIssueDto } from './types';
 
 function issue(
@@ -107,5 +107,36 @@ describe('issueContext', () => {
     expect(ctx.before.startsWith('…')).toBe(true);
     expect(ctx.fragment).toBe('go');
     expect(ctx.after).toBe(' home.');
+  });
+});
+
+describe('issueKind', () => {
+  it('underlines mistakes in red', () => {
+    expect(issueKind(DONT)).toBe('error');
+    expect(issueKind(issue(3, 'x', 'y', 0, { category: 'spelling', severity: 'warning' }))).toBe('error');
+  });
+
+  it('underlines better phrasing in yellow', () => {
+    expect(issueKind(issue(3, 'x', 'y', 0, { category: 'grammar', severity: 'suggestion' }))).toBe('improvement');
+    expect(issueKind(issue(4, 'x', 'y', 0, { category: 'clarity', severity: 'warning' }))).toBe('improvement');
+    expect(issueKind(issue(5, 'x', 'y', 0, { category: 'style', severity: 'error' }))).toBe('improvement');
+  });
+});
+
+describe('buildMarks', () => {
+  it('maps issues to underline spans with the card text', () => {
+    const marks = buildMarks([DONT], () => 'Grammar');
+    expect(marks).toEqual([
+      {
+        id: 1,
+        start: 4,
+        end: 8,
+        kind: 'error',
+        title: 'Grammar',
+        original: 'dont',
+        suggestion: "doesn't",
+        explanation: '',
+      },
+    ]);
   });
 });

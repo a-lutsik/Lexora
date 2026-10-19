@@ -67,6 +67,9 @@ export const QUERY_KEYS = {
 } as const;
 
 /** Backend events emitted with `app.emit`. */
+/** Most underlines drawn in another app's field at once (keep in sync with `MAX_MARKS` in grammar_watch/mod.rs). */
+export const MAX_GRAMMAR_MARKS = 32;
+
 export const APP_EVENTS = {
   CARD_ENRICH: 'lexora:card-enrich',
   TRANSLATION_BACKFILLED: 'lexora:translation-backfilled',
@@ -75,6 +78,12 @@ export const APP_EVENTS = {
   /** The backend collapsed the writing-check panel (payload: `false`). */
   GRAMMAR_PANEL: 'lexora:grammar-panel',
 } as const;
+  /** Underline rectangles for the overlay window (`GrammarMarksPayload`). */
+  GRAMMAR_MARKS: 'lexora:grammar-marks',
+  /** The suggestion shown in the hover card (`GrammarMark`, or null). */
+  GRAMMAR_CARD: 'lexora:grammar-card',
+  /** A button was pressed in the hover card (`GrammarMarkAction`). */
+  GRAMMAR_MARK_ACTION: 'lexora:grammar-mark-action',
 
 export const STALE_TIME = {
   SHORT:  10_000,   // 10s — due count, etc.

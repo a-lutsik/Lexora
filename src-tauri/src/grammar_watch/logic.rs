@@ -412,6 +412,29 @@ impl Rect {
         (self.x + self.width / 2.0, self.y + self.height / 2.0)
     }
 
+    /// The point lies inside the rectangle grown by `slop` on every side.
+    pub fn contains(&self, x: f64, y: f64, slop: f64) -> bool {
+        x >= self.x - slop
+            && x <= self.right() + slop
+            && y >= self.y - slop
+            && y <= self.bottom() + slop
+    }
+
+    /// Overlap with `other`, if any.
+    pub fn intersect(&self, other: &Rect) -> Option<Rect> {
+        let x = self.x.max(other.x);
+        let y = self.y.max(other.y);
+        let right = self.right().min(other.right());
+        let bottom = self.bottom().min(other.bottom());
+        let overlap = Rect {
+            x,
+            y,
+            width: right - x,
+            height: bottom - y,
+        };
+        overlap.is_usable().then_some(overlap)
+    }
+
     pub fn is_usable(&self) -> bool {
         self.x.is_finite()
             && self.y.is_finite()
@@ -483,6 +506,174 @@ pub fn panel_frame(badge: &Rect, width: f64, height: f64, visible: &Rect) -> Rec
         y,
         width,
         height,
+    }
+}
+
+// ── Underlines and the hover card ────────────────────────
+
+/// The pointer may be this far (screen px) from an underlined word.
+pub const MARK_HIT_SLOP: f64 = 2.0;
+/// The pointer must rest on a word this long before the card appears.
+pub const HOVER_DELAY: Duration = Duration::from_millis(250);
+/// The card stays this long after the pointer left word and card.
+pub const HIDE_DELAY: Duration = Duration::from_millis(450);
+/// Gap between the underlined word and its card (logical px).
+pub const CARD_GAP: f64 = 4.0;
+
+/// UTF-16 length of the whitespace the field has before the checked text.
+/// `None` when the field no longer holds `checked` (the user kept typing).
+pub fn body_offset_utf16(current: &str, checked: &str) -> Option<usize> {
+    if current.trim() != checked.trim() {
+        return None;
+    }
+    let leading = &current[..current.len() - current.trim_start().len()];
+    Some(leading.encode_utf16().count())
+}
+
+/// `text` between two UTF-16 offsets (`None` when out of range or inside a
+/// surrogate pair).
+pub fn utf16_slice(text: &str, start: usize, end: usize) -> Option<String> {
+    if start > end {
+        return None;
+    }
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let slice = units.get(start..end)?;
+    String::from_utf16(slice).ok()
+}
+
+/// How many `\n` precede UTF-16 offset `start` — the shift when a control
+/// counts every line break as two characters (`\r\n`).
+pub fn newlines_before_utf16(text: &str, start: usize) -> usize {
+    let mut seen = 0usize;
+    let mut breaks = 0usize;
+    for ch in text.chars() {
+        if seen >= start {
+            break;
+        }
+        seen += ch.len_utf16();
+        if ch == '\n' {
+            breaks += 1;
+        }
+    }
+    breaks
+}
+
+/// The underlined word under the pointer: its id and the rectangle hit.
+pub fn hit_mark(regions: &[(i64, Vec<Rect>)], x: f64, y: f64) -> Option<(i64, Rect)> {
+    regions.iter().find_map(|(id, rects)| {
+        rects
+            .iter()
+            .find(|rect| rect.contains(x, y, MARK_HIT_SLOP))
+            .map(|rect| (*id, *rect))
+    })
+}
+
+/// Hover card: left edge on the word, below it when there is room,
+/// otherwise above, always inside the visible screen area.
+pub fn card_frame(anchor: &Rect, width: f64, height: f64, gap: f64, visible: &Rect) -> Rect {
+    let below = anchor.bottom() + gap;
+    let y = if below + height <= visible.bottom() - SCREEN_MARGIN {
+        below
+    } else {
+        anchor.y - gap - height
+    };
+    let (x, y) = clamp_into(anchor.x, y, width, height, visible);
+    Rect {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
+/// What the hover thread should do after looking at the pointer.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HoverStep {
+    Nothing,
+    Show { id: i64, anchor: Rect },
+    Hide,
+}
+
+/// Pointer-over-underline state: a short dwell opens the card, leaving
+/// both the word and the card closes it after a grace period.
+#[derive(Debug, Default)]
+pub struct HoverState {
+    pointed: Option<(i64, Instant)>,
+    card: Option<i64>,
+    card_frame: Option<Rect>,
+    left_at: Option<Instant>,
+}
+
+impl HoverState {
+    pub fn card_id(&self) -> Option<i64> {
+        self.card
+    }
+
+    /// The card for `id` is now on screen at `frame`.
+    pub fn card_shown(&mut self, id: i64, frame: Rect) {
+        self.card = Some(id);
+        self.card_frame = Some(frame);
+        self.pointed = None;
+        self.left_at = None;
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn step(
+        &mut self,
+        regions: &[(i64, Vec<Rect>)],
+        cursor: (f64, f64),
+        now: Instant,
+    ) -> HoverStep {
+        let (x, y) = cursor;
+        let over_card = self
+            .card_frame
+            .is_some_and(|frame| frame.contains(x, y, MARK_HIT_SLOP));
+        if over_card {
+            self.left_at = None;
+            self.pointed = None;
+            return HoverStep::Nothing;
+        }
+        match hit_mark(regions, x, y) {
+            Some((id, anchor)) => {
+                self.left_at = None;
+                if self.card == Some(id) {
+                    self.pointed = None;
+                    return HoverStep::Nothing;
+                }
+                match self.pointed {
+                    Some((pointed, since)) if pointed == id => {
+                        if now.duration_since(since) >= HOVER_DELAY {
+                            self.pointed = None;
+                            HoverStep::Show { id, anchor }
+                        } else {
+                            HoverStep::Nothing
+                        }
+                    }
+                    _ => {
+                        self.pointed = Some((id, now));
+                        HoverStep::Nothing
+                    }
+                }
+            }
+            None => {
+                self.pointed = None;
+                if self.card.is_none() {
+                    return HoverStep::Nothing;
+                }
+                let since = *self.left_at.get_or_insert(now);
+                if now.duration_since(since) >= HIDE_DELAY {
+                    self.card = None;
+                    self.card_frame = None;
+                    self.left_at = None;
+                    HoverStep::Hide
+                } else {
+                    HoverStep::Nothing
+                }
+            }
+        }
     }
 }
 
@@ -973,5 +1164,162 @@ mod tests {
             ..SCREEN
         }
         .is_usable());
+    }
+
+    // ── Underlines and the hover card ────────────────────
+
+    fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn body_offset_counts_leading_whitespace_in_utf16_units() {
+        assert_eq!(body_offset_utf16("  \nHi there", "Hi there"), Some(3));
+        assert_eq!(body_offset_utf16("Hi there  ", "Hi there"), Some(0));
+        assert_eq!(body_offset_utf16("Hi there", "Hi there!"), None);
+    }
+
+    #[test]
+    fn utf16_slice_follows_javascript_offsets() {
+        // 😀 is two UTF-16 units, like in a JavaScript string.
+        let text = "a😀 dont";
+        assert_eq!(utf16_slice(text, 4, 8).as_deref(), Some("dont"));
+        assert_eq!(utf16_slice(text, 1, 3).as_deref(), Some("😀"));
+        assert_eq!(utf16_slice(text, 2, 3), None);
+        assert_eq!(utf16_slice(text, 4, 99), None);
+        assert_eq!(utf16_slice(text, 5, 4), None);
+    }
+
+    #[test]
+    fn newlines_before_counts_breaks_in_front_of_the_offset() {
+        let text = "one\ntwo\nthree";
+        assert_eq!(newlines_before_utf16(text, 0), 0);
+        assert_eq!(newlines_before_utf16(text, 4), 1);
+        assert_eq!(newlines_before_utf16(text, 9), 2);
+    }
+
+    #[test]
+    fn rect_contains_and_intersect() {
+        let word = rect(10.0, 10.0, 20.0, 10.0);
+        assert!(word.contains(10.0, 10.0, 0.0));
+        assert!(!word.contains(8.0, 15.0, 0.0));
+        assert!(word.contains(8.0, 15.0, 2.0));
+
+        let field = rect(0.0, 0.0, 25.0, 100.0);
+        assert_eq!(word.intersect(&field), Some(rect(10.0, 10.0, 15.0, 10.0)));
+        assert_eq!(word.intersect(&rect(50.0, 0.0, 10.0, 10.0)), None);
+    }
+
+    #[test]
+    fn hit_mark_finds_the_word_under_the_pointer() {
+        let regions = vec![
+            (1, vec![rect(10.0, 10.0, 20.0, 10.0)]),
+            (2, vec![rect(40.0, 10.0, 20.0, 10.0), rect(0.0, 30.0, 15.0, 10.0)]),
+        ];
+        assert_eq!(hit_mark(&regions, 15.0, 15.0), Some((1, rect(10.0, 10.0, 20.0, 10.0))));
+        assert_eq!(hit_mark(&regions, 5.0, 35.0), Some((2, rect(0.0, 30.0, 15.0, 10.0))));
+        assert_eq!(hit_mark(&regions, 33.0, 15.0), None);
+    }
+
+    #[test]
+    fn card_opens_below_the_word_or_above_when_cramped() {
+        let screen = rect(0.0, 0.0, 1000.0, 800.0);
+        let word = rect(100.0, 100.0, 40.0, 20.0);
+        let below = card_frame(&word, 340.0, 200.0, 4.0, &screen);
+        assert_eq!((below.x, below.y), (100.0, 124.0));
+
+        let low = rect(100.0, 700.0, 40.0, 20.0);
+        let above = card_frame(&low, 340.0, 200.0, 4.0, &screen);
+        assert_eq!(above.y, 700.0 - 4.0 - 200.0);
+
+        let edge = rect(900.0, 100.0, 40.0, 20.0);
+        let clamped = card_frame(&edge, 340.0, 200.0, 4.0, &screen);
+        assert_eq!(clamped.x, 1000.0 - SCREEN_MARGIN - 340.0);
+    }
+
+    #[test]
+    fn hover_opens_the_card_after_a_short_dwell() {
+        let regions = vec![(1, vec![rect(10.0, 10.0, 20.0, 10.0)])];
+        let start = Instant::now();
+        let mut hover = HoverState::default();
+
+        assert_eq!(hover.step(&regions, (15.0, 15.0), start), HoverStep::Nothing);
+        let early = start + HOVER_DELAY / 2;
+        assert_eq!(hover.step(&regions, (15.0, 15.0), early), HoverStep::Nothing);
+        let late = start + HOVER_DELAY;
+        assert_eq!(
+            hover.step(&regions, (15.0, 15.0), late),
+            HoverStep::Show { id: 1, anchor: rect(10.0, 10.0, 20.0, 10.0) }
+        );
+    }
+
+    #[test]
+    fn hover_restarts_the_dwell_when_the_pointer_moves_to_another_word() {
+        let regions = vec![
+            (1, vec![rect(10.0, 10.0, 20.0, 10.0)]),
+            (2, vec![rect(40.0, 10.0, 20.0, 10.0)]),
+        ];
+        let start = Instant::now();
+        let mut hover = HoverState::default();
+        hover.step(&regions, (15.0, 15.0), start);
+        let moved = start + HOVER_DELAY;
+        assert_eq!(hover.step(&regions, (45.0, 15.0), moved), HoverStep::Nothing);
+        assert_eq!(
+            hover.step(&regions, (45.0, 15.0), moved + HOVER_DELAY),
+            HoverStep::Show { id: 2, anchor: rect(40.0, 10.0, 20.0, 10.0) }
+        );
+    }
+
+    #[test]
+    fn hover_closes_the_card_only_after_the_grace_period() {
+        let regions = vec![(1, vec![rect(10.0, 10.0, 20.0, 10.0)])];
+        let card = rect(10.0, 30.0, 100.0, 60.0);
+        let start = Instant::now();
+        let mut hover = HoverState::default();
+        hover.card_shown(1, card);
+
+        // Over the card: stays open however long.
+        assert_eq!(hover.step(&regions, (50.0, 50.0), start), HoverStep::Nothing);
+        assert_eq!(
+            hover.step(&regions, (50.0, 50.0), start + HIDE_DELAY * 4),
+            HoverStep::Nothing
+        );
+
+        // Left both: closes after the grace period.
+        let left = start + HIDE_DELAY * 5;
+        assert_eq!(hover.step(&regions, (500.0, 500.0), left), HoverStep::Nothing);
+        assert_eq!(
+            hover.step(&regions, (500.0, 500.0), left + HIDE_DELAY / 2),
+            HoverStep::Nothing
+        );
+        assert_eq!(
+            hover.step(&regions, (500.0, 500.0), left + HIDE_DELAY),
+            HoverStep::Hide
+        );
+        assert_eq!(hover.card_id(), None);
+    }
+
+    #[test]
+    fn hover_keeps_the_card_when_the_pointer_returns_to_the_word() {
+        let regions = vec![(1, vec![rect(10.0, 10.0, 20.0, 10.0)])];
+        let start = Instant::now();
+        let mut hover = HoverState::default();
+        hover.card_shown(1, rect(10.0, 30.0, 100.0, 60.0));
+        hover.step(&regions, (500.0, 500.0), start);
+        assert_eq!(
+            hover.step(&regions, (15.0, 15.0), start + HIDE_DELAY / 2),
+            HoverStep::Nothing
+        );
+        // The grace timer restarted: still open long after the first exit.
+        assert_eq!(
+            hover.step(&regions, (15.0, 15.0), start + HIDE_DELAY * 3),
+            HoverStep::Nothing
+        );
+        assert_eq!(hover.card_id(), Some(1));
     }
 }

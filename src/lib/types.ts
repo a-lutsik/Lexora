@@ -675,6 +675,53 @@ export type TextRegister = 'official' | 'business' | 'colleague' | 'general';
 export type InlineAssistantMode =
   | 'translate'
   | 'fix'
+/** How a suggestion is underlined: red for a mistake, yellow for a better phrasing. */
+export type GrammarMarkKind = 'error' | 'improvement';
+
+/** One underlined span in another app's field (UTF-16 offsets into `text`). */
+export type GrammarMark = {
+  id: number;
+  start: number;
+  end: number;
+  kind: GrammarMarkKind;
+  title: string;
+  original: string;
+  suggestion: string;
+  explanation: string;
+};
+
+export type SetGrammarMarksInput = {
+  fieldId: number;
+  /** Text the offsets refer to — must still be in the field. */
+  text: string;
+  marks: GrammarMark[];
+};
+
+/** Rectangle in CSS pixels, relative to the underline window. */
+export type GrammarMarkRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type GrammarMarkRegion = {
+  id: number;
+  kind: GrammarMarkKind;
+  rects: GrammarMarkRect[];
+};
+
+export type GrammarMarksPayload = {
+  regions: GrammarMarkRegion[];
+};
+
+export type GrammarMarkActionKind = 'apply' | 'dismiss' | 'open';
+
+export type GrammarMarkAction = {
+  issueId: number;
+  action: GrammarMarkActionKind;
+};
+
   | 'improve'
   | 'rephrase'
   | 'shorten'

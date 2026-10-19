@@ -6,7 +6,9 @@
 use crate::db::repos::grammar_watch::{GrammarWatchRepo, GrammarWatchSettings};
 use crate::db::DbPool;
 use crate::error::AppError;
-use crate::grammar_watch::{self, FieldPayload, GrammarWatchStatus};
+use crate::grammar_watch::{
+    self, FieldPayload, GrammarWatchStatus, MarkInput, MarksPayload, SetMarksInput,
+};
 use serde::Deserialize;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -77,6 +79,40 @@ pub async fn apply_grammar_fix(
     })
     .await
     .map_err(|e| AppError::Io(format!("Applying the fix was interrupted: {e}")))?
+}
+
+/// Underline the open suggestions in the watched field (`None` clears).
+#[tauri::command]
+pub async fn set_grammar_marks(
+    input: Option<SetMarksInput>,
+    app: AppHandle,
+) -> Result<(), AppError> {
+    // Measuring words talks to the other app and can block for a while.
+    tokio::task::spawn_blocking(move || grammar_watch::set_marks(&app, input))
+        .await
+        .map_err(|e| AppError::Io(format!("Underlining was interrupted: {e}")))?
+}
+
+/// Last underlines for a freshly mounted underline window.
+#[tauri::command]
+pub fn get_grammar_marks() -> MarksPayload {
+    grammar_watch::last_marks()
+}
+
+/// Suggestion of the hover card for a freshly mounted card window.
+#[tauri::command]
+pub fn get_grammar_card() -> Option<MarkInput> {
+    grammar_watch::last_card()
+}
+
+/// A button of the hover card: `apply`, `dismiss` or `open`.
+#[tauri::command]
+pub fn grammar_card_action(
+    issue_id: i64,
+    action: String,
+    app: AppHandle,
+) -> Result<(), AppError> {
+    grammar_watch::card_action(&app, issue_id, &action)
 }
 
 #[tauri::command]
