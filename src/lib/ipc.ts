@@ -11,7 +11,6 @@ import type {
   GrammarMarkActionKind,
   GrammarMarksPayload,
   SetGrammarMarksInput,
-  RemoteModel,
   GrammarFieldPayload,
   GrammarWatchSettings,
   GrammarWatchStatus,
