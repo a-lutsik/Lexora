@@ -23,7 +23,6 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 /// Underlines are re-measured this often (scrolling, resizing, moving).
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 const REFRESH_INTERVAL: Duration = Duration::from_millis(400);
 /// How often the pointer is compared with the underlines.
 const HOVER_POLL: Duration = Duration::from_millis(60);
@@ -38,7 +37,6 @@ pub(super) enum Overlay {
 }
 
 impl Overlay {
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub(super) fn label(self) -> &'static str {
         match self {
             Overlay::Marks => MARKS_LABEL,
@@ -47,7 +45,6 @@ impl Overlay {
     }
 
     /// Same page as the badge; the fragment picks what it renders.
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub(super) fn url(self) -> &'static str {
         match self {
             Overlay::Marks => "grammar.html#marks",
@@ -160,7 +157,6 @@ pub(super) fn clear(app: &AppHandle) {
 
 /// Called by the watcher on every tick: re-measure when the last
 /// measurement is old enough.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(super) fn refresh_if_due(app: &AppHandle) {
     let due = lock()
         .active
