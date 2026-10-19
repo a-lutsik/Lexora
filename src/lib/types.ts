@@ -663,18 +663,6 @@ export type ApplyGrammarFixInput = {
   correctedText: string;
 };
 
-export type RewriteTextInput = {
-  text: string;
-  language?: string | null;
-  mode: RewriteMode;
-  customPrompt?: string;
-};
-
-export type TextRegister = 'official' | 'business' | 'colleague' | 'general';
-
-export type InlineAssistantMode =
-  | 'translate'
-  | 'fix'
 /** How a suggestion is underlined: red for a mistake, yellow for a better phrasing. */
 export type GrammarMarkKind = 'error' | 'improvement';
 
@@ -722,6 +710,18 @@ export type GrammarMarkAction = {
   action: GrammarMarkActionKind;
 };
 
+export type RewriteTextInput = {
+  text: string;
+  language?: string | null;
+  mode: RewriteMode;
+  customPrompt?: string;
+};
+
+export type TextRegister = 'official' | 'business' | 'colleague' | 'general';
+
+export type InlineAssistantMode =
+  | 'translate'
+  | 'fix'
   | 'improve'
   | 'rephrase'
   | 'shorten'

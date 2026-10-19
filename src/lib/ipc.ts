@@ -470,12 +470,6 @@ export const ipc = {
 
     excludeApp: (bundleId: string) =>
       invoke<GrammarWatchSettings>('exclude_grammar_app', { bundleId }),
-  },
-
-  // ── Popup (inline assistant + dictionary card) ────────
-
-  popup: {
-    acceptAndReplace: (text: string) =>
 
     /** Underline these suggestions in the watched field (null clears them). */
     setMarks: (input: SetGrammarMarksInput | null) =>
@@ -490,6 +484,12 @@ export const ipc = {
     /** A button of the hover card: the writing-check window carries it out. */
     cardAction: (issueId: number, action: GrammarMarkActionKind) =>
       invoke<void>('grammar_card_action', { issueId, action }),
+  },
+
+  // ── Popup (inline assistant + dictionary card) ────────
+
+  popup: {
+    acceptAndReplace: (text: string) =>
       invoke<void>('accept_and_replace', { text }),
 
     resize: (width: number, height: number, resizable = false) =>
