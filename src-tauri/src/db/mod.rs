@@ -63,7 +63,12 @@ pub fn run_migrations(pool: &DbPool) -> Result<(), AppError> {
     let mut conn = pool.get()?;
 
     // r2d2 PooledConnection derefs to rusqlite::Connection
+    // The database may have been migrated by a different build of Lexora
+    // (a newer version, or a local branch with its own migrations). Migrations
+    // are additive, so versions this binary does not know are ignored instead
+    // of aborting startup with «migration VNN is missing from the filesystem».
     migrations::runner()
+        .set_abort_missing(false)
         .run(&mut *conn)
         .map_err(|e| AppError::Database(format!("Migration failed: {e}")))?;
 
@@ -119,6 +124,29 @@ mod tests {
             lang_count >= 20,
             "V017 expands language catalog, got {lang_count}"
         );
+        Ok(())
+    }
+
+    /// A database migrated by another build (e.g. a local branch with V026)
+    /// must still open: unknown applied migrations are ignored.
+    #[test]
+    fn run_migrations_ignores_migrations_unknown_to_this_build() -> Result<(), AppError> {
+        let manager = SqliteConnectionManager::memory();
+        let pool = Pool::builder()
+            .max_size(1)
+            .build(manager)
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        run_migrations(&pool)?;
+
+        let conn = pool.get()?;
+        conn.execute(
+            "INSERT INTO refinery_schema_history (version, name, applied_on, checksum)
+             VALUES (9999, 'from_another_build', '2026-10-12T00:00:00.000000000+00:00', '1')",
+            [],
+        )?;
+        drop(conn);
+
+        run_migrations(&pool)?;
         Ok(())
     }
 }
