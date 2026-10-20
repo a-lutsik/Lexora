@@ -1,3 +1,5 @@
+import { t as tUi } from "../../i18n";
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Searchable Language Select
 // Combobox for long language lists (filter by name/native/code).
@@ -6,7 +8,7 @@
 // ============================================================
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { getLanguageEntry } from '../../lib/languages';
+import { getLanguageEntry, languageLabel } from '../../lib/languages';
 import type { SelectOption } from './Select';
 import './Select.css';
 import './LanguageSelect.css';
@@ -27,11 +29,11 @@ type LanguageSelectProps = {
   onOpenChange?: (open: boolean) => void;
 };
 
-function triggerLabel(option: SelectOption | undefined, compact: boolean, placeholder: string): string {
+function triggerLabel(option: SelectOption | undefined, compact: boolean, placeholder: string, locale: string): string {
   if (!option) return placeholder;
   if (!compact) return option.label;
-  if (option.value === 'auto') return 'Auto';
-  return getLanguageEntry(option.value)?.name ?? option.label;
+  if (option.value === 'auto') return tUi("Auto");
+  return languageLabel(option.value, false, locale);
 }
 
 function optionId(listboxId: string, value: string): string {
@@ -58,7 +60,7 @@ export function LanguageSelect({
   options,
   value,
   onChange,
-  placeholder = 'Select language…',
+  placeholder,
   disabled = false,
   ariaLabel,
   className = '',
@@ -67,6 +69,7 @@ export function LanguageSelect({
   compact = false,
   onOpenChange,
 }: LanguageSelectProps) {
+  const { t: tUi, locale } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -94,7 +97,7 @@ export function LanguageSelect({
     const q = query.trim().toLowerCase();
     if (!q) return allOptions;
     return allOptions.filter((opt) => {
-      const hay = `${opt.label} ${opt.value}`.toLowerCase();
+      const hay = `${opt.label} ${opt.value} ${getLanguageEntry(opt.value)?.name ?? ''}`.toLowerCase();
       return hay.includes(q);
     });
   }, [allOptions, query]);
@@ -203,9 +206,9 @@ export function LanguageSelect({
       >
         <span className="custom-select-value">
           {selectedOption ? (
-            <span>{triggerLabel(selectedOption, compact, placeholder)}</span>
+            <span>{triggerLabel(selectedOption, compact, placeholder ?? tUi("Select language…"), locale)}</span>
           ) : (
-            <span className="custom-select-placeholder">{placeholder}</span>
+            <span className="custom-select-placeholder">{placeholder ?? tUi("Select language…")}</span>
           )}
         </span>
         <span className="custom-select-chevron">
@@ -215,7 +218,7 @@ export function LanguageSelect({
 
       {isOpen && (
         <div className="language-select-dropdown">
-          <input
+          <input dir="auto"
             ref={inputRef}
             type="search"
             className="language-select-search"
@@ -225,8 +228,8 @@ export function LanguageSelect({
               setHighlightedIndex(0);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Search languages…"
-            aria-label="Search languages"
+            placeholder={tUi("Search languages…")}
+            aria-label={tUi("Search languages")}
             aria-controls={listboxId}
             aria-activedescendant={activeDescendantId}
             autoComplete="off"
@@ -240,9 +243,7 @@ export function LanguageSelect({
             aria-label={ariaLabel}
           >
             {filtered.length === 0 ? (
-              <li className="custom-select-option is-disabled" role="presentation">
-                No languages match
-              </li>
+              <li className="custom-select-option is-disabled" role="presentation">{tUi("No languages match")}</li>
             ) : (
               filtered.map((option, index) => {
                 const isSelected = option.value === value;

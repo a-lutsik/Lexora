@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Create Collection Modal
 // ============================================================
@@ -19,6 +20,7 @@ export function CreateCollectionModal({
   languageId,
   onClose,
 }: CreateCollectionModalProps) {
+  const { t: tUi } = useI18n();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -75,51 +77,46 @@ export function CreateCollectionModal({
         }}
       >
         <div className="collection-modal-header">
-          <h2 id="create-collection-title" className="collection-modal-title">
-            New Collection
-          </h2>
+          <h2 id="create-collection-title" className="collection-modal-title">{tUi("New Collection")}</h2>
           <button
             type="button"
             className="collection-modal-close"
             onClick={onClose}
             disabled={createMutation.isPending}
-            aria-label="Close dialog"
+            aria-label={tUi("Close dialog")}
           >
             ×
           </button>
         </div>
 
-        <label className="collection-modal-label" htmlFor="collection-name">
-          Collection name
-        </label>
-        <input
+        <label className="collection-modal-label" htmlFor="collection-name">{tUi("Collection name")}</label>
+        <input dir="auto"
           id="collection-name"
           className="collection-modal-input"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Travel, Work emails, Exam week…"
+          placeholder={tUi("Travel, Work emails, Exam week…")}
           maxLength={80}
           autoFocus
           required
-          aria-label="Collection name"
+          aria-label={tUi("Collection name")}
         />
 
-        <label className="collection-modal-label" htmlFor="collection-description">
-          Description <span className="text-muted">(optional)</span>
+        <label className="collection-modal-label" htmlFor="collection-description">{tUi("Description ")}<span className="text-muted">{tUi("(optional)")}</span>
         </label>
-        <textarea
+        <textarea dir="auto"
           id="collection-description"
           className="collection-modal-textarea"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="What belongs in this list?"
+          placeholder={tUi("What belongs in this list?")}
           rows={3}
           maxLength={240}
         />
 
         {createMutation.isError && (
           <p className="collection-modal-error" role="alert">
-            {formatIpcError(createMutation.error, 'Could not create the collection')}
+            {formatIpcError(createMutation.error, tUi("Could not create the collection"))}
           </p>
         )}
 
@@ -130,19 +127,15 @@ export function CreateCollectionModal({
             size="md"
             onClick={onClose}
             disabled={createMutation.isPending}
-          >
-            Cancel
-          </Button>
+          >{tUi("Cancel")}</Button>
           <Button
             type="submit"
             variant="primary"
             size="md"
             disabled={!canSubmit}
             isLoading={createMutation.isPending}
-            aria-label="Create collection"
-          >
-            Create collection
-          </Button>
+            aria-label={tUi("Create collection")}
+          >{tUi("Create collection")}</Button>
         </div>
       </form>
     </div>

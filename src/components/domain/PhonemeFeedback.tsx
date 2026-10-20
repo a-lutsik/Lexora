@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — PhonemeFeedback
 // Color-coded IPA chips + overall score gauge.
@@ -26,8 +27,9 @@ export function ScoreGauge({
   variant = 'compact',
   label,
   caption,
-  'aria-label': ariaLabel = 'Pronunciation score',
+  'aria-label': ariaLabel,
 }: ScoreGaugeProps) {
+  const { t: tUi } = useI18n();
   const value = score ?? 0;
   const tone = score === null ? 'empty' : scoreTone(value);
   const progress = score === null ? 0 : Math.min(100, Math.max(0, score)) / 100;
@@ -43,7 +45,7 @@ export function ScoreGauge({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={score === null ? 0 : value}
-          aria-label={ariaLabel}
+          aria-label={ariaLabel ?? tUi("Pronunciation score")}
         >
           <svg
             className="score-gauge-ring-svg"
@@ -90,7 +92,7 @@ export function ScoreGauge({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={value}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? tUi("Pronunciation score")}
     >
       <span className="score-gauge-value">{value}%</span>
     </div>
@@ -102,12 +104,13 @@ type PhonemeFeedbackProps = {
 };
 
 export function PhonemeFeedback({ phonemes }: PhonemeFeedbackProps) {
+  const { t: tUi } = useI18n();
   if (phonemes.length === 0) {
-    return <p className="text-muted text-sm">No phoneme breakdown for this attempt.</p>;
+    return <p className="text-muted text-sm">{tUi("No phoneme breakdown for this attempt.")}</p>;
   }
 
   return (
-    <ul className="phoneme-row" aria-label="Phoneme scores">
+    <ul className="phoneme-row" aria-label={tUi("Phoneme scores")}>
       {phonemes.map((phone) => {
         const status = phonemeStatusClass(phone.status);
         return (
@@ -117,7 +120,7 @@ export function PhonemeFeedback({ phonemes }: PhonemeFeedbackProps) {
           >
             <span className="phoneme-chip-ipa">/{phone.targetPhoneme}/</span>
             {phone.recognizedPhoneme && phone.recognizedPhoneme !== phone.targetPhoneme && (
-              <span className="phoneme-chip-heard">heard /{phone.recognizedPhoneme}/</span>
+              <span className="phoneme-chip-heard">{tUi("heard /")}{phone.recognizedPhoneme}/</span>
             )}
             <span className="phoneme-chip-acc">{phone.accuracy}%</span>
           </li>

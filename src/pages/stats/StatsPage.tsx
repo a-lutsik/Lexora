@@ -1,3 +1,5 @@
+import { t } from '../../i18n';
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Statistics Page
 // Streak tracker, retention metrics, accuracy percentage, cards due.
@@ -27,10 +29,11 @@ function accuracyTone(accuracyPercent: number): 'danger' | 'warn' | 'success' {
 // 'word_choice' → 'Word choice'
 function formatErrorType(errorType: string): string {
   const spaced = errorType.replace(/_/g, ' ');
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return t(spaced.charAt(0).toUpperCase() + spaced.slice(1));
 }
 
 export default function StatsPage() {
+  const { t: tUi } = useI18n();
   const activeLanguageId = useSettingsStore((s) => s.activeLanguageId);
 
   const { data: stats } = useQuery({
@@ -78,80 +81,79 @@ export default function StatsPage() {
   return (
     <div className="stats-page animate-fade-in">
       <div className="stats-header">
-        <h1 className="stats-title">Learning Statistics</h1>
-        <p className="text-secondary text-sm">Track your vocabulary growth, retention rates, and daily consistency</p>
+        <h1 className="stats-title">{tUi("Learning Statistics")}</h1>
+        <p className="text-secondary text-sm">{tUi("Track your vocabulary growth, retention rates, and daily consistency")}</p>
       </div>
 
       {/* Metrics Row */}
       <div className="stats-grid">
         <div className="stats-card">
-          <div className="text-muted text-xs font-medium stats-card-label">TOTAL VOCABULARY</div>
+          <div className="text-muted text-xs font-medium stats-card-label">{tUi("TOTAL VOCABULARY")}</div>
           <div className="stats-card-value text-primary">
             {stats?.totalWords ?? 0}
           </div>
-          <div className="text-muted text-xs stats-card-hint">Saved words</div>
+          <div className="text-muted text-xs stats-card-hint">{tUi("Saved words")}</div>
         </div>
 
         <div className="stats-card">
-          <div className="text-muted text-xs font-medium stats-card-label">ACCURACY</div>
+          <div className="text-muted text-xs font-medium stats-card-label">{tUi("ACCURACY")}</div>
           <div className="stats-card-value text-success">
             {stats && stats.accuracyPercent > 0 ? `${stats.accuracyPercent}%` : '—'}
           </div>
-          <div className="text-muted text-xs stats-card-hint">Recall rate</div>
+          <div className="text-muted text-xs stats-card-hint">{tUi("Recall rate")}</div>
         </div>
 
         <div className="stats-card">
-          <div className="text-muted text-xs font-medium stats-card-label">MATURE WORDS</div>
+          <div className="text-muted text-xs font-medium stats-card-label">{tUi("MATURE WORDS")}</div>
           <div className="stats-card-value text-accent">
             {stats?.matureCount ?? 0}
           </div>
-          <div className="text-muted text-xs stats-card-hint">Interval &gt; 21 days</div>
+          <div className="text-muted text-xs stats-card-hint">{tUi("Interval > 21 days")}</div>
         </div>
 
         <div className="stats-card">
-          <div className="text-muted text-xs font-medium stats-card-label">CURRENT STREAK</div>
+          <div className="text-muted text-xs font-medium stats-card-label">{tUi("CURRENT STREAK")}</div>
           <div className="stats-card-value text-warn">
-            🔥 {stats?.streak ?? 0}d
-          </div>
-          <div className="text-muted text-xs stats-card-hint">Days in a row with a review</div>
+            🔥 {stats?.streak ?? 0}{tUi("d")}</div>
+          <div className="text-muted text-xs stats-card-hint">{tUi("Days in a row with a review")}</div>
         </div>
       </div>
 
       {/* Words Added */}
       <div className="stats-section">
-        <h3 className="stats-section-title">Words Added</h3>
+        <h3 className="stats-section-title">{tUi("Words Added")}</h3>
         <div className="stats-added-grid">
           <div className="stats-added-card">
             <div className="stats-added-value text-accent">{wordsAdded?.today ?? 0}</div>
-            <div className="text-muted text-xs">Today</div>
+            <div className="text-muted text-xs">{tUi("Today")}</div>
           </div>
           <div className="stats-added-card">
             <div className="stats-added-value text-accent">{wordsAdded?.thisWeek ?? 0}</div>
-            <div className="text-muted text-xs">This week</div>
+            <div className="text-muted text-xs">{tUi("This week")}</div>
           </div>
           <div className="stats-added-card">
             <div className="stats-added-value text-accent">{wordsAdded?.thisMonth ?? 0}</div>
-            <div className="text-muted text-xs">This month</div>
+            <div className="text-muted text-xs">{tUi("This month")}</div>
           </div>
           <div className="stats-added-card">
             <div className="stats-added-value text-accent">{wordsAdded?.total ?? 0}</div>
-            <div className="text-muted text-xs">Total</div>
+            <div className="text-muted text-xs">{tUi("Total")}</div>
           </div>
         </div>
       </div>
 
       {/* Daily Activity Chart */}
       <div className="stats-section">
-        <h3 className="stats-section-title">Activity — Last {ACTIVITY_DAYS} Days</h3>
+        <h3 className="stats-section-title">{tUi("Activity — Last ")}{ACTIVITY_DAYS}{tUi(" Days")}</h3>
 
         {totalReviewed + totalAdded === 0 ? (
-          <p className="stats-empty text-muted">No activity yet — complete a study session to see the chart.</p>
+          <p className="stats-empty text-muted">{tUi("No activity yet — complete a study session to see the chart.")}</p>
         ) : (
           <>
             <div
               className="stats-activity-chart"
               role="img"
-              aria-label={`Daily activity for the last ${ACTIVITY_DAYS} days: ${totalReviewed} reviews and ${totalAdded} words added in total`}
+              aria-label={tUi("Daily activity for the last {ACTIVITY_DAYS} days: {totalReviewed} reviews and {totalAdded} words added in total", { ACTIVITY_DAYS: ACTIVITY_DAYS, totalReviewed: totalReviewed, totalAdded: totalAdded })}
             >
               {activityDays.map((day, index) => (
                 <div key={day.date} className="stats-activity-day">
@@ -159,12 +161,12 @@ export default function StatsPage() {
                     <div
                       className="stats-activity-bar stats-activity-bar--reviewed"
                       style={{ '--bar-h': `${maxActivity > 0 ? (day.reviewed / maxActivity) * 100 : 0}%` } as React.CSSProperties}
-                      title={`${day.date}: ${day.reviewed} reviewed`}
+                      title={tUi("{value1}: {value2} reviewed", { value1: day.date, value2: day.reviewed })}
                     />
                     <div
                       className="stats-activity-bar stats-activity-bar--added"
                       style={{ '--bar-h': `${maxActivity > 0 ? (day.added / maxActivity) * 100 : 0}%` } as React.CSSProperties}
-                      title={`${day.date}: ${day.added} added`}
+                      title={tUi("{value1}: {value2} added", { value1: day.date, value2: day.added })}
                     />
                   </div>
                   <div className="stats-activity-date" aria-hidden="true">
@@ -175,23 +177,19 @@ export default function StatsPage() {
             </div>
             <div className="stats-activity-legend">
               <span className="stats-activity-legend-item">
-                <span className="stats-activity-legend-swatch stats-activity-legend-swatch--reviewed" aria-hidden="true" />
-                Reviewed
-              </span>
+                <span className="stats-activity-legend-swatch stats-activity-legend-swatch--reviewed" aria-hidden="true" />{tUi("Reviewed")}</span>
               <span className="stats-activity-legend-item">
-                <span className="stats-activity-legend-swatch stats-activity-legend-swatch--added" aria-hidden="true" />
-                Added
-              </span>
+                <span className="stats-activity-legend-swatch stats-activity-legend-swatch--added" aria-hidden="true" />{tUi("Added")}</span>
             </div>
 
             {/* Screen-reader data table duplicating the chart */}
             <table className="sr-only">
-              <caption>Daily activity for the last {ACTIVITY_DAYS} days</caption>
+              <caption>{tUi("Daily activity for the last ")}{ACTIVITY_DAYS}{tUi(" days")}</caption>
               <thead>
                 <tr>
-                  <th scope="col">Date</th>
-                  <th scope="col">Reviewed</th>
-                  <th scope="col">Added</th>
+                  <th scope="col">{tUi("Date")}</th>
+                  <th scope="col">{tUi("Reviewed")}</th>
+                  <th scope="col">{tUi("Added")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -210,10 +208,10 @@ export default function StatsPage() {
 
       {/* Accuracy by Error Type */}
       <div className="stats-section">
-        <h3 className="stats-section-title">Accuracy by Error Type</h3>
+        <h3 className="stats-section-title">{tUi("Accuracy by Error Type")}</h3>
 
         {!errorBreakdown || errorBreakdown.length === 0 ? (
-          <p className="stats-empty text-muted">Not enough data — errors will appear after study sessions.</p>
+          <p className="stats-empty text-muted">{tUi("Not enough data — errors will appear after study sessions.")}</p>
         ) : (
           <ul className="stats-error-list">
             {errorBreakdown.map((item) => (
@@ -222,7 +220,7 @@ export default function StatsPage() {
                 <div
                   className="stats-error-track"
                   role="img"
-                  aria-label={`${formatErrorType(item.errorType)}: ${item.count} errors, ${item.accuracyPercent}% accuracy`}
+                  aria-label={tUi("{value1}: {value2} errors, {value3}% accuracy", { value1: formatErrorType(item.errorType), value2: item.count, value3: item.accuracyPercent })}
                 >
                   <div
                     className={`stats-error-bar stats-error-bar--${accuracyTone(item.accuracyPercent)}`}
@@ -240,10 +238,10 @@ export default function StatsPage() {
 
       {/* Hardest Words */}
       <div className="stats-section">
-        <h3 className="stats-section-title">Hardest Words</h3>
+        <h3 className="stats-section-title">{tUi("Hardest Words")}</h3>
 
         {!hardestWords || hardestWords.length === 0 ? (
-          <p className="stats-empty text-muted">Not enough data — difficult words will appear after study sessions.</p>
+          <p className="stats-empty text-muted">{tUi("Not enough data — difficult words will appear after study sessions.")}</p>
         ) : (
           <ul className="stats-hardest-list">
             {hardestWords.map((word) => (
@@ -253,7 +251,7 @@ export default function StatsPage() {
                   {word.translation ?? '—'}
                 </div>
                 <div className="stats-hardest-lapses text-muted">
-                  {word.lapses} {word.lapses === 1 ? 'lapse' : 'lapses'}
+                  {word.lapses} {word.lapses === 1 ? tUi("lapse") : tUi("lapses")}
                 </div>
                 <span className={`stats-accuracy-badge stats-accuracy-badge--${accuracyTone(word.accuracyPercent)}`}>
                   {word.accuracyPercent}%
@@ -266,36 +264,34 @@ export default function StatsPage() {
 
       {/* SRS Mastery Distribution */}
       <div className="stats-section">
-        <h3 className="stats-section-title">
-          SRS Mastery Stages
-        </h3>
+        <h3 className="stats-section-title">{tUi("SRS Mastery Stages")}</h3>
 
         <div className="stats-stages">
           <div className="stats-stage">
-            <div className="stats-stage-name stats-stage-name--new">New</div>
-            <div className="text-muted text-xs">Awaiting first session</div>
+            <div className="stats-stage-name stats-stage-name--new">{tUi("New")}</div>
+            <div className="text-muted text-xs">{tUi("Awaiting first session")}</div>
           </div>
           <div className="stats-stage">
-            <div className="stats-stage-name stats-stage-name--learning">Learning</div>
-            <div className="text-muted text-xs">Interval 1–4 days</div>
+            <div className="stats-stage-name stats-stage-name--learning">{tUi("Learning")}</div>
+            <div className="text-muted text-xs">{tUi("Interval 1–4 days")}</div>
           </div>
           <div className="stats-stage">
-            <div className="stats-stage-name stats-stage-name--review">Review</div>
-            <div className="text-muted text-xs">Interval 4–21 days</div>
+            <div className="stats-stage-name stats-stage-name--review">{tUi("Review")}</div>
+            <div className="text-muted text-xs">{tUi("Interval 4–21 days")}</div>
           </div>
           <div className="stats-stage">
-            <div className="stats-stage-name stats-stage-name--mature">Mature</div>
-            <div className="text-muted text-xs">Long term retention</div>
+            <div className="stats-stage-name stats-stage-name--mature">{tUi("Mature")}</div>
+            <div className="text-muted text-xs">{tUi("Long term retention")}</div>
           </div>
         </div>
       </div>
 
       {/* Writing Error Patterns */}
       <div className="stats-section">
-        <h3 className="stats-section-title">Writing Mistake Patterns</h3>
+        <h3 className="stats-section-title">{tUi("Writing Mistake Patterns")}</h3>
 
         {!writingPatterns || writingPatterns.length === 0 ? (
-          <p className="stats-empty text-muted">No writing mistakes recorded yet — analyze text in Writing Assistant.</p>
+          <p className="stats-empty text-muted">{tUi("No writing mistakes recorded yet — analyze text in Writing Assistant.")}</p>
         ) : (
           <ul className="stats-error-list">
             {writingPatterns.map((pattern) => (
@@ -317,14 +313,14 @@ export default function StatsPage() {
 
       {/* Pronunciation */}
       <div className="stats-section">
-        <h3 className="stats-section-title">Pronunciation</h3>
+        <h3 className="stats-section-title">{tUi("Pronunciation")}</h3>
         <p className="text-muted text-sm stats-pronunciation-avg">
           {pronunciationAverage == null
-            ? 'No speaking attempts yet.'
-            : `Average score across recent attempts: ${pronunciationAverage}/100`}
+            ? tUi("No speaking attempts yet.")
+            : tUi("Average score across recent attempts: {pronunciationAverage}/100", { pronunciationAverage: pronunciationAverage })}
         </p>
         {!problemPhonemes || problemPhonemes.length === 0 ? (
-          <p className="stats-empty text-muted">Problem sounds will appear after scored recordings.</p>
+          <p className="stats-empty text-muted">{tUi("Problem sounds will appear after scored recordings.")}</p>
         ) : (
           <ul className="stats-error-list">
             {problemPhonemes.map((pattern) => (
@@ -333,7 +329,7 @@ export default function StatsPage() {
                 <span className="text-secondary text-xs">
                   {pattern.sampleTarget && pattern.sampleRecognized
                     ? `${pattern.sampleTarget} → ${pattern.sampleRecognized}`
-                    : 'frequent miss'}
+                    : tUi("frequent miss")}
                 </span>
                 <span className="stats-error-meta">×{pattern.occurrenceCount}</span>
               </li>

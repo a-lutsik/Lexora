@@ -143,7 +143,7 @@ describe('StudyPage', () => {
       expect(selected()).toHaveFocus();
 
       await user.keyboard('{ArrowLeft}{ArrowLeft}');
-      expect(selected()).toHaveTextContent('Speaking');
+      expect(selected()).toHaveTextContent('Collocations');
       expect(selected()).toHaveFocus();
     });
 
@@ -152,7 +152,7 @@ describe('StudyPage', () => {
       screen.getAllByRole('radio')[0]?.focus();
 
       await user.keyboard('{End}');
-      expect(selected()).toHaveTextContent('Speaking');
+      expect(selected()).toHaveTextContent('Collocations');
       await user.keyboard('{Home}');
       expect(selected()).toHaveTextContent('Flashcards');
     });

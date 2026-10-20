@@ -132,3 +132,125 @@ fn v023_keeps_customized_ai_settings() -> Result<(), AppError> {
     assert_eq!(package, None);
     Ok(())
 }
+
+#[test]
+fn vocabulary_categories_default_all_insertion_paths_to_general() -> Result<(), AppError> {
+    let pool = create_pool_test_memory()?;
+    run_migrations(&pool)?;
+    let conn = pool.get()?;
+    let language_count: i64 = conn.query_row("SELECT COUNT(*) FROM language", [], |r| r.get(0))?;
+    let general_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM vocabulary_category WHERE is_general = 1 AND deleted_at IS NULL",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(general_count, language_count);
+    conn.execute("INSERT INTO lexeme (language_id, text, normalized_text) VALUES (1, 'category default', 'category default')", [])?;
+    let lexeme_id = conn.last_insert_rowid();
+    conn.execute(
+        "INSERT INTO user_vocabulary (lexeme_id, source) VALUES (?1, 'import')",
+        [lexeme_id],
+    )?;
+    let (name, language_id): (String, i64) = conn.query_row(
+        "SELECT c.name, c.language_id FROM user_vocabulary uv JOIN vocabulary_category c ON c.id = uv.category_id WHERE uv.lexeme_id = ?1",
+        [lexeme_id], |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    assert_eq!(name, "General");
+    assert_eq!(language_id, 1);
+    assert!(conn.execute(
+        "UPDATE user_vocabulary SET category_id = (SELECT id FROM vocabulary_category WHERE language_id = 2 AND is_general = 1) WHERE lexeme_id = ?1",
+        [lexeme_id],
+    ).is_err(), "raw writes must reject cross-language categories");
+    assert!(conn.execute(
+        "UPDATE user_vocabulary SET category_id = NULL WHERE lexeme_id = ?1",
+        [lexeme_id],
+    ).is_err(), "persisted words must retain a category");
+    Ok(())
+}
+
+#[test]
+fn category_migration_backfills_existing_words_and_restarts_safely() -> Result<(), AppError> {
+    let pool = create_pool_test_memory()?;
+    {
+        let mut conn = pool.get()?;
+        super::migrations::runner()
+            .set_target(refinery::Target::Version(28))
+            .run(&mut *conn)
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        conn.execute("INSERT INTO lexeme(language_id, text, normalized_text) VALUES (1, 'existing category word', 'existing category word')", [])?;
+        let lexeme_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO user_vocabulary(lexeme_id) VALUES (?1)",
+            [lexeme_id],
+        )?;
+    }
+    run_migrations(&pool)?;
+    run_migrations(&pool)?;
+    let conn = pool.get()?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM user_vocabulary uv JOIN vocabulary_category c ON c.id = uv.category_id WHERE c.is_general = 1 AND c.language_id = 1",
+        [], |row| row.get(0),
+    )?;
+    assert_eq!(count, 1);
+    conn.execute("INSERT INTO language(code, name, native_name) VALUES ('zz', 'Category language', 'Category language')", [])?;
+    let general_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM vocabulary_category WHERE language_id = (SELECT id FROM language WHERE code = 'zz') AND is_general = 1",
+        [], |row| row.get(0),
+    )?;
+    assert_eq!(general_count, 1);
+    Ok(())
+}
+
+#[test]
+fn v030_adds_collocation_cache_and_check_table() -> Result<(), AppError> {
+    let pool = create_pool_test_memory()?;
+    run_migrations(&pool)?;
+    run_migrations(&pool)?;
+
+    let conn = pool.get()?;
+    let table: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'lexeme_collocation'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(table, 1);
+    let marker: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'lexeme_collocation_check'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(marker, 1);
+    Ok(())
+}
+
+#[test]
+fn v032_adds_advanced_models_switch_off_by_default() -> Result<(), AppError> {
+    let pool = create_pool_test_memory()?;
+    run_migrations(&pool)?;
+    run_migrations(&pool)?;
+
+    let conn = pool.get()?;
+    let advanced: i64 = conn.query_row(
+        "SELECT advanced_models FROM user_settings WHERE id = 1",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(advanced, 0);
+    Ok(())
+}
+
+#[test]
+fn v031_adds_voice_translate_hotkey_with_default() -> Result<(), AppError> {
+    let pool = create_pool_test_memory()?;
+    run_migrations(&pool)?;
+    run_migrations(&pool)?;
+
+    let conn = pool.get()?;
+    let hotkey: String = conn.query_row(
+        "SELECT hotkey_voice_translate FROM user_settings WHERE id = 1",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(hotkey, crate::hotkeys::VOICE_TRANSLATE_SHORTCUT);
+    Ok(())
+}

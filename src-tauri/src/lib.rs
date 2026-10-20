@@ -11,6 +11,7 @@ pub mod display;
 pub mod error;
 pub mod grammar_watch;
 pub mod hotkeys;
+pub mod i18n;
 pub mod popup;
 pub mod pronunciation;
 pub mod providers;
@@ -49,6 +50,9 @@ pub fn run() {
                         Some(hotkeys::HotkeyAction::TranslateSelection) => {
                             hotkeys::translate_selection(app);
                         }
+                        Some(hotkeys::HotkeyAction::VoiceTranslate) => {
+                            hotkeys::voice_translate(app);
+                        }
                         Some(hotkeys::HotkeyAction::ToggleStickers) => {
                             if let Err(e) = stickers::toggle_stickers_inner(app) {
                                 log::warn!("Failed to toggle stickers from hotkey: {e}");
@@ -71,6 +75,8 @@ pub fn run() {
         })
         // ── Setup ─────────────────────────────────────────
         .setup(|app| {
+            i18n::initialize(app.handle())?;
+
             // Initialize SQLite connection pool
             let app_dir = app.path().app_data_dir()?;
 
@@ -96,7 +102,10 @@ pub fn run() {
                     .notification()
                     .builder()
                     .title("Lexora")
-                    .body(&health.message)
+                    .body(i18n::text(app.handle(), match health.status {
+                        db::backup::DbHealthStatus::RecoveredFromBackup => "Database was corrupt and restored from backup.",
+                        _ => "Database was corrupt and no usable backup found; starting with an empty database. The original file was preserved for recovery.",
+                    }))
                     .show()
                 {
                     log::warn!("Failed to show recovery notification: {e}");
@@ -178,7 +187,7 @@ pub fn run() {
             // HotkeyState должен быть managed до регистрации — register_shortcuts
             // обновляет в нём привязки для диспетчеризации в обработчике плагина.
             app.manage(hotkeys::HotkeyState::default());
-            let (hotkey_translate, hotkey_stickers) = {
+            let shortcuts = {
                 let pool = app.state::<Arc<db::DbPool>>();
                 match pool
                     .get()
@@ -188,16 +197,11 @@ pub fn run() {
                     Ok(settings) => hotkeys::current_shortcuts(&settings),
                     Err(e) => {
                         log::warn!("Failed to load hotkey settings, using defaults: {e}");
-                        (
-                            hotkeys::TRANSLATE_SHORTCUT.to_string(),
-                            hotkeys::STICKERS_SHORTCUT.to_string(),
-                        )
+                        hotkeys::ShortcutStrings::default()
                     }
                 }
             };
-            if let Err(e) =
-                hotkeys::register_shortcuts(app.handle(), &hotkey_translate, &hotkey_stickers)
-            {
+            if let Err(e) = hotkeys::register_shortcuts(app.handle(), &shortcuts) {
                 log::warn!("Failed to register global shortcuts: {e}");
             }
 
@@ -220,13 +224,22 @@ pub fn run() {
         })
         // ── IPC Commands ───────────────────────────────────
         .invoke_handler(tauri::generate_handler![
+            commands::interface::set_interface_locale,
             // Vocabulary
+            commands::categories::list_categories,
+            commands::categories::create_category,
+            commands::categories::rename_category,
+            commands::categories::delete_category,
+            commands::categories::move_vocabulary_to_category,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::get_vocabulary_entry,
             commands::vocabulary::add_to_vocabulary,
+            commands::collocations::get_collocations,
+            commands::collocations::add_collocations_to_vocabulary,
             commands::vocabulary::add_vocabulary_batch,
             commands::vocabulary::import_word_list,
             commands::vocabulary::remove_from_vocabulary,
+            commands::vocabulary::remove_vocabulary_batch,
             commands::vocabulary::toggle_favorite,
             commands::vocabulary::update_vocabulary_notes,
             commands::vocabulary::update_vocabulary_entry,
@@ -254,6 +267,10 @@ pub fn run() {
             commands::grammar_watch::request_grammar_watch_access,
             commands::grammar_watch::get_grammar_field,
             commands::grammar_watch::apply_grammar_fix,
+            commands::grammar_watch::set_grammar_marks,
+            commands::grammar_watch::get_grammar_marks,
+            commands::grammar_watch::get_grammar_card,
+            commands::grammar_watch::grammar_card_action,
             commands::grammar_watch::set_grammar_panel_open,
             commands::grammar_watch::snooze_grammar_field,
             commands::grammar_watch::exclude_grammar_app,
@@ -300,6 +317,8 @@ pub fn run() {
             commands::models::get_ai_usage,
             commands::models::apply_model_package,
             commands::models::set_role_route,
+            commands::models::set_advanced_models,
+            commands::models::list_provider_models,
             commands::models::test_model_role,
             // Realtime voice (Gemini Live)
             commands::realtime::realtime_start,

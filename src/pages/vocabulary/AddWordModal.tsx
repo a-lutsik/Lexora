@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Add Word Modal
 // Quick translate and single-click add to vocabulary with AI.
@@ -8,7 +9,11 @@ import { listen } from '@tauri-apps/api/event';
 import { useTranslate } from '../../hooks/useTranslate';
 import { useAddToVocabulary } from '../../hooks/useVocabulary';
 import { useSessionLanguagePair } from '../../hooks/useSessionLanguagePair';
-import { useLanguageOptions } from '../../hooks/useLanguages';
+import { useCategories } from '../../hooks/useCategories';
+import { CategorySelect } from '../../components/domain/CategorySelect';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { formatIpcError } from '../../lib/utils';
+import { useLanguages, resolveLanguageId, useLanguageOptions } from '../../hooks/useLanguages';
 import { Button } from '../../components/ui/Button';
 import { PosBadge } from '../../components/ui/Badge';
 import { AudioButton } from '../../components/domain/AudioButton';
@@ -23,6 +28,7 @@ type AddWordModalProps = {
   isOpen: boolean;
   onClose: () => void;
   initialText?: string;
+  initialCategoryId?: number | null;
 };
 
 function CloseIcon() {
@@ -33,9 +39,12 @@ function CloseIcon() {
   );
 }
 
-export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModalProps) {
+export function AddWordModal({ isOpen, onClose, initialText = '', initialCategoryId = null }: AddWordModalProps) {
+  const { t: tUi } = useI18n();
   const [text, setText] = useState(initialText);
   const [notes, setNotes] = useState('');
+  const [categoryId, setCategoryId] = useState(initialCategoryId);
+  const activeLanguageId = useSettingsStore((state) => state.activeLanguageId);
   const [added, setAdded] = useState(false);
   const [enrichExample, setEnrichExample] = useState<string | null>(null);
   const [enrichImagePath, setEnrichImagePath] = useState<string | null>(null);
@@ -47,12 +56,16 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
 
   const { sourceLang, targetLang, setTargetLang } = useSessionLanguagePair();
   const langOptions = useLanguageOptions([sourceLang, targetLang]);
+  const { data: languages } = useLanguages();
+  const sourceLanguageId = resolveLanguageId(languages, sourceLang) ?? activeLanguageId;
+  const categories = useCategories(isOpen ? sourceLanguageId : 0);
   const translateMutation = useTranslate();
   const addMutation = useAddToVocabulary();
 
   const resetDraft = (nextText = '') => {
     setText(nextText);
     setNotes('');
+    setCategoryId(initialCategoryId);
     setAdded(false);
     setEnrichExample(null);
     setEnrichImagePath(null);
@@ -180,6 +193,7 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
 
   const handleAdd = () => {
     if (!text.trim()) return;
+    const selectedCategoryId = categoryId ?? categories.data?.find((category) => category.isGeneral)?.id;
     addMutation.mutate(
       {
         lexemeId: translateMutation.data?.lexemeId ?? null,
@@ -187,6 +201,7 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
         sourceLanguage: translateMutation.data?.sourceLanguage || sourceLang,
         notes: notes.trim() || undefined,
         source: 'manual',
+        ...(selectedCategoryId != null ? { categoryId: selectedCategoryId } : {}),
       },
       {
         onSuccess: () => {
@@ -226,16 +241,14 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
         {/* Header */}
         <div className="add-word-header">
           <div>
-            <h2 id="add-word-title" className="add-word-title">Add Word to Vocabulary</h2>
-            <p className="text-secondary text-xs">
-              Translate from {sourceLang.toUpperCase()} → {targetLang.toUpperCase()} (session target does not change Settings)
-            </p>
+            <h2 id="add-word-title" className="add-word-title">{tUi("Add Word to Vocabulary")}</h2>
+            <p className="text-secondary text-xs">{tUi("Translate from ")}{sourceLang.toUpperCase()} → {targetLang.toUpperCase()}{tUi(" (session target does not change Settings)")}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="add-word-close-btn"
-            aria-label="Close dialog"
+            aria-label={tUi("Close dialog")}
           >
             <CloseIcon />
           </button>
@@ -246,35 +259,33 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
             value={targetLang}
             options={langOptions}
             onChange={handleTargetChange}
-            ariaLabel="Target language"
+            ariaLabel={tUi("Target language")}
           />
         </div>
 
         {/* Input & Translate Button */}
         <div className="add-word-input-row">
-          <input
+          <input dir="auto"
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleTranslate()}
-            placeholder={`Type word or phrase in ${sourceLang.toUpperCase()}…`}
+            placeholder={tUi("Type word or phrase in {value1}…", { value1: sourceLang.toUpperCase() })}
             autoFocus
             className="add-word-input"
-            aria-label="Word or phrase to translate"
+            aria-label={tUi("Word or phrase to translate")}
           />
           <Button
             variant="secondary"
             size="md"
             onClick={() => handleTranslate()}
             isLoading={translateMutation.isPending}
-          >
-            Translate
-          </Button>
+          >{tUi("Translate")}</Button>
         </div>
 
         {translateMutation.isError && !translateMutation.isPending && (
           <div className="add-word-error-box" role="alert">
-            <div className="add-word-error-title">Couldn’t translate</div>
+            <div className="add-word-error-title">{tUi("Couldn’t translate")}</div>
             <div>
               {formatProviderError(translateMutation.error)}
             </div>
@@ -295,7 +306,7 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
                 <AudioButton
                   text={data.text}
                   language={data.sourceLanguage || undefined}
-                  ariaLabel="Pronounce"
+                  ariaLabel={tUi("Pronounce")}
                 />
               </div>
               <PosBadge pos={data.partOfSpeech} />
@@ -307,7 +318,7 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
 
             <AssociatedImage
               path={data.imagePath}
-              alt={`Photo of ${data.text}`}
+              alt={tUi("Photo of {word}", { word: data.text })}
               isLoading={imagePending && !data.imagePath}
               isRefreshing={imageRefreshing}
               size="card"
@@ -323,7 +334,7 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
             )}
 
             {data.sourceSynonyms.length > 0 && (
-              <div className="add-word-source-synonyms" aria-label="Source language synonyms">
+              <div className="add-word-source-synonyms" aria-label={tUi("Source language synonyms")}>
                 {data.sourceSynonyms.map((syn) => (
                   <span key={syn} className="add-word-syn-chip">
                     {syn}
@@ -350,29 +361,32 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
           </div>
         )}
 
+        <label className="bulk-add-field">{tUi('Category')}
+          <CategorySelect categories={categories.data ?? []} value={categoryId} onChange={setCategoryId}
+            disabled={addMutation.isPending || added} />
+        </label>
+        {categories.isError && <p className="text-secondary text-xs">{tUi('Could not load categories.')} <Button size="sm" onClick={() => void categories.refetch()}>{tUi('Try again')}</Button></p>}
+        {addMutation.isError && <p role="alert" className="add-word-image-error">{formatIpcError(addMutation.error, tUi('Could not add word.'))}</p>}
+
         {/* Optional Notes */}
         <div>
           <label
             htmlFor="add-word-notes"
             className="text-secondary text-xs font-medium add-word-notes-label"
-          >
-            PERSONAL NOTES / CONTEXT (OPTIONAL)
-          </label>
-          <input
+          >{tUi("PERSONAL NOTES / CONTEXT (OPTIONAL)")}</label>
+          <input dir="auto"
             id="add-word-notes"
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="e.g. Learned from reading an article about space..."
+            placeholder={tUi("e.g. Learned from reading an article about space...")}
             className="add-word-notes-input"
           />
         </div>
 
         {/* Actions */}
         <div className="add-word-actions">
-          <Button variant="ghost" size="md" onClick={onClose}>
-            Cancel
-          </Button>
+          <Button variant="ghost" size="md" onClick={onClose}>{tUi("Cancel")}</Button>
           <Button
             variant={added ? 'secondary' : 'primary'}
             size="md"
@@ -380,7 +394,7 @@ export function AddWordModal({ isOpen, onClose, initialText = '' }: AddWordModal
             isLoading={addMutation.isPending}
             disabled={!text.trim() || added}
           >
-            {added ? '✓ Added to Vocabulary!' : '+ Add to Vocabulary'}
+            {added ? tUi("✓ Added to Vocabulary!") : tUi("+ Add to Vocabulary")}
           </Button>
         </div>
       </div>

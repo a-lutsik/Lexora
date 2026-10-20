@@ -45,6 +45,8 @@ export function useAddToVocabulary() {
     mutationFn: (input: AddVocabularyInput) => ipc.vocabulary.add(input),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.CATEGORIES] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY_ENTRY] });
       void client.invalidateQueries({ queryKey: ['media', 'image'] });
     },
   });
@@ -57,6 +59,8 @@ export function useAddVocabularyBatch() {
     mutationFn: (input: AddVocabularyBatchInput) => ipc.vocabulary.addBatch(input),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.CATEGORIES] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY_ENTRY] });
     },
   });
 }
@@ -68,6 +72,8 @@ export function useImportWordList() {
     mutationFn: (input: ImportWordListInput) => ipc.vocabulary.importWordList(input),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.CATEGORIES] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY_ENTRY] });
     },
   });
 }
@@ -79,6 +85,7 @@ export function useRemoveFromVocabulary() {
     mutationFn: (id: number) => ipc.vocabulary.remove(id),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.CATEGORIES] });
       // Удалённое слово не должно оставаться в счётчике «к повторению» и очереди.
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.DUE_COUNT] });
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.STUDY_QUEUE] });
@@ -97,6 +104,7 @@ export function useToggleFavorite() {
         updated
       );
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.CATEGORIES] });
     },
   });
 }
@@ -110,6 +118,23 @@ export function useUpdateVocabularyEntry() {
     onSuccess: (updated) => {
       client.setQueryData([QUERY_KEYS.VOCABULARY_ENTRY, updated.id], updated);
       void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.CATEGORIES] });
+    },
+  });
+}
+
+export function useRemoveVocabularyBatch() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => ipc.vocabulary.removeBatch(ids),
+    onSuccess: (_result, ids) => {
+      for (const id of ids) {
+        client.removeQueries({ queryKey: [QUERY_KEYS.VOCABULARY_ENTRY, id], exact: true });
+      }
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.VOCABULARY] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.CATEGORIES] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.DUE_COUNT] });
+      void client.invalidateQueries({ queryKey: [QUERY_KEYS.STUDY_QUEUE] });
     },
   });
 }

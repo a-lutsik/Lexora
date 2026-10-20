@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Settings → Writing check in other apps
 // Opt-in «Grammarly mode»: Lexora watches the text field you type
@@ -16,6 +17,7 @@ import { Button } from '../../components/ui/Button';
 import { formatIpcError } from '../../lib/utils';
 
 export function GrammarWatchSection() {
+  const { t: tUi } = useI18n();
   const { data: settings, isLoading } = useGrammarWatchSettings();
   const { data: status } = useGrammarWatchStatus();
   const update = useUpdateGrammarWatchSettings();
@@ -64,60 +66,44 @@ export function GrammarWatchSection() {
 
   return (
     <div id="settings-writing-check" className="settings-section" aria-labelledby="grammar-watch-title">
-      <h3 id="grammar-watch-title" className="settings-section-title settings-section-title--spaced">
-        Writing check in other apps
-      </h3>
+      <h3 id="grammar-watch-title" className="settings-section-title settings-section-title--spaced">{tUi("Writing check in other apps")}</h3>
 
       <div className="settings-fields">
         <label className="settings-checkbox-label">
-          <input
+          <input dir="auto"
             type="checkbox"
             checked={enabled}
             disabled={!supported || isLoading || update.isPending}
             onChange={(event) => handleToggle(event.target.checked)}
             className="settings-checkbox"
           />
-          <span className="settings-checkbox-text text-sm font-medium">
-            Suggest fixes while I type in any app
-          </span>
+          <span className="settings-checkbox-text text-sm font-medium">{tUi("Suggest fixes while I type in any app")}</span>
         </label>
-        <p className="text-secondary text-xs">
-          Lexora reads the text field you are typing in and, after a short pause, sends the text to
-          your AI provider to check it in your learning language. A badge appears in the corner of
-          the field; click it to apply fixes right there. Password fields are never read and checks
-          are not saved. Uses your AI provider and may incur API cost.
-        </p>
+        <p className="text-secondary text-xs">{tUi("Lexora reads the text field you are typing in and, after a short pause, sends the text to your AI provider to check it in your learning language. A badge appears in the corner of the field; click it to apply fixes right there. Password fields are never read and checks are not saved. Uses your AI provider and may incur API cost.")}</p>
         {!supported && status && (
-          <p className="text-secondary text-xs">Available on macOS and Windows.</p>
+          <p className="text-secondary text-xs">{tUi("Available on macOS and Windows.")}</p>
         )}
 
         {needsAccess && (
           <div className="grammar-settings-access" role="alert">
-            <p className="text-sm">
-              Lexora needs Accessibility access to read and fix text in other apps: System Settings
-              → Privacy & Security → Accessibility.
-            </p>
+            <p className="text-sm">{tUi("Lexora needs Accessibility access to read and fix text in other apps: System Settings → Privacy & Security → Accessibility.")}</p>
             <Button
               size="sm"
               onClick={() => requestAccess.mutate()}
               disabled={requestAccess.isPending}
-            >
-              Grant access
-            </Button>
+            >{tUi("Grant access")}</Button>
           </div>
         )}
 
         {update.isError && (
           <p className="text-danger text-xs" role="alert">
-            {formatIpcError(update.error, 'Could not save the setting.')}
+            {formatIpcError(update.error, tUi("Could not save the setting."))}
           </p>
         )}
 
         <div>
-          <label htmlFor={inputId} className="settings-label text-secondary text-xs font-medium">
-            NEVER CHECK IN THESE APPS (BUNDLE ID OR .EXE NAME)
-          </label>
-          <ul className="grammar-settings-apps" aria-label="Excluded apps">
+          <label htmlFor={inputId} className="settings-label text-secondary text-xs font-medium">{tUi("NEVER CHECK IN THESE APPS (BUNDLE ID OR .EXE NAME)")}</label>
+          <ul className="grammar-settings-apps" aria-label={tUi("Excluded apps")}>
             {excluded.map((bundleId) => (
               <li key={bundleId} className="grammar-settings-app">
                 <span className="grammar-settings-app-id">{bundleId}</span>
@@ -126,7 +112,7 @@ export function GrammarWatchSection() {
                   className="grammar-settings-app-remove"
                   onClick={() => save({ excludedApps: excluded.filter((id) => id !== bundleId) })}
                   disabled={update.isPending}
-                  aria-label={`Check again in ${bundleId}`}
+                  aria-label={tUi("Check again in {bundleId}", { bundleId: bundleId })}
                 >
                   ×
                 </button>
@@ -136,19 +122,17 @@ export function GrammarWatchSection() {
           {/* Not a <form>: the section lives inside the Settings form, and a
               nested submit would also run the page-wide save. */}
           <div className="grammar-settings-add">
-            <input
+            <input dir="auto"
               id={inputId}
               type="text"
               className="settings-input settings-input--mono"
               value={newApp}
               onChange={(event) => setNewApp(event.target.value)}
               onKeyDown={handleAddKey}
-              placeholder="com.example.app, notepad.exe or com.example.*"
+              placeholder={tUi("com.example.app, notepad.exe or com.example.*")}
               disabled={!settings}
             />
-            <Button size="sm" onClick={handleAdd} disabled={!newApp.trim() || update.isPending}>
-              Add
-            </Button>
+            <Button size="sm" onClick={handleAdd} disabled={!newApp.trim() || update.isPending}>{tUi("Add")}</Button>
           </div>
         </div>
       </div>

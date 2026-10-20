@@ -2,14 +2,19 @@
 // LEXORA — Writing-check badge
 // A small circle in the corner of the text field the user is
 // typing in: spinner while checking, number of suggestions,
-// ✓ when the text is clean, «!» when the check failed.
+// the Lexora «L» when the text is clean, «!» when the check failed.
 // ============================================================
+
+import type { ReactNode } from 'react';
+import { t as tUi } from "../i18n";
+import { useI18n } from "../hooks/useI18n";
 
 export type BadgeState =
   | { kind: 'checking' }
   | { kind: 'error' }
   | { kind: 'clean' }
-  | { kind: 'issues'; count: number };
+  /** `hasErrors`: at least one mistake (red); otherwise only improvements (yellow). */
+  | { kind: 'issues'; count: number; hasErrors: boolean };
 
 type GrammarBadgeProps = {
   state: BadgeState;
@@ -19,33 +24,45 @@ type GrammarBadgeProps = {
 function badgeLabel(state: BadgeState): string {
   switch (state.kind) {
     case 'checking':
-      return 'Lexora is checking your text';
+      return tUi("Lexora is checking your text");
     case 'error':
-      return 'Writing check failed — open details';
+      return tUi("Writing check failed — open details");
     case 'clean':
-      return 'No mistakes found — open writing check';
+      return tUi("No mistakes found — open writing check");
     case 'issues':
-      return `${state.count} writing ${state.count === 1 ? 'suggestion' : 'suggestions'} — open`;
+      return state.count === 1
+        ? tUi("{count} writing suggestion — open", { count: state.count })
+        : tUi("{count} writing suggestions — open", { count: state.count });
   }
 }
 
-function badgeContent(state: BadgeState): string {
+/** The app icon (public/favicon.svg): the Lexora «L» on its purple tile. */
+function LexoraMark() {
+  return <img className="grammar-badge-logo" src="/favicon.svg" alt="" draggable={false} />;
+}
+
+function badgeContent(state: BadgeState): ReactNode {
   switch (state.kind) {
     case 'checking':
-      return '';
+      return null;
     case 'error':
       return '!';
     case 'clean':
-      return '✓';
+      return <LexoraMark />;
     case 'issues':
       return state.count > 9 ? '9+' : String(state.count);
   }
 }
 
+function badgeTone(state: BadgeState): string {
+  return state.kind === 'issues' && !state.hasErrors ? 'is-improvements' : `is-${state.kind}`;
+}
+
 export function GrammarBadge({ state, onOpen }: GrammarBadgeProps) {
+  useI18n();
   return (
     <button type="button" className="grammar-badge" onClick={onOpen} aria-label={badgeLabel(state)}>
-      <span className={`grammar-badge-dot is-${state.kind}`} aria-hidden="true">
+      <span className={`grammar-badge-dot ${badgeTone(state)}`} aria-hidden="true">
         {badgeContent(state)}
       </span>
     </button>

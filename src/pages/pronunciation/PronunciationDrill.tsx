@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Shared Practice / Shadowing drill scene
 // Glass card, hero phrase, waveform + mic, score rings, toolbar.
@@ -54,9 +55,10 @@ export type PronunciationDrillProps = {
 };
 
 function HighlightedPhrase({ text, className }: { text: string; className?: string }) {
+  const { t: tUi } = useI18n();
   const tokens = tokenizePhrase(text);
   if (!text.trim()) {
-    return <p className={className}>Enter a phrase to begin</p>;
+    return <p className={className}>{tUi("Enter a phrase to begin")}</p>;
   }
   return (
     <p className={className} aria-hidden="true">
@@ -109,25 +111,23 @@ export function PronunciationDrill({
   error = null,
   children,
 }: PronunciationDrillProps) {
+  const { t: tUi } = useI18n();
   const sessionCaption =
     sessionTotal > 0 ? (
-      <>
-        Passed{' '}
+      <>{tUi("Passed")}{' '}
         <span className="score-gauge-ring-pass">
           {sessionPassed}/{sessionTotal}
         </span>{' '}
-        ({PRONUNCIATION_PASS_SCORE}% threshold)
-      </>
+        ({PRONUNCIATION_PASS_SCORE}{tUi("% threshold)")}</>
     ) : (
-      <>Pass at {PRONUNCIATION_PASS_SCORE}%</>
+      <>{tUi("Pass at ")}{PRONUNCIATION_PASS_SCORE}%</>
     );
 
   const currentLabel =
     currentScore === null ? (
-      'Current Score'
+      tUi("Current Score")
     ) : (
-      <>
-        Current Score:{' '}
+      <>{tUi("Current Score:")}{' '}
         <span className="score-gauge-ring-pass">{currentScore}%</span>
       </>
     );
@@ -141,45 +141,45 @@ export function PronunciationDrill({
           {phraseEditable ? (
             <label className="drill-phrase-field" htmlFor={phraseInputId}>
               <span className="sr-only">{phraseInputLabel}</span>
-              <input
+              <input dir="auto"
                 ref={phraseInputRef}
                 id={phraseInputId}
                 className="drill-phrase-input"
                 value={targetText}
                 onChange={(e) => onTargetTextChange?.(e.target.value)}
-                placeholder={emptyPhraseHint}
+                placeholder={tUi(emptyPhraseHint)}
                 autoComplete="off"
                 disabled={inputLocked}
-                aria-label={phraseInputLabel}
+                aria-label={tUi(phraseInputLabel)}
               />
             </label>
           ) : (
             <p
               id={phraseInputId}
               className={`drill-phrase-input drill-phrase-input--static${!targetText.trim() ? ' is-placeholder' : ''}`}
-              aria-label={phraseInputLabel}
+              aria-label={tUi(phraseInputLabel)}
             >
-              {targetText.trim() || emptyPhraseHint}
+              {targetText.trim() || tUi(emptyPhraseHint)}
             </p>
           )}
 
           {showIpaField ? (
             <label className="drill-ipa-field" htmlFor={ipaInputId}>
-              <span className="sr-only">Target IPA (optional)</span>
-              <input
+              <span className="sr-only">{tUi("Target IPA (optional)")}</span>
+              <input dir="auto"
                 id={ipaInputId}
                 className="drill-ipa-input"
                 value={targetIpa}
                 onChange={(e) => onTargetIpaChange?.(e.target.value)}
-                placeholder="/optional IPA/"
+                placeholder={tUi("/optional IPA/")}
                 autoComplete="off"
                 disabled={inputLocked}
-                aria-label="Target IPA (optional)"
+                aria-label={tUi("Target IPA (optional)")}
               />
             </label>
           ) : (
             targetIpa.trim() && (
-              <p className="drill-ipa-display phonetic" aria-label="Target IPA">
+              <p className="drill-ipa-display phonetic" aria-label={tUi("Target IPA")}>
                 {targetIpa}
               </p>
             )
@@ -199,9 +199,9 @@ export function PronunciationDrill({
 
           {spaceHint && (
             <p className="drill-space-hint">
-              <kbd className="drill-kbd">Space</kbd>
+              <kbd className="drill-kbd">{tUi("Space")}</kbd>
               {' '}
-              {spaceHintText}
+              {tUi(spaceHintText)}
             </p>
           )}
 
@@ -211,18 +211,16 @@ export function PronunciationDrill({
             </p>
           )}
 
-          <div className="drill-actions" role="group" aria-label="Listen, voice, and record">
+          <div className="drill-actions" role="group" aria-label={tUi("Listen, voice, and record")}>
             <button
               type="button"
               className="drill-action-btn"
               onClick={onListen}
               onKeyDown={suppressSpaceKey}
               disabled={listenDisabled}
-              aria-label="Listen to Model"
+              aria-label={tUi("Listen to Model")}
             >
-              <IconSpeaker size={18} />
-              Listen to Model
-            </button>
+              <IconSpeaker size={18} />{tUi("Listen to Model")}</button>
             <button
               type="button"
               className={`drill-action-btn drill-action-btn--voice${waveActive ? ' is-active' : ''}`}
@@ -230,10 +228,10 @@ export function PronunciationDrill({
               onKeyDown={suppressSpaceKey}
               disabled={primaryDisabled && !waveActive}
               aria-pressed={waveActive}
-              aria-label={waveActive ? 'Stop' : 'Voice'}
+              aria-label={waveActive ? tUi("Stop") : tUi("Voice")}
             >
               <IconMic size={18} />
-              {waveActive ? 'Stop' : 'Voice'}
+              {waveActive ? tUi("Stop") : tUi("Voice")}
             </button>
             <button
               type="button"
@@ -241,13 +239,13 @@ export function PronunciationDrill({
               onClick={onPrimary}
               onKeyDown={suppressSpaceKey}
               disabled={primaryDisabled && !waveActive}
-              aria-label={primaryAriaLabel}
+              aria-label={tUi(primaryAriaLabel)}
               aria-busy={primaryLoading}
             >
               {primaryLoading && (
                 <span className="drill-cta-spinner animate-spin" aria-hidden="true" />
               )}
-              <span className="drill-cta-label">{primaryLabel}</span>
+              <span className="drill-cta-label">{tUi(primaryLabel)}</span>
             </button>
           </div>
         </section>
@@ -266,37 +264,33 @@ export function PronunciationDrill({
           score={currentScore}
           variant="ring"
           label={currentLabel}
-          aria-label="Current pronunciation score"
+          aria-label={tUi("Current pronunciation score")}
         />
         <ScoreGauge
           score={sessionAverage}
           variant="ring"
-          label="Total Session Score:"
+          label={tUi("Total Session Score:")}
           caption={sessionCaption}
-          aria-label="Total session pronunciation score"
+          aria-label={tUi("Total session pronunciation score")}
         />
       </aside>
 
-      <div className="pronunciation-drill-toolbar" role="group" aria-label="Drill actions">
+      <div className="pronunciation-drill-toolbar" role="group" aria-label={tUi("Drill actions")}>
         <div className="pronunciation-drill-toolbar-end">
           {showPostpone && onPostpone && (
             <button
               type="button"
               className="drill-toolbar-btn"
               onClick={onPostpone}
-              aria-label="Postpone phrase"
-            >
-              Postpone
-            </button>
+              aria-label={tUi("Postpone phrase")}
+            >{tUi("Postpone")}</button>
           )}
           <button
             type="button"
             className="drill-toolbar-btn"
             onClick={onNextPhrase}
-            aria-label="Next Phrase"
-          >
-            Next Phrase
-          </button>
+            aria-label={tUi("Next Phrase")}
+          >{tUi("Next Phrase")}</button>
         </div>
       </div>
     </div>

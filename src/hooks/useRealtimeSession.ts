@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // ============================================================
 // LEXORA — useRealtimeSession (Gemini Live via the Rust proxy)
 // start(): unlock playback → open the session → stream the mic.
@@ -86,7 +87,7 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions = {}) {
           dispatch({ type: 'endTurn' });
           return;
         case 'goAway':
-          setNotice(SESSION_LIMIT_NOTICE);
+          setNotice(t(SESSION_LIMIT_NOTICE));
           return;
         case 'turnSaved':
           optionsRef.current.onTurnSaved?.(event.session);
@@ -101,7 +102,7 @@ export function useRealtimeSession(options: UseRealtimeSessionOptions = {}) {
           dispatch({ type: 'endTurn' });
           setStatus((s) => (s === 'error' ? s : 'idle'));
           if (event.reason) {
-            setNotice(`Сессия завершена: ${event.reason}`);
+            setNotice(t("Session ended: {reason}", { reason: event.reason }));
           }
           return;
       }

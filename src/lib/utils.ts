@@ -1,3 +1,4 @@
+import { getLocale, t, translate } from '../i18n';
 // ============================================================
 // LEXORA — Shared UI utilities
 // ============================================================
@@ -13,8 +14,14 @@ export function escapeRegExp(value: string): string {
 }
 
 /** «1 word» / «2 words»: английское склонение по числу. */
-export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : plural}`;
+export function pluralize(count: number, singular: string, plural = `${singular}s`, locale = getLocale()): string {
+  const category = new Intl.PluralRules(locale).select(count);
+  const categoryKey = `${singular}_${category}`;
+  const translatedCategory = translate(locale, categoryKey);
+  const label = translatedCategory === categoryKey
+    ? translate(locale, category === 'one' ? singular : plural)
+    : translatedCategory;
+  return `${new Intl.NumberFormat(locale).format(count)} ${label}`;
 }
 
 export type TextSegment = { text: string; match: boolean };
@@ -41,9 +48,9 @@ export function splitByTerm(text: string, term: string): TextSegment[] {
 export function formatFrequencyHint(hint: string | null | undefined): string | null {
   if (!hint) return null;
   const top = /^top-(\d+)$/.exec(hint);
-  if (top?.[1]) return `Top ${Number(top[1]).toLocaleString('en-US')}`;
+  if (top?.[1]) return t("Top {rank}", { rank: Number(top[1]).toLocaleString(getLocale()) });
   const rank = /^rank-(\d+)$/.exec(hint);
-  if (rank?.[1]) return `★ ${Number(rank[1]).toLocaleString('en-US')}`;
+  if (rank?.[1]) return `★ ${Number(rank[1]).toLocaleString(getLocale())}`;
   return null;
 }
 
@@ -61,6 +68,13 @@ export function formatRelativeDate(timestamp: number): string {
   const diffDays = Math.round(
     (startOfDay(new Date(timestamp * 1000)) - startOfDay(new Date())) / MS_PER_DAY
   );
+
+  if (getLocale() !== 'en') {
+    return new Intl.RelativeTimeFormat(
+      Intl.RelativeTimeFormat.supportedLocalesOf([getLocale()])[0] ?? 'en',
+      { numeric: 'auto' },
+    ).format(diffDays, 'day');
+  }
 
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Tomorrow';
@@ -112,10 +126,21 @@ export async function copyToClipboard(text: string): Promise<boolean> {
  */
 export function formatIpcError(err: unknown, fallback: string): string {
   const raw = extractIpcErrorText(err);
-  if (!raw) return fallback;
+  if (!raw) return t(fallback);
   const cleaned = raw.replace(APP_ERROR_PREFIX, '').trim();
-  if (!cleaned) return fallback;
-  return toFriendlyErrorMessage(cleaned, fallback);
+  if (!cleaned) return t(fallback);
+  const categoryName = /^Category name must contain 1–(\d+) characters$/.exec(cleaned);
+  if (categoryName?.[1]) return t('Category name must contain 1–{max} characters', { max: categoryName[1] });
+  if (/^Category \d+ not found$/.test(cleaned)) return t('Category not found');
+  if (/^Vocabulary entry \d+ not found$/.test(cleaned)) return t('Vocabulary entry not found');
+  switch (cleaned) {
+    case 'A category with this name already exists': return t('A category with this name already exists');
+    case 'Category must belong to the word language': return t('Category must belong to the word language');
+    case 'General cannot be renamed': return t('General cannot be renamed');
+    case 'General cannot be deleted': return t('General cannot be deleted');
+    case 'Select at least one vocabulary entry with a positive ID': return t('Select at least one vocabulary entry with a positive ID');
+  }
+  return t(toFriendlyErrorMessage(cleaned, fallback));
 }
 
 export function toFriendlyErrorMessage(message: string, fallback: string): string {
@@ -141,11 +166,11 @@ export function toFriendlyErrorMessage(message: string, fallback: string): strin
     lower.includes('no api key') ||
     lower.includes('not configured')
   ) {
-    return lower.includes('settings') ? message : AI_NOT_CONNECTED_MESSAGE;
+    return AI_NOT_CONNECTED_MESSAGE;
   }
 
   if (lower.includes('offline mode') || (lower.includes('offline') && lower.includes('settings'))) {
-    return looksUserFacing(message) ? message : AI_NOT_CONNECTED_MESSAGE;
+    return 'AI features are unavailable in offline mode. Disable offline mode in Settings.';
   }
 
   if (

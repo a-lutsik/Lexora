@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Multimodal Translation Hub Page
 // Stage 4: Text, Image/OCR, Document, and Speech Translation.
@@ -29,6 +30,7 @@ import './translate.css';
 type TabMode = 'text' | 'image' | 'document' | 'audio' | 'interpreter' | 'history';
 
 export function TranslatePage() {
+  const { t: tUi } = useI18n();
   const [activeTab, setActiveTab] = useState<TabMode>('text');
   const { sourceLang, targetLang, setSourceLang, setTargetLang, swap } = useSessionLanguagePair({
     allowAutoSource: true,
@@ -55,29 +57,27 @@ export function TranslatePage() {
     <div className="translate-page animate-fade-in">
       <header className="translate-header">
         <div>
-          <h1 className="translate-title">Translation Hub</h1>
-          <p className="text-secondary text-sm">
-            Translate text, extract image OCR, process documents, translate speech, or interpret live.
-          </p>
+          <h1 className="translate-title">{tUi("Translation Hub")}</h1>
+          <p className="text-secondary text-sm">{tUi("Translate text, extract image OCR, process documents, translate speech, or interpret live.")}</p>
         </div>
 
         {activeTab !== 'history' && (
-          <div className="translate-lang-bar" role="group" aria-label="Language selection">
+          <div className="translate-lang-bar" role="group" aria-label={tUi("Language selection")}>
             <LanguageSelect
               className="lang-select-wrap"
               value={sourceLang}
               options={langOptions}
-              leadingOptions={[{ value: 'auto', label: '✨ Auto-Detect' }]}
+              leadingOptions={[{ value: 'auto', label: tUi("✨ Auto-Detect") }]}
               onChange={setSourceLang}
-              ariaLabel="Source language"
+              ariaLabel={tUi("Source language")}
             />
 
             <button
               type="button"
               className="btn-swap-lang"
               onClick={() => handleSwap()}
-              aria-label="Swap source and target languages"
-              title="Swap languages"
+              aria-label={tUi("Swap source and target languages")}
+              title={tUi("Swap languages")}
             >
               <IconSwap size={16} />
             </button>
@@ -87,7 +87,7 @@ export function TranslatePage() {
               value={targetLang}
               options={langOptions}
               onChange={setTargetLang}
-              ariaLabel="Target language"
+              ariaLabel={tUi("Target language")}
             />
 
             <TranslationDomainSelect
@@ -101,7 +101,7 @@ export function TranslatePage() {
         )}
       </header>
 
-      <div className="translate-mode-tabs" role="tablist" aria-label="Translation Modes">
+      <div className="translate-mode-tabs" role="tablist" aria-label={tUi("Translation Modes")}>
         <button
           type="button"
           role="tab"
@@ -111,7 +111,7 @@ export function TranslatePage() {
           onClick={() => handleTabChange('text')}
         >
           <IconTabText />
-          <span>Text</span>
+          <span>{tUi("Text")}</span>
         </button>
         <button
           type="button"
@@ -122,7 +122,7 @@ export function TranslatePage() {
           onClick={() => handleTabChange('image')}
         >
           <IconTabImage />
-          <span>Image & Photo</span>
+          <span>{tUi("Image & Photo")}</span>
         </button>
         <button
           type="button"
@@ -133,7 +133,7 @@ export function TranslatePage() {
           onClick={() => handleTabChange('document')}
         >
           <IconTabDocument />
-          <span>Document</span>
+          <span>{tUi("Document")}</span>
         </button>
         <button
           type="button"
@@ -144,7 +144,7 @@ export function TranslatePage() {
           onClick={() => handleTabChange('audio')}
         >
           <IconTabAudio />
-          <span>Speech & Audio</span>
+          <span>{tUi("Speech & Audio")}</span>
         </button>
         <button
           type="button"
@@ -155,7 +155,7 @@ export function TranslatePage() {
           onClick={() => handleTabChange('interpreter')}
         >
           <IconTabInterpreter />
-          <span>Live Interpreter</span>
+          <span>{tUi("Live Interpreter")}</span>
         </button>
         <button
           type="button"
@@ -166,7 +166,7 @@ export function TranslatePage() {
           onClick={() => handleTabChange('history')}
         >
           <IconTabHistory />
-          <span>History</span>
+          <span>{tUi("History")}</span>
         </button>
       </div>
 

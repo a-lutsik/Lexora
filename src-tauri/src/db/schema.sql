@@ -2,8 +2,7 @@
 -- LEXORA — Master Database Schema (reference only)
 -- Версия: 1.0 | Применяется через refinery migrations
 -- ВНИМАНИЕ: этот файл не исполняется напрямую. Актуальная
--- миграция — db/migrations/V001__init_schema.sql; держать
--- содержимое (кроме PRAGMA-блока ниже) синхронным с ней.
+-- миграции — db/migrations/V*.sql; этот файл — справочник схемы.
 -- PRAGMA применяются per-connection в db::create_pool.
 -- Правила: snake_case, soft delete, нормализованный текст,
 --          транзакции для всех мутаций, индексы для JOIN/WHERE
@@ -152,6 +151,23 @@ CREATE TABLE IF NOT EXISTS collection_item (
 CREATE INDEX IF NOT EXISTS idx_collection_item_collection
     ON collection_item(collection_id, sort_order);
 
+-- ── Vocabulary Categories (V029) ───────────────────────────
+
+CREATE TABLE IF NOT EXISTS vocabulary_category (
+    id INTEGER PRIMARY KEY,
+    language_id INTEGER NOT NULL REFERENCES language(id),
+    name TEXT NOT NULL,
+    normalized_name TEXT NOT NULL,
+    is_general INTEGER NOT NULL DEFAULT 0 CHECK (is_general IN (0, 1)),
+    created_at DATETIME DEFAULT (unixepoch()),
+    deleted_at DATETIME
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_category_language_name
+    ON vocabulary_category(language_id, normalized_name) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_category_general
+    ON vocabulary_category(language_id) WHERE is_general = 1 AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_category_deleted ON vocabulary_category(deleted_at);
+
 -- ── User Vocabulary ───────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS user_vocabulary (
@@ -162,6 +178,7 @@ CREATE TABLE IF NOT EXISTS user_vocabulary (
     is_favorite INTEGER NOT NULL DEFAULT 0,
     notes       TEXT,
     source      TEXT,    -- 'popup'|'manual'|'import'
+    category_id INTEGER REFERENCES vocabulary_category(id),
     deleted_at  DATETIME, -- Soft delete
     UNIQUE(user_id, lexeme_id)
 );
@@ -171,6 +188,8 @@ CREATE INDEX IF NOT EXISTS idx_uv_user_lexeme
 
 CREATE INDEX IF NOT EXISTS idx_uv_user_added
     ON user_vocabulary(user_id, added_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_uv_category ON user_vocabulary(category_id, deleted_at);
 
 -- ── Review State (SRS) ────────────────────────────────────
 
@@ -230,6 +249,10 @@ CREATE TABLE IF NOT EXISTS user_settings (
     -- V004__hotkeys.sql: настраиваемые глобальные хоткеи
     hotkey_translate        TEXT    NOT NULL DEFAULT 'CmdOrCtrl+Shift+L',
     hotkey_stickers         TEXT    NOT NULL DEFAULT 'CmdOrCtrl+Shift+S',
+    -- V031__hotkey_voice_translate.sql: голосовой перевод в popup
+    hotkey_voice_translate  TEXT    NOT NULL DEFAULT 'CmdOrCtrl+Shift+Space',
+    -- V032__advanced_models.sql: продвинутый режим — модель для каждой функции
+    advanced_models         INTEGER NOT NULL DEFAULT 0,
     -- V005__fallback_provider.sql: автоматический резервный AI провайдер
     fallback_ai_provider    TEXT    DEFAULT 'openrouter',
     fallback_ai_model       TEXT    DEFAULT 'minimax/minimax-m2.7:free',
@@ -439,4 +462,40 @@ CREATE TABLE IF NOT EXISTS sticker_window_position (
     width      INTEGER NOT NULL,
     height     INTEGER NOT NULL,
     updated_at DATETIME DEFAULT (unixepoch())
+);
+
+-- ── Collocations (V030) ──────────────────────────────────
+-- AI collocations cached per (word, target language); a collocation
+-- added as its own card links to that phrase lexeme.
+
+CREATE TABLE IF NOT EXISTS lexeme_collocation (
+    id                    INTEGER PRIMARY KEY,
+    lexeme_id             INTEGER NOT NULL REFERENCES lexeme(id) ON DELETE CASCADE,
+    target_language_id    INTEGER NOT NULL REFERENCES language(id),
+    text                  TEXT    NOT NULL,
+    normalized_text       TEXT    NOT NULL,
+    pattern               TEXT,
+    translation           TEXT    NOT NULL,
+    example               TEXT,
+    focus                 TEXT,
+    distractors           TEXT    NOT NULL DEFAULT '[]',
+    nuance                TEXT,
+    sort_order            INTEGER NOT NULL DEFAULT 0,
+    collocation_lexeme_id INTEGER REFERENCES lexeme(id) ON DELETE SET NULL,
+    source                TEXT,
+    created_at            DATETIME DEFAULT (unixepoch()),
+    UNIQUE(lexeme_id, target_language_id, normalized_text)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collocation_lexeme_target
+    ON lexeme_collocation(lexeme_id, target_language_id, sort_order);
+
+CREATE INDEX IF NOT EXISTS idx_collocation_phrase_lexeme
+    ON lexeme_collocation(collocation_lexeme_id);
+
+CREATE TABLE IF NOT EXISTS lexeme_collocation_check (
+    lexeme_id          INTEGER NOT NULL REFERENCES lexeme(id) ON DELETE CASCADE,
+    target_language_id INTEGER NOT NULL REFERENCES language(id),
+    checked_at         DATETIME NOT NULL DEFAULT (unixepoch()),
+    PRIMARY KEY (lexeme_id, target_language_id)
 );

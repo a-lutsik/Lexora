@@ -18,7 +18,8 @@ export type StudyMode =
   | 'cloze'
   | 'irregular_verbs'
   | 'definition'
-  | 'speaking';
+  | 'speaking'
+  | 'collocation';
 
 export type ErrorType =
   | 'typo'
@@ -104,6 +105,7 @@ export type MediaDto = {
 // ── User Vocabulary ───────────────────────────────────────
 
 export type VocabularyEntryDto = {
+  categoryId?: number;
   id: number;
   userId: number;
   lexemeId: number;
@@ -120,6 +122,46 @@ export type VocabularyEntryDto = {
   reviewState: ReviewStateDto | null;
   /** Persisted local image generated or fetched when the word was added. */
   imagePath?: string | null;
+  /** Study hints when this card was created from a word's collocation. */
+  collocationDrill?: CollocationDrillDto | null;
+};
+
+// ── Collocations ──────────────────────────────────────────
+
+/** A frequent word combination of a word ("take advantage of"). */
+export type CollocationDto = {
+  id: number;
+  lexemeId: number;
+  text: string;
+  /** Grammatical pattern, e.g. "verb + noun". */
+  pattern: string | null;
+  /** Meaning of the whole collocation in the target language. */
+  translation: string;
+  example: string | null;
+  /** Partner word blanked in the collocation study mode. */
+  focus: string | null;
+  distractors: string[];
+  /** How it differs from similar collocations ("in the end" vs "at the end"). */
+  nuance: string | null;
+  /** Active vocabulary entry when this collocation is already being learned. */
+  vocabularyEntryId: number | null;
+};
+
+export type CollocationDrillDto = {
+  focus: string;
+  distractors: string[];
+  translation: string;
+  example: string | null;
+  pattern: string | null;
+  /** The word this collocation belongs to. */
+  headword: string;
+};
+
+export type AddCollocationsInput = {
+  lexemeId: number;
+  targetLanguage: string;
+  collocationIds: number[];
+  categoryId?: number | null;
 };
 
 // ── Review State (SRS) ────────────────────────────────────
@@ -264,6 +306,7 @@ export type AIProviderName =
   | 'cloudflare'
   | 'openrouter'
   | 'groq'
+  | 'deepseek'
   | 'custom'
   | 'openai'
   | 'gemini'
@@ -296,7 +339,7 @@ export type AppSettings = {
   ttsVoice: string;
   stickerCount: number;
   stickerOpacity: number;
-  /** `all` | `mine` | `c:<collectionId>` — multi-select of sticker word sources. */
+  /** `all` | `mine` | `cat:<categoryId>` | `c:<collectionId>` — multi-select of sticker word sources. */
   stickerSources: string[];
   quietHoursStart: string | null;
   quietHoursEnd: string | null;
@@ -308,6 +351,8 @@ export type AppSettings = {
   // Global shortcuts (tauri-plugin-global-shortcut format, e.g. 'CmdOrCtrl+Shift+L')
   hotkeyTranslate: string;
   hotkeyStickers: string;
+  /** Opens the popup in voice mode: speak → translation → Accept inserts it. */
+  hotkeyVoiceTranslate?: string;
   // Fallback AI provider for automatic failover
   fallbackAiProvider?: AIProviderName | null;
   fallbackAiModel?: string | null;
@@ -322,6 +367,8 @@ export type AppSettings = {
   ttsEngine?: TtsEngine;
   /** Active model package (V023); `custom` = per-role overrides. */
   modelPackage?: ModelPackageId | null;
+  /** Advanced mode (V032): per-role model editors are shown. */
+  advancedModels?: boolean;
 };
 
 // ── AI model routing (V023) ───────────────────────────────
@@ -360,6 +407,13 @@ export type ModelStatus =
 export type UnitPrice = {
   unit: 'image' | 'minute';
   usd: number;
+};
+
+/** A model the provider reports for the saved key; empty capabilities = unknown. */
+export type RemoteModel = {
+  id: string;
+  label: string | null;
+  capabilities: ModelCapability[];
 };
 
 export type ModelSpec = {
@@ -462,6 +516,7 @@ export type RealtimeEvent =
 // ── Input types (for mutations) ───────────────────────────
 
 export type AddVocabularyInput = {
+  categoryId?: number | null;
   lexemeId: number | null;   // null if new word
   text: string;
   sourceLanguage: string;
@@ -470,12 +525,14 @@ export type AddVocabularyInput = {
 };
 
 export type AddVocabularyBatchInput = {
+  categoryId?: number | null;
   texts: string[];
   sourceLanguage: string;
   source?: string;
 };
 
 export type ImportWordListInput = {
+  categoryId?: number | null;
   path: string;
   sourceLanguage: string;
   source?: string;
@@ -616,6 +673,53 @@ export type ApplyGrammarFixInput = {
   /** Text the check ran on — must still be in the field. */
   checkedText: string;
   correctedText: string;
+};
+
+/** How a suggestion is underlined: red for a mistake, yellow for a better phrasing. */
+export type GrammarMarkKind = 'error' | 'improvement';
+
+/** One underlined span in another app's field (UTF-16 offsets into `text`). */
+export type GrammarMark = {
+  id: number;
+  start: number;
+  end: number;
+  kind: GrammarMarkKind;
+  title: string;
+  original: string;
+  suggestion: string;
+  explanation: string;
+};
+
+export type SetGrammarMarksInput = {
+  fieldId: number;
+  /** Text the offsets refer to — must still be in the field. */
+  text: string;
+  marks: GrammarMark[];
+};
+
+/** Rectangle in CSS pixels, relative to the underline window. */
+export type GrammarMarkRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type GrammarMarkRegion = {
+  id: number;
+  kind: GrammarMarkKind;
+  rects: GrammarMarkRect[];
+};
+
+export type GrammarMarksPayload = {
+  regions: GrammarMarkRegion[];
+};
+
+export type GrammarMarkActionKind = 'apply' | 'dismiss' | 'open';
+
+export type GrammarMarkAction = {
+  issueId: number;
+  action: GrammarMarkActionKind;
 };
 
 export type RewriteTextInput = {
@@ -842,6 +946,7 @@ export type PronunciationModelDto = {
 // ── Filter types ──────────────────────────────────────────
 
 export type VocabularyFilters = {
+  categoryId?: number | null;
   search: string;
   languageId: number | null;
   status: SrsStatus | 'all';
@@ -867,6 +972,9 @@ export type StudyQueueFilters = {
   /** When set, restrict the queue to user-added and/or selected collections. */
   includeMine?: boolean;
   collectionIds?: number[];
+  categoryIds?: number[];
+  /** Collocation mode: only cards created from a drillable collocation. */
+  collocationsOnly?: boolean;
 };
 
 // ── Stage 4: Multimodal Translation Hub ──────────────────
@@ -984,4 +1092,12 @@ export type TranslationHistoryDto = {
   metadataJson?: string | null;
   isFavorite: boolean;
   createdAt: number;
+};
+
+export type CategoryDto = {
+  id: number;
+  name: string;
+  languageId: number;
+  isGeneral: boolean;
+  wordCount: number;
 };

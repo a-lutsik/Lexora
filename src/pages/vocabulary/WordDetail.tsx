@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Word Detail Modal / Drawer
 // Full inspection: phonetic, translations, examples, SRS status, notes.
@@ -18,12 +19,15 @@ import { Button, IconButton } from '../../components/ui/Button';
 import { AudioButton } from '../../components/domain/AudioButton';
 import { AssociatedImage } from '../../components/domain/AssociatedImage';
 import { FreqBadge } from '../../components/domain/FreqBadge';
+import { CollocationList } from '../../components/domain/CollocationList';
+import { WordCategory } from './WordCategory';
 import { WordDetailEdit } from './WordDetailEdit';
 import { WordDetailRemove } from './WordDetailRemove';
 import { WordDetailUnavailable } from './WordDetailUnavailable';
 import { ipc } from '../../lib/ipc';
 import { STALE_TIME, QUERY_KEYS } from '../../lib/constants';
 import { formatImageProviderError } from '../../lib/inlineAssistant';
+import { canHaveCollocations } from '../../lib/collocations';
 import type { CardEnrichEvent } from '../../lib/types';
 import './vocabulary.css';
 
@@ -58,6 +62,7 @@ function EditIcon() {
 }
 
 export function WordDetail({ id, onClose }: WordDetailProps) {
+  const { t: tUi } = useI18n();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: entry, isLoading, isError, refetch } = useVocabularyEntry(id);
@@ -73,6 +78,7 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
   const [imageRefreshing, setImageRefreshing] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [imageNonce, setImageNonce] = useState(0);
+  const [showCollocations, setShowCollocations] = useState(false);
   const [viewTarget, setViewTarget] = useState(settings?.interfaceLanguage ?? 'ru');
   const dialogRef = useRef<HTMLDivElement>(null);
   const langOptions = useLanguageOptions([viewTarget, settings?.interfaceLanguage ?? 'ru']);
@@ -95,13 +101,13 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
   }, [entry, languages, settings?.primaryLanguage]);
 
   const mainTranslation = useMemo(() => {
-    if (!entry) return 'No translation';
+    if (!entry) return tUi("No translation");
     if (targetLangId != null) {
       const match = entry.translations.find((t) => t.targetLanguageId === targetLangId);
       if (match) return match.translatedText;
     }
-    return entry.translations[0]?.translatedText ?? 'No translation';
-  }, [entry, targetLangId]);
+    return entry.translations[0]?.translatedText ?? tUi("No translation");
+  }, [entry, targetLangId, tUi]);
 
   const needsFetch =
     entry != null &&
@@ -200,7 +206,7 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
   if (isLoading) {
     return (
       <div className="word-detail-overlay word-detail-overlay--loading" role="status">
-        <div className="text-muted text-sm animate-pulse">Loading word details…</div>
+        <div className="text-muted text-sm animate-pulse">{tUi("Loading word details…")}</div>
       </div>
     );
   }
@@ -246,12 +252,12 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
           <div className="word-detail-actions">
             <IconButton
               icon={<StarIcon filled={entry.isFavorite} />}
-              aria-label={entry.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              aria-label={entry.isFavorite ? tUi("Remove from favorites") : tUi("Add to favorites")}
               onClick={() => toggleFavMutation.mutate(entry.id)}
             />
             <IconButton
               icon={<CloseIcon />}
-              aria-label="Close word details"
+              aria-label={tUi("Close word details")}
               onClick={onClose}
             />
           </div>
@@ -273,10 +279,10 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
                 <h2 id="word-detail-title" className="word-detail-word">
                   {lexeme.text}
                 </h2>
-                <AudioButton text={lexeme.text} ariaLabel="Pronounce word" />
+                <AudioButton text={lexeme.text} ariaLabel={tUi("Pronounce word")} />
                 <IconButton
                   icon={<EditIcon />}
-                  aria-label="Edit word and translation"
+                  aria-label={tUi("Edit word and translation")}
                   onClick={() => setIsEditing(true)}
                 />
               </div>
@@ -299,37 +305,50 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
                   onClose();
                   navigate(`/pronunciation?${params.toString()}`);
                 }}
-                aria-label={`Practice pronunciation of ${lexeme.text}`}
-              >
-                Practice pronunciation
-              </Button>
+                aria-label={tUi("Practice pronunciation of {value1}", { value1: lexeme.text })}
+              >{tUi("Practice pronunciation")}</Button>
             </div>
           </div>
 
           {/* Translation */}
           <div>
             <div className="word-detail-translation-header">
-              <div className="text-muted text-xs font-semibold word-detail-section-label">TRANSLATION</div>
+              <div className="text-muted text-xs font-semibold word-detail-section-label">{tUi("TRANSLATION")}</div>
               <LanguageSelect
                 className="word-detail-target-select"
                 value={viewTarget}
                 options={langOptions}
                 onChange={setViewTarget}
-                ariaLabel="View translation in language"
+                ariaLabel={tUi("View translation in language")}
               />
             </div>
             <div className="word-detail-translation" aria-live="polite">
               {translateMutation.isPending && needsFetch
-                ? 'Translating…'
+                ? tUi("Translating…")
                 : translateMutation.data?.targetLanguage === viewTarget
                   ? translateMutation.data.mainTranslation
                   : mainTranslation}
             </div>
           </div>
 
+          {canHaveCollocations(lexeme.text, lexeme.partOfSpeech) && (
+            <div className="word-detail-collocations">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setShowCollocations((open) => !open)}
+              >
+                {showCollocations ? tUi("Hide collocations") : tUi("Show collocations")}
+              </Button>
+              {showCollocations && (
+                <CollocationList lexemeId={entry.lexemeId} word={lexeme.text} targetLanguage={viewTarget} />
+              )}
+            </div>
+          )}
+
           <AssociatedImage
             path={imagePath ?? null}
-            alt={`Photo of ${lexeme.text}`}
+            alt={tUi("Photo of {word}", { word: lexeme.text })}
             isLoading={isImageLoading && !imagePath}
             isRefreshing={imageRefreshing}
             size="card"
@@ -365,33 +384,34 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
           {reviewState && (
             <div className="word-detail-srs-grid">
               <div>
-                <div className="text-muted text-xs">Interval</div>
-                <div className="word-detail-srs-value">{reviewState.interval}d</div>
+                <div className="text-muted text-xs">{tUi("Interval")}</div>
+                <div className="word-detail-srs-value">{reviewState.interval}{tUi("d")}</div>
               </div>
               <div>
-                <div className="text-muted text-xs">Ease Factor</div>
+                <div className="text-muted text-xs">{tUi("Ease Factor")}</div>
                 <div className="word-detail-srs-value">{reviewState.ease.toFixed(2)}</div>
               </div>
               <div>
-                <div className="text-muted text-xs">Repetitions</div>
+                <div className="text-muted text-xs">{tUi("Repetitions")}</div>
                 <div className="word-detail-srs-value">{reviewState.repetitions}</div>
               </div>
             </div>
           )}
+
+          <WordCategory key={`${entry.id}:${entry.categoryId ?? ''}`} entryId={entry.id}
+            languageId={lexeme.languageId} categoryId={entry.categoryId ?? null} />
 
           {/* User Notes */}
           <div>
             <label
               htmlFor="word-detail-notes"
               className="text-muted text-xs font-semibold word-detail-section-label"
-            >
-              PERSONAL NOTES
-            </label>
-            <textarea
+            >{tUi("PERSONAL NOTES")}</label>
+            <textarea dir="auto"
               id="word-detail-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add personal notes, mnemonics, or example phrases…"
+              placeholder={tUi("Add personal notes, mnemonics, or example phrases…")}
               rows={3}
               className="word-detail-notes"
             />
@@ -401,9 +421,7 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
                 size="sm"
                 onClick={handleSaveNotes}
                 isLoading={isSavingNotes}
-              >
-                Save Notes
-              </Button>
+              >{tUi("Save Notes")}</Button>
             </div>
             {notesError && (
               <p className="word-detail-notes-error" role="alert">

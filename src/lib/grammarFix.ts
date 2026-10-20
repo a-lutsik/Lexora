@@ -5,7 +5,7 @@
 // ============================================================
 
 import { applyVisibleFixes, realignIssue, usableIssues } from './writingDiff';
-import type { WritingIssueDto } from './types';
+import type { GrammarMark, GrammarMarkKind, WritingIssueDto } from './types';
 
 export type FixResult = {
   /** Field text after the fix. */
@@ -87,4 +87,31 @@ export function issueContext(
     fragment: text.slice(issue.offsetStart, issue.offsetEnd),
     after,
   };
+}
+
+/** Categories that polish a correct text instead of fixing a mistake. */
+const IMPROVEMENT_CATEGORIES: ReadonlySet<string> = new Set(['clarity', 'style', 'tone', 'unnatural']);
+
+/** Red underline for a mistake, yellow for a better way to say it. */
+export function issueKind(issue: WritingIssueDto): GrammarMarkKind {
+  return issue.severity === 'suggestion' || IMPROVEMENT_CATEGORIES.has(issue.category)
+    ? 'improvement'
+    : 'error';
+}
+
+/** Underlines for the open suggestions; `titleOf` gives the card heading. */
+export function buildMarks(
+  issues: WritingIssueDto[],
+  titleOf: (issue: WritingIssueDto) => string,
+): GrammarMark[] {
+  return issues.map((issue) => ({
+    id: issue.id,
+    start: issue.offsetStart,
+    end: issue.offsetEnd,
+    kind: issueKind(issue),
+    title: titleOf(issue),
+    original: issue.originalFragment,
+    suggestion: issue.suggestedFix,
+    explanation: issue.explanation,
+  }));
 }

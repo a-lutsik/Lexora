@@ -10,6 +10,7 @@ pub mod lexical_domain;
 pub mod openai;
 pub mod rate_limit;
 
+use crate::providers::models::health::{ChainHealth, HealthFailure};
 use crate::providers::models::usage::ChainUsage;
 use crate::commands::study::EvaluationResult;
 use crate::commands::translate::TranslationResult;
@@ -95,6 +96,33 @@ pub struct EnrichResult {
     pub usage_note: Option<String>,
     pub example_sentence: Option<String>,
     pub example_sentence_2: Option<String>,
+}
+
+/// Request for the on-demand collocation list of a single word.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollocationsRequest {
+    pub text: String,
+    pub source_language: String,
+    pub target_language: String,
+    pub main_translation: String,
+}
+
+/// One validated collocation: the phrase, its meaning and study hints.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CollocationItem {
+    pub text: String,
+    pub pattern: Option<String>,
+    pub translation: String,
+    pub example: Option<String>,
+    /// Partner word blanked in the study mode; None when the model gave none usable.
+    pub focus: Option<String>,
+    pub distractors: Vec<String>,
+    pub nuance: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollocationsResult {
+    pub collocations: Vec<CollocationItem>,
 }
 
 /// Request for the first mnemonic LLM step (3 visual associations).
@@ -265,6 +293,138 @@ pub fn enrich_from_json(parsed: &serde_json::Value) -> EnrichResult {
     }
 }
 
+/// Most collocations shown for one word.
+pub const MAX_COLLOCATIONS: usize = 8;
+const MAX_COLLOCATION_DISTRACTORS: usize = 3;
+const MAX_COLLOCATION_CHARS: usize = 80;
+const MAX_COLLOCATION_NOTE_CHARS: usize = 300;
+const MAX_COLLOCATION_WORD_CHARS: usize = 40;
+
+/// Trimmed string field; empty strings and a literal "null" count as missing.
+fn optional_model_text(value: &serde_json::Value, key: &str) -> Option<String> {
+    optional_trimmed_string(value, key).filter(|s| !s.eq_ignore_ascii_case("null"))
+}
+
+/// True when `needle` occurs in `haystack` as a whole word (both already lowercase).
+fn contains_whole_word(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    haystack.match_indices(needle).any(|(start, _)| {
+        let before = haystack[..start].chars().next_back();
+        let after = haystack[start + needle.len()..].chars().next();
+        !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
+    })
+}
+
+/// Optional model text limited to `max` characters; longer values are dropped.
+fn bounded_model_text(value: &serde_json::Value, key: &str, max: usize) -> Option<String> {
+    optional_model_text(value, key).filter(|s| s.chars().count() <= max)
+}
+
+/// True when a word of `text` starts with `stem` (both lowercase): "advantages"
+/// matches "advanta", "spend" does not match "end".
+fn has_word_starting_with(text: &str, stem: &str) -> bool {
+    text.split(|c: char| !c.is_alphanumeric())
+        .any(|word| !stem.is_empty() && word.starts_with(stem))
+}
+
+/// Leading part of the headword that inflected forms keep ("advantage" → "advanta").
+fn headword_stem(headword: &str) -> String {
+    let chars: Vec<char> = headword.chars().collect();
+    let keep = chars.len().saturating_sub(2).max(chars.len().min(3));
+    chars[..keep].iter().collect()
+}
+
+/// Build validated collocations from parsed LLM JSON.
+/// Drops items without the headword, duplicates, empty or oversized fields; a
+/// focus word that is not inside the collocation (or is a form of the headword)
+/// is cleared, so the item is still shown but never drilled.
+/// An answer without a collocation list, or whose items are all unusable, is an
+/// error so the provider chain can try the next model; an empty list is a valid
+/// "this word has no collocations".
+pub fn collocations_from_json(
+    parsed: &serde_json::Value,
+    headword: &str,
+) -> Result<CollocationsResult, AppError> {
+    let items = parsed["collocations"]
+        .as_array()
+        .or_else(|| parsed.as_array())
+        .cloned()
+        .ok_or_else(|| AppError::Provider("Model answer has no collocation list".to_string()))?;
+    let headword_lower = headword.trim().to_lowercase();
+    let stem = headword_stem(&headword_lower);
+    let mut seen = std::collections::HashSet::new();
+    let mut collocations = Vec::new();
+
+    for item in &items {
+        let Some(text) = optional_model_text(item, "text") else {
+            continue;
+        };
+        let Some(translation) = bounded_model_text(item, "translation", MAX_COLLOCATION_NOTE_CHARS)
+        else {
+            continue;
+        };
+        let text_lower = text.to_lowercase();
+        if text.chars().count() > MAX_COLLOCATION_CHARS
+            || text_lower == headword_lower
+            || !has_word_starting_with(&text_lower, &stem)
+            || !seen.insert(text_lower.clone())
+        {
+            continue;
+        }
+
+        let focus = optional_model_text(item, "focus").filter(|focus| {
+            let focus_lower = focus.to_lowercase();
+            !focus_lower.starts_with(&stem)
+                && focus.chars().count() <= MAX_COLLOCATION_WORD_CHARS
+                && !focus_lower.contains(char::is_whitespace)
+                && contains_whole_word(&text_lower, &focus_lower)
+        });
+        let mut distractors: Vec<String> = Vec::new();
+        if let Some(focus) = &focus {
+            for raw in item["distractors"].as_array().into_iter().flatten() {
+                let Some(word) = raw.as_str().map(str::trim).filter(|w| !w.is_empty()) else {
+                    continue;
+                };
+                if word.contains(char::is_whitespace)
+                    || word.chars().count() > MAX_COLLOCATION_WORD_CHARS
+                    || word.eq_ignore_ascii_case(focus)
+                    || distractors.iter().any(|d| d.eq_ignore_ascii_case(word))
+                {
+                    continue;
+                }
+                distractors.push(word.to_string());
+                if distractors.len() == MAX_COLLOCATION_DISTRACTORS {
+                    break;
+                }
+            }
+        }
+        // A blank with nothing to choose from is not a drill.
+        let focus = focus.filter(|_| !distractors.is_empty());
+
+        collocations.push(CollocationItem {
+            text,
+            pattern: bounded_model_text(item, "pattern", MAX_COLLOCATION_WORD_CHARS),
+            translation,
+            example: bounded_model_text(item, "example", MAX_COLLOCATION_NOTE_CHARS),
+            focus,
+            distractors,
+            nuance: bounded_model_text(item, "nuance", MAX_COLLOCATION_NOTE_CHARS),
+        });
+        if collocations.len() == MAX_COLLOCATIONS {
+            break;
+        }
+    }
+
+    if collocations.is_empty() && !items.is_empty() {
+        return Err(AppError::Provider(
+            "Model answer has no usable collocations".to_string(),
+        ));
+    }
+    Ok(CollocationsResult { collocations })
+}
+
 fn optional_trimmed_string(value: &serde_json::Value, key: &str) -> Option<String> {
     value[key]
         .as_str()
@@ -395,6 +555,15 @@ pub fn render_translate_prompt(req: &TranslateRequest) -> String {
 /// Render the enrich prompt from prompts/enrich.txt.
 pub fn render_enrich_prompt(req: &EnrichRequest) -> String {
     include_str!("prompts/enrich.txt")
+        .replace("{{text}}", &req.text)
+        .replace("{{source_lang}}", &req.source_language)
+        .replace("{{target_lang}}", &req.target_language)
+        .replace("{{main_translation}}", &req.main_translation)
+}
+
+/// Render the collocations prompt from prompts/collocations.txt.
+pub fn render_collocations_prompt(req: &CollocationsRequest) -> String {
+    include_str!("prompts/collocations.txt")
         .replace("{{text}}", &req.text)
         .replace("{{source_lang}}", &req.source_language)
         .replace("{{target_lang}}", &req.target_language)
@@ -1410,6 +1579,16 @@ pub trait AIProvider: Send + Sync {
     async fn translate(&self, req: TranslateRequest) -> Result<TranslationResult, AppError>;
     /// Second-pass enrichment: example sentence + usage note (non-blocking for UI).
     async fn enrich(&self, req: EnrichRequest) -> Result<EnrichResult, AppError>;
+    /// On-demand collocations of a word. Providers without it keep this default.
+    async fn collocations(
+        &self,
+        _req: CollocationsRequest,
+    ) -> Result<CollocationsResult, AppError> {
+        Err(AppError::Validation(format!(
+            "{} cannot list collocations",
+            self.provider_name()
+        )))
+    }
     /// Visual mnemonic: invent 3 association concepts for a word sense.
     async fn mnemonic_concepts(
         &self,
@@ -1485,6 +1664,8 @@ pub struct ProviderRegistry {
     attempt_timeout: Option<std::time::Duration>,
     /// Counts each attempt per role/model (Settings → «Расходы AI»).
     usage: Option<ChainUsage>,
+    /// Remembers models that stopped working and tries them last.
+    health: Option<ChainHealth>,
 }
 
 /// What a failed model attempt means for the rest of the chain.
@@ -1494,6 +1675,8 @@ pub(crate) enum FailureKind {
     Auth,
     /// Quota / 429: the next model has its own limits.
     RateLimit,
+    /// The provider no longer serves this model (removed, decommissioned).
+    Gone,
     /// Timeout, missing capability, server error: try the next model.
     Other,
 }
@@ -1507,6 +1690,17 @@ const AUTH_FAILURE_MARKERS: &[&str] = &[
     "incorrect api key",
     "invalid x-api-key",
     "authentication_error",
+];
+
+const GONE_MODEL_MARKERS: &[&str] = &[
+    "model_not_found",
+    "not_found_error",
+    "does not exist",
+    "decommissioned",
+    "no longer available",
+    "no longer supported",
+    "no endpoints found",
+    "is not found for api version",
 ];
 
 const RATE_LIMIT_MARKERS: &[&str] = &[
@@ -1532,17 +1726,40 @@ pub(crate) fn classify_failure(err: &AppError) -> FailureKind {
         FailureKind::Auth
     } else if has_status_code(&text, "429") || RATE_LIMIT_MARKERS.iter().any(|m| text.contains(m)) {
         FailureKind::RateLimit
+    } else if has_status_code(&text, "404") || GONE_MODEL_MARKERS.iter().any(|m| text.contains(m)) {
+        FailureKind::Gone
     } else {
         FailureKind::Other
     }
 }
 
-/// Try each provider of the chain in order; return the first success or the last error.
+/// Health impact of a failed attempt; local refusals (missing capability) are not the model's fault.
+fn health_failure(err: &AppError, kind: FailureKind) -> Option<HealthFailure> {
+    if !matches!(err, AppError::Provider(_) | AppError::Http(_)) {
+        return None;
+    }
+    match kind {
+        FailureKind::Auth => None,
+        FailureKind::Gone => Some(HealthFailure::Gone),
+        FailureKind::RateLimit => Some(HealthFailure::RateLimit),
+        FailureKind::Other => Some(HealthFailure::Transient),
+    }
+}
+
+/// Try each provider of the chain (models that stopped working last);
+/// return the first success or the last error.
 macro_rules! chain_call {
     ($self:ident, $method:ident, $req:expr) => {{
         let mut last_err: Option<AppError> = None;
         let total = $self.chain.len();
-        for (index, provider) in $self.chain.iter().enumerate() {
+        let order = match &$self.health {
+            Some(health) => health.attempt_order(total),
+            None => (0..total).collect::<Vec<_>>(),
+        };
+        for (position, index) in order.into_iter().enumerate() {
+            let Some(provider) = $self.chain.get(index) else {
+                continue;
+            };
             let attempt = provider.$method($req.clone());
             let outcome = match $self.attempt_timeout {
                 Some(limit) => match tokio::time::timeout(limit, attempt).await {
@@ -1559,9 +1776,18 @@ macro_rules! chain_call {
                 usage.record_attempt(index, outcome.is_ok());
             }
             match outcome {
-                Ok(value) => return Ok(value),
+                Ok(value) => {
+                    if let Some(health) = &$self.health {
+                        health.record(index, None);
+                    }
+                    return Ok(value);
+                }
                 Err(e) => {
-                    if classify_failure(&e) == FailureKind::Auth {
+                    let kind = classify_failure(&e);
+                    if let (Some(health), Some(failure)) = (&$self.health, health_failure(&e, kind)) {
+                        health.record(index, Some(failure));
+                    }
+                    if kind == FailureKind::Auth {
                         log::warn!(
                             "AI {} via {}: API key rejected, not falling back: {e}",
                             stringify!($method),
@@ -1569,7 +1795,7 @@ macro_rules! chain_call {
                         );
                         return Err(e);
                     }
-                    if index + 1 < total {
+                    if position + 1 < total {
                         log::warn!(
                             "AI {} via {} failed: {e}. Trying next model...",
                             stringify!($method),
@@ -1594,6 +1820,7 @@ impl ProviderRegistry {
             chain,
             attempt_timeout: None,
             usage: None,
+            health: None,
         }
     }
 
@@ -1605,12 +1832,19 @@ impl ProviderRegistry {
             chain,
             attempt_timeout,
             usage: None,
+            health: None,
         }
     }
 
     /// Count attempts; `usage.targets` must be parallel to the chain.
     pub fn with_usage(mut self, usage: ChainUsage) -> Self {
         self.usage = Some(usage);
+        self
+    }
+
+    /// Skip models that recently stopped working; `health.keys` must be parallel to the chain.
+    pub fn with_health(mut self, health: ChainHealth) -> Self {
+        self.health = Some(health);
         self
     }
 
@@ -1633,6 +1867,13 @@ impl ProviderRegistry {
 
     pub async fn enrich(&self, req: EnrichRequest) -> Result<EnrichResult, AppError> {
         chain_call!(self, enrich, req)
+    }
+
+    pub async fn collocations(
+        &self,
+        req: CollocationsRequest,
+    ) -> Result<CollocationsResult, AppError> {
+        chain_call!(self, collocations, req)
     }
 
     pub async fn mnemonic_concepts(
@@ -1794,6 +2035,21 @@ pub fn create_provider(
                 key,
                 Some(model_name.to_string()),
                 Some("Groq".to_string()),
+            )))
+        }
+        "deepseek" => {
+            let key = crate::api_keys::get_api_key(app, "deepseek");
+            if key.is_none() {
+                return Err(AppError::Validation(
+                    "DeepSeek API Key is missing. Please enter and save your DeepSeek key in Settings."
+                        .to_string(),
+                ));
+            }
+            Ok(Arc::new(custom::CustomOpenAIProvider::new(
+                Some("https://api.deepseek.com/v1".to_string()),
+                key,
+                Some(model_name.to_string()),
+                Some("DeepSeek".to_string()),
             )))
         }
         "gemini" => {
@@ -2428,6 +2684,124 @@ mod tests {
         assert!(!prompt.contains("{{"));
         assert!(prompt.contains("auto"));
         assert!(prompt.contains("none"));
+    }
+
+    #[test]
+    fn render_collocations_prompt_substitutes_all_placeholders() {
+        let prompt = render_collocations_prompt(&CollocationsRequest {
+            text: "advantage".to_string(),
+            source_language: "en".to_string(),
+            target_language: "uk".to_string(),
+            main_translation: "перевага".to_string(),
+        });
+        assert!(!prompt.contains("{{"));
+        assert!(prompt.contains("\"advantage\""));
+        assert!(prompt.contains("перевага"));
+    }
+
+    fn parse_collocations(parsed: serde_json::Value, headword: &str) -> CollocationsResult {
+        collocations_from_json(&parsed, headword).expect("usable collocations")
+    }
+
+    #[test]
+    fn collocations_from_json_keeps_valid_items_in_order() {
+        let parsed = serde_json::json!({ "collocations": [
+            { "text": "take advantage of", "pattern": "verb + noun", "translation": "скористатися",
+              "example": "Take advantage of the sale.", "focus": "take",
+              "distractors": ["make", "give", "do", "get"], "nuance": null },
+            { "text": "In the end", "pattern": "prep + noun", "translation": "зрештою",
+              "example": null, "focus": "In", "distractors": ["at", "by"], "nuance": "підсумок" }
+        ]});
+        let res = parse_collocations(parsed.clone(), "advantage");
+        assert_eq!(res.collocations.len(), 1, "\"in the end\" lacks the headword");
+        let first = &res.collocations[0];
+        assert_eq!(first.text, "take advantage of");
+        assert_eq!(first.focus.as_deref(), Some("take"));
+        assert_eq!(first.distractors, vec!["make", "give", "do"], "capped at 3");
+        assert_eq!(first.nuance, None);
+
+        let end = parse_collocations(parsed, "end");
+        assert_eq!(end.collocations[0].text, "In the end");
+        assert_eq!(end.collocations[0].focus.as_deref(), Some("In"));
+        assert_eq!(end.collocations[0].example, None);
+    }
+
+    #[test]
+    fn collocations_from_json_accepts_inflected_headword_but_not_substrings() {
+        let parsed = serde_json::json!({ "collocations": [
+            { "text": "have advantages over", "translation": "мати переваги" },
+            { "text": "spend time", "translation": "проводити час" }
+        ]});
+        let res = parse_collocations(parsed.clone(), "advantage");
+        assert_eq!(res.collocations.len(), 1);
+        assert_eq!(res.collocations[0].focus, None);
+        assert!(res.collocations[0].distractors.is_empty());
+
+        let end = collocations_from_json(
+            &serde_json::json!({ "collocations": [{ "text": "spend time", "translation": "x" }] }),
+            "end",
+        );
+        assert!(end.is_err(), "\"spend\" only contains \"end\" as a substring");
+    }
+
+    #[test]
+    fn collocations_from_json_clears_unusable_focus() {
+        let parsed = serde_json::json!({ "collocations": [
+            // focus not a whole word of text
+            { "text": "at the end of", "translation": "в кінці", "focus": "th", "distractors": ["in"] },
+            // focus is the headword itself
+            { "text": "by the end", "translation": "до кінця", "focus": "end", "distractors": ["in"] },
+            // distractor equal to focus or multi-word only → nothing to choose from
+            { "text": "end up", "translation": "опинитися", "focus": "up",
+              "distractors": ["UP", "end over"] },
+            // focus is an inflected form of the headword
+            { "text": "make ends meet", "translation": "зводити кінці з кінцями", "focus": "ends",
+              "distractors": ["end"] }
+        ]});
+        let res = parse_collocations(parsed, "end");
+        assert_eq!(res.collocations.len(), 4);
+        for item in &res.collocations {
+            assert_eq!(item.focus, None, "{}", item.text);
+            assert!(item.distractors.is_empty(), "{}", item.text);
+        }
+    }
+
+    #[test]
+    fn collocations_from_json_drops_duplicates_empty_oversized_and_bare_headword() {
+        let long = "x".repeat(301);
+        let parsed = serde_json::json!({ "collocations": [
+            { "text": "in the end", "translation": "зрештою", "example": long, "pattern": "p".repeat(41) },
+            { "text": "In The End", "translation": "дубль" },
+            { "text": "end", "translation": "кінець" },
+            { "text": "at the end", "translation": "" },
+            { "text": "by the end", "translation": long },
+            { "text": "", "translation": "x" },
+            { "text": "null", "translation": "x" }
+        ]});
+        let res = parse_collocations(parsed, "end");
+        let texts: Vec<_> = res.collocations.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(texts, vec!["in the end"]);
+        assert_eq!(res.collocations[0].example, None, "oversized example dropped");
+        assert_eq!(res.collocations[0].pattern, None, "oversized pattern dropped");
+    }
+
+    #[test]
+    fn collocations_from_json_caps_count() {
+        let items: Vec<_> = (0..12)
+            .map(|i| serde_json::json!({ "text": format!("end {i}"), "translation": "t" }))
+            .collect();
+        let res = parse_collocations(serde_json::json!({ "collocations": items }), "end");
+        assert_eq!(res.collocations.len(), MAX_COLLOCATIONS);
+    }
+
+    #[test]
+    fn collocations_from_json_tells_empty_list_from_unusable_answer() {
+        let empty = parse_collocations(serde_json::json!({ "collocations": [] }), "end");
+        assert!(empty.collocations.is_empty(), "a word may have no collocations");
+        assert!(collocations_from_json(&serde_json::json!({}), "end").is_err());
+        assert!(collocations_from_json(&serde_json::json!({ "collocations": "x" }), "end").is_err());
+        let wrong_keys = serde_json::json!({ "collocations": [{ "text": "in the end", "meaning": "x" }] });
+        assert!(collocations_from_json(&wrong_keys, "end").is_err(), "falls back to the next model");
     }
 
     #[test]
@@ -3511,6 +3885,61 @@ mod tests {
         assert_eq!(res.main_translation, "fallback");
     }
 
+    fn health_for(names: &[&str]) -> (ChainHealth, Arc<crate::providers::models::health::ModelHealth>) {
+        let tracker = Arc::new(crate::providers::models::health::ModelHealth::default());
+        let health = ChainHealth {
+            tracker: tracker.clone(),
+            keys: names.iter().map(|n| n.to_string()).collect(),
+        };
+        (health, tracker)
+    }
+
+    #[tokio::test]
+    async fn removed_model_is_skipped_on_the_next_call() {
+        let removed = Arc::new(StubProvider::failing_with(
+            "primary",
+            "Gemini API error 404 Not Found: models/gemini-old is not found for API version v1beta",
+        ));
+        let fallback = Arc::new(StubProvider::ok("fallback"));
+        let (health, _) = health_for(&["gemini:old", "gemini:new"]);
+        let registry = ProviderRegistry::from_chain(vec![removed.clone(), fallback.clone()], None)
+            .with_health(health);
+
+        registry.translate(sample_translate_req()).await.unwrap();
+        let res = registry.translate(sample_translate_req()).await.unwrap();
+
+        assert_eq!(res.main_translation, "fallback");
+        assert_eq!(removed.call_count(), 1, "a removed model must not be retried right away");
+        assert_eq!(fallback.call_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn skipped_model_is_still_the_last_resort() {
+        let primary = Arc::new(StubProvider::ok("primary"));
+        let broken = Arc::new(StubProvider::failing("fallback"));
+        let (health, tracker) = health_for(&["a:primary", "b:fallback"]);
+        tracker.record_failure("a:primary", HealthFailure::Gone, std::time::Instant::now());
+        let registry = ProviderRegistry::from_chain(vec![primary.clone(), broken.clone()], None)
+            .with_health(health);
+
+        let res = registry.translate(sample_translate_req()).await.unwrap();
+
+        assert_eq!(res.main_translation, "primary");
+        assert_eq!(broken.call_count(), 1, "healthy models go first");
+        assert!(!tracker.is_cooling("a:primary", std::time::Instant::now()), "success heals the model");
+    }
+
+    #[tokio::test]
+    async fn missing_capability_does_not_mark_the_model_broken() {
+        let (health, tracker) = health_for(&["a:primary"]);
+        let registry = ProviderRegistry::from_chain(vec![Arc::new(StubProvider::ok("primary"))], None)
+            .with_health(health);
+        let err = AppError::Validation("cannot transcribe speech".to_string());
+        assert_eq!(health_failure(&err, classify_failure(&err)), None);
+        registry.translate(sample_translate_req()).await.unwrap();
+        assert!(!tracker.is_cooling("a:primary", std::time::Instant::now()));
+    }
+
     #[test]
     fn classifies_provider_failures() {
         let kind = |msg: &str| classify_failure(&AppError::Provider(msg.to_string()));
@@ -3521,6 +3950,9 @@ mod tests {
         assert_eq!(kind("429 Too Many Requests"), FailureKind::RateLimit);
         assert_eq!(kind("Gemini 429 RESOURCE_EXHAUSTED: quota exceeded"), FailureKind::RateLimit);
         assert_eq!(kind("gemini did not answer within 30s"), FailureKind::Other);
+        assert_eq!(kind("OpenAI error 404: The model `gpt-old` does not exist"), FailureKind::Gone);
+        assert_eq!(kind("Groq 400: The model `llama-x` has been decommissioned"), FailureKind::Gone);
+        assert_eq!(kind("OpenRouter 404: No endpoints found for x:free"), FailureKind::Gone);
         assert_eq!(kind("Gemini 403: User location is not supported"), FailureKind::Other);
         assert_eq!(
             kind("Input of 34012 tokens exceeds the 14290 limit"),

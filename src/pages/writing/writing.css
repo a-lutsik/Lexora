@@ -6,6 +6,8 @@
   --writing-editor-min-height: 10rem;
   --writing-diff-min-height: 6rem;
   --writing-mode-select-width: 10rem;
+  --writing-limit-toast-width: 24rem;
+  --writing-limit-toast-z: 1000;
   padding: var(--space-8);
   height: 100%;
   overflow-y: auto;
@@ -443,6 +445,29 @@
   display: flex;
   gap: var(--space-2);
   margin-top: var(--space-1);
+}
+
+.writing-limit-toast {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: var(--writing-limit-toast-z);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: min(var(--writing-limit-toast-width), calc(100% - var(--space-12)));
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-warn);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-4);
+}
+
+.writing-limit-toast-text {
+  margin: 0;
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
 }
 
 .writing-privacy-banner {

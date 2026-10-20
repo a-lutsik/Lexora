@@ -46,17 +46,17 @@ describe('countWritingChars', () => {
 });
 
 describe('shouldAutoCheckWriting', () => {
-  it('rejects empty, short, and over-limit text', () => {
+  it('rejects empty and over-limit text', () => {
     expect(shouldAutoCheckWriting('', null)).toBe(false);
     expect(shouldAutoCheckWriting('   ', null)).toBe(false);
-    expect(shouldAutoCheckWriting('hi', null)).toBe(false);
-    expect(shouldAutoCheckWriting('one two three', null)).toBe(false);
     expect(shouldAutoCheckWriting('a'.repeat(MAX_WRITING_CHARS + 1), null)).toBe(false);
   });
 
-  it('accepts text meeting the char or word threshold', () => {
-    expect(shouldAutoCheckWriting('This has twenty+ chars!!', null)).toBe(true);
-    expect(shouldAutoCheckWriting('one two three four', null)).toBe(true);
+  it('accepts any non-empty text within the limit', () => {
+    expect(shouldAutoCheckWriting('hi', null)).toBe(true);
+    expect(shouldAutoCheckWriting('bless god', null)).toBe(true);
+    expect(shouldAutoCheckWriting('one two three', null)).toBe(true);
+    expect(shouldAutoCheckWriting('a'.repeat(MAX_WRITING_CHARS), null)).toBe(true);
   });
 
   it('skips when text matches the last successful check', () => {

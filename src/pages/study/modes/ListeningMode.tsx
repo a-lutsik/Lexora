@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Listening Study Mode
 // Hidden word, TTS playback, type what you hear.
@@ -19,6 +20,7 @@ type ListeningModeProps = {
 };
 
 export function ListeningMode({ entry, onComplete }: ListeningModeProps) {
+  const { t: tUi } = useI18n();
   const [input, setInput] = useState('');
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const startTime = useRef<number>(Date.now());
@@ -73,33 +75,31 @@ export function ListeningMode({ entry, onComplete }: ListeningModeProps) {
 
       {/* Prompt: audio only, word hidden */}
       <div className="typing-prompt">
-        <div className="typing-prompt-label">
-          Listen and type what you hear:
-        </div>
+        <div className="typing-prompt-label">{tUi("Listen and type what you hear:")}</div>
         <div className="study-audio-replay">
           <AudioButton
             text={lexeme.text}
-            ariaLabel="Replay pronunciation"
+            ariaLabel={tUi("Replay pronunciation")}
             onPlayed={() => inputRef.current?.focus()}
           />
-          <div className="study-audio-hint">Click to replay</div>
+          <div className="study-audio-hint">{tUi("Click to replay")}</div>
         </div>
       </div>
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="typing-form">
-        <input
+        <input dir="auto"
           ref={inputRef}
           type="text"
           className="typing-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type what you heard…"
+          placeholder={tUi("Type what you heard…")}
           disabled={result !== null}
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          aria-label="Your answer"
+          aria-label={tUi("Your answer")}
         />
 
         {!result && (
@@ -109,9 +109,7 @@ export function ListeningMode({ entry, onComplete }: ListeningModeProps) {
               variant="primary"
               size="md"
               isLoading={evaluateMutation.isPending}
-            >
-              Check Answer (↵)
-            </Button>
+            >{tUi("Check Answer (↵)")}</Button>
           </div>
         )}
       </form>
@@ -129,7 +127,7 @@ export function ListeningMode({ entry, onComplete }: ListeningModeProps) {
           }`}
         >
           <div className="typing-feedback-title">
-            {result.isCorrect ? '✓ Excellent!' : `Expected: ${result.correctAnswer}`}
+            {result.isCorrect ? tUi("✓ Excellent!") : tUi("Expected: {value1}", { value1: result.correctAnswer })}
           </div>
 
           {/* Reveal the word and its translation after checking */}
@@ -151,9 +149,7 @@ export function ListeningMode({ entry, onComplete }: ListeningModeProps) {
           )}
 
           <div className="typing-feedback-actions">
-            <Button variant="secondary" size="md" onClick={handleNext}>
-              Continue (Space)
-            </Button>
+            <Button variant="secondary" size="md" onClick={handleNext}>{tUi("Continue (Space)")}</Button>
           </div>
         </div>
       )}

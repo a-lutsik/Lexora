@@ -1,5 +1,7 @@
+pub mod category;
 pub mod ai_usage;
 pub mod collection;
+pub mod collocation;
 pub mod dialogue;
 pub mod grammar_watch;
 pub mod lexeme;

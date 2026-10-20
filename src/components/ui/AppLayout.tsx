@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — AppLayout Component
 // Wraps all main pages with sidebar navigation.
@@ -5,7 +6,6 @@
 
 import { NavLink } from 'react-router-dom';
 import { useDueCount } from '../../hooks/useStudyQueue';
-import { pluralize } from '../../lib/utils';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { LogoMark } from './Logo';
 import {
@@ -26,6 +26,7 @@ type AppLayoutProps = {
 };
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const { t: tUi } = useI18n();
   const activeLanguageId = useSettingsStore((s) => s.activeLanguageId);
   const { data: dueCount } = useDueCount(activeLanguageId);
 
@@ -36,11 +37,9 @@ export function AppLayout({ children }: AppLayoutProps) {
         type="button"
         className="skip-link"
         onClick={() => document.getElementById('main-content')?.focus()}
-      >
-        Skip to main content
-      </button>
+      >{tUi("Skip to main content")}</button>
 
-      <aside className="sidebar" role="navigation" aria-label="Main navigation">
+      <aside className="sidebar" role="navigation" aria-label={tUi("Main navigation")}>
         <div className="sidebar-logo" data-tauri-drag-region>
           <div className="sidebar-logo-mark" aria-hidden="true">
             <LogoMark size={32} />
@@ -54,10 +53,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="Vocabulary"
+            aria-label={tUi("Vocabulary")}
           >
             <IconNavBook />
-            <span className="nav-label">Vocabulary</span>
+            <span className="nav-label">{tUi("Vocabulary")}</span>
           </NavLink>
 
           <NavLink
@@ -65,12 +64,14 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label={`Study${dueCount ? `, ${dueCount} due` : ''}`}
+            aria-label={dueCount ? tUi("Study, {count} due", { count: dueCount }) : tUi("Study")}
           >
             <IconNavCards />
-            <span className="nav-label">Study</span>
+            <span className="nav-label">{tUi("Study")}</span>
             {dueCount != null && dueCount > 0 && (
-              <span className="nav-badge" aria-label={`${pluralize(dueCount, 'card')} due`}>
+              <span className="nav-badge" aria-label={dueCount === 1
+                ? tUi("{count} card due", { count: dueCount })
+                : tUi("{count} cards due", { count: dueCount })}>
                 {dueCount > 99 ? '99+' : dueCount}
               </span>
             )}
@@ -81,10 +82,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="Writing"
+            aria-label={tUi("Writing")}
           >
             <IconNavPen />
-            <span className="nav-label">Writing</span>
+            <span className="nav-label">{tUi("Writing")}</span>
           </NavLink>
 
           <NavLink
@@ -92,10 +93,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="Translate"
+            aria-label={tUi("Translate")}
           >
             <IconNavTranslate />
-            <span className="nav-label">Translate</span>
+            <span className="nav-label">{tUi("Translate")}</span>
           </NavLink>
 
           <NavLink
@@ -103,10 +104,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="Speak (pronunciation)"
+            aria-label={tUi("Speak (pronunciation)")}
           >
             <IconNavMic />
-            <span className="nav-label">Speak</span>
+            <span className="nav-label">{tUi("Speak")}</span>
           </NavLink>
 
           <NavLink
@@ -114,10 +115,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="AI Dialogue"
+            aria-label={tUi("AI Dialogue")}
           >
             <IconNavDialogue />
-            <span className="nav-label">Dialogue</span>
+            <span className="nav-label">{tUi("Dialogue")}</span>
           </NavLink>
 
           <NavLink
@@ -125,10 +126,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="Collections"
+            aria-label={tUi("Collections")}
           >
             <IconNavCollections />
-            <span className="nav-label">Collections</span>
+            <span className="nav-label">{tUi("Collections")}</span>
           </NavLink>
 
           <NavLink
@@ -136,10 +137,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="Stats (statistics)"
+            aria-label={tUi("Stats (statistics)")}
           >
             <IconNavStats />
-            <span className="nav-label">Stats</span>
+            <span className="nav-label">{tUi("Stats")}</span>
           </NavLink>
         </nav>
 
@@ -151,10 +152,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             className={({ isActive }) =>
               `sidebar-nav-item${isActive ? ' active' : ''}`
             }
-            aria-label="Settings"
+            aria-label={tUi("Settings")}
           >
             <IconNavSettings />
-            <span className="nav-label">Settings</span>
+            <span className="nav-label">{tUi("Settings")}</span>
           </NavLink>
         </div>
       </aside>

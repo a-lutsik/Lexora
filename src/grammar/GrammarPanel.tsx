@@ -1,3 +1,5 @@
+import { t as tUi } from "../i18n";
+import { useI18n } from "../hooks/useI18n";
 // ============================================================
 // LEXORA — Writing-check panel
 // Suggestion cards for the text in another app's field. «Apply»
@@ -5,6 +7,7 @@
 // ============================================================
 
 import { useEffect } from 'react';
+import { writingLabel } from '../lib/interfaceText';
 import { issueContext } from '../lib/grammarFix';
 import type { WritingIssueDto } from '../lib/types';
 
@@ -40,10 +43,10 @@ function CloseIcon() {
 }
 
 function panelTitle(status: PanelStatus, count: number): string {
-  if (status === 'checking') return 'Checking…';
-  if (status === 'error') return 'Writing check';
-  if (count === 0) return 'Looks good';
-  return `${count} ${count === 1 ? 'suggestion' : 'suggestions'}`;
+  if (status === 'checking') return tUi("Checking…");
+  if (status === 'error') return tUi("Writing check");
+  if (count === 0) return tUi("Looks good");
+  return count === 1 ? tUi("{count} suggestion", { count }) : tUi("{count} suggestions", { count });
 }
 
 export function GrammarPanel({
@@ -62,6 +65,7 @@ export function GrammarPanel({
   onExcludeApp,
   onClose,
 }: GrammarPanelProps) {
+  const { t: tUi } = useI18n();
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -82,7 +86,7 @@ export function GrammarPanel({
           {panelTitle(status, count)}
           {appName && <span className="grammar-panel-app"> · {appName}</span>}
         </h1>
-        <button type="button" className="grammar-icon-btn" onClick={onClose} aria-label="Close suggestions">
+        <button type="button" className="grammar-icon-btn" onClick={onClose} aria-label={tUi("Close suggestions")}>
           <CloseIcon />
         </button>
       </header>
@@ -93,23 +97,23 @@ export function GrammarPanel({
             {applyError}
           </p>
         )}
-        {status === 'checking' && <p className="grammar-panel-note">Checking your text…</p>}
+        {status === 'checking' && <p className="grammar-panel-note">{tUi("Checking your text…")}</p>}
         {status === 'error' && (
           <p className="grammar-alert" role="alert">
-            {checkError ?? 'Could not check the text.'}
+            {checkError ?? tUi("Could not check the text.")}
           </p>
         )}
         {status === 'ready' && count === 0 && (
-          <p className="grammar-panel-note is-clean">✓ No mistakes found — the text reads well.</p>
+          <p className="grammar-panel-note is-clean">{tUi("✓ No mistakes found — the text reads well.")}</p>
         )}
         {status === 'ready' && count > 0 && (
-          <ul className="grammar-list" aria-label="Suggestions">
+          <ul className="grammar-list" aria-label={tUi("Suggestions")}>
             {issues.map((issue) => {
               const context = issueContext(text, issue);
-              const change = `${issue.originalFragment || '…'} → ${issue.suggestedFix || 'remove'}`;
+              const change = `${issue.originalFragment || '…'} → ${issue.suggestedFix || tUi('Remove')}`;
               return (
                 <li key={issue.id} className="grammar-card">
-                  <span className="grammar-card-category">{issue.category}</span>
+                  <span className="grammar-card-category">{writingLabel(issue.category)}</span>
                   <p className="grammar-card-context">
                     {context.before}
                     <del>{context.fragment}</del>
@@ -123,19 +127,15 @@ export function GrammarPanel({
                       className="grammar-btn is-primary"
                       onClick={() => onApply(issue.id)}
                       disabled={isApplying}
-                      aria-label={`Apply fix: ${change}`}
-                    >
-                      Apply
-                    </button>
+                      aria-label={tUi("Apply fix: {change}", { change: change })}
+                    >{tUi("Apply")}</button>
                     <button
                       type="button"
                       className="grammar-btn"
                       onClick={() => onDismiss(issue.id)}
                       disabled={isApplying}
-                      aria-label={`Dismiss fix: ${change}`}
-                    >
-                      Dismiss
-                    </button>
+                      aria-label={tUi("Dismiss fix: {change}", { change: change })}
+                    >{tUi("Dismiss")}</button>
                   </div>
                 </li>
               );
@@ -146,17 +146,14 @@ export function GrammarPanel({
 
       <footer className="grammar-panel-footer">
         {count > 1 && status === 'ready' && (
-          <button type="button" className="grammar-btn is-primary" onClick={onApplyAll} disabled={isApplying}>
-            Apply all ({count})
+          <button type="button" className="grammar-btn is-primary" onClick={onApplyAll} disabled={isApplying}>{tUi("Apply all (")}{count})
           </button>
         )}
         <div className="grammar-footer-spacer" />
-        <button type="button" className="grammar-link-btn" onClick={onIgnore}>
-          Hide for this text
-        </button>
+        <button type="button" className="grammar-link-btn" onClick={onIgnore}>{tUi("Hide for this text")}</button>
         {canExcludeApp && (
           <button type="button" className="grammar-link-btn" onClick={onExcludeApp}>
-            {appName ? `Don't check in ${appName}` : "Don't check in this app"}
+            {appName ? tUi("Don't check in {appName}", { appName: appName }) : tUi("Don't check in this app")}
           </button>
         )}
       </footer>

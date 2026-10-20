@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Create Dialogue Scenario Modal
 // The learner describes a situation (or picks "free conversation");
@@ -29,6 +30,7 @@ const MAX_TITLE_CHARS = 80;
 const MAX_DESCRIPTION_CHARS = 500;
 
 export function CreateScenarioModal({ isOpen, language, onClose }: CreateScenarioModalProps) {
+  const { t: tUi, locale } = useI18n();
   const [kind, setKind] = useState<DialogueScenarioKind>('guided');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -102,29 +104,24 @@ export function CreateScenarioModal({ isOpen, language, onClose }: CreateScenari
         }}
       >
         <div className="dialogue-modal-header">
-          <h2 id="dialogue-modal-title" className="dialogue-modal-title">
-            Add scenario
-          </h2>
+          <h2 id="dialogue-modal-title" className="dialogue-modal-title">{tUi("Add scenario")}</h2>
           <button
             type="button"
             className="dialogue-modal-close"
             onClick={onClose}
             disabled={isPending}
-            aria-label="Close dialog"
+            aria-label={tUi("Close dialog")}
           >
             ×
           </button>
         </div>
 
-        <p className="dialogue-modal-hint">
-          The tutor will speak {languageLabel(language)}. The AI writes the role, the first line
-          and useful phrases for you.
-        </p>
+        <p className="dialogue-modal-hint">{tUi("The tutor will speak ")}{languageLabel(language, false, locale)}{tUi(". The AI writes the role, the first line and useful phrases for you.")}</p>
 
         <fieldset className="dialogue-modal-kinds">
-          <legend className="dialogue-modal-label">Type</legend>
+          <legend className="dialogue-modal-label">{tUi("Type")}</legend>
           <label className={`dialogue-modal-kind${!isFree ? ' is-selected' : ''}`}>
-            <input
+            <input dir="auto"
               type="radio"
               name="dialogue-scenario-kind"
               value="guided"
@@ -132,11 +129,11 @@ export function CreateScenarioModal({ isOpen, language, onClose }: CreateScenari
               onChange={() => setKind('guided')}
               disabled={isPending}
             />
-            <span className="dialogue-modal-kind-name">Situation</span>
-            <span className="dialogue-modal-kind-desc">Practice a specific situation</span>
+            <span className="dialogue-modal-kind-name">{tUi("Situation")}</span>
+            <span className="dialogue-modal-kind-desc">{tUi("Practice a specific situation")}</span>
           </label>
           <label className={`dialogue-modal-kind${isFree ? ' is-selected' : ''}`}>
-            <input
+            <input dir="auto"
               type="radio"
               name="dialogue-scenario-kind"
               value="free"
@@ -144,50 +141,47 @@ export function CreateScenarioModal({ isOpen, language, onClose }: CreateScenari
               onChange={() => setKind('free')}
               disabled={isPending}
             />
-            <span className="dialogue-modal-kind-name">Free conversation</span>
-            <span className="dialogue-modal-kind-desc">Talk about anything you like</span>
+            <span className="dialogue-modal-kind-name">{tUi("Free conversation")}</span>
+            <span className="dialogue-modal-kind-desc">{tUi("Talk about anything you like")}</span>
           </label>
         </fieldset>
 
-        <label className="dialogue-modal-label" htmlFor="dialogue-scenario-title">
-          Title {isFree && <span className="text-muted">(optional)</span>}
+        <label className="dialogue-modal-label" htmlFor="dialogue-scenario-title">{tUi("Title ")}{isFree && <span className="text-muted">{tUi("(optional)")}</span>}
         </label>
-        <input
+        <input dir="auto"
           id="dialogue-scenario-title"
           className="dialogue-modal-input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder={isFree ? 'Free conversation' : 'At the pharmacy, Booking a table…'}
+          placeholder={isFree ? tUi("Free conversation") : tUi("At the pharmacy, Booking a table…")}
           maxLength={MAX_TITLE_CHARS}
           autoComplete="off"
           disabled={isPending}
         />
 
         <label className="dialogue-modal-label" htmlFor="dialogue-scenario-description">
-          {isFree ? 'Topics or notes' : 'Describe the situation'}{' '}
-          {isFree && <span className="text-muted">(optional)</span>}
+          {isFree ? tUi("Topics or notes") : tUi("Describe the situation")}{' '}
+          {isFree && <span className="text-muted">{tUi("(optional)")}</span>}
         </label>
-        <textarea
+        <textarea dir="auto"
           id="dialogue-scenario-description"
           className="dialogue-modal-textarea"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder={
             isFree
-              ? 'Anything you want the tutor to know about you or what you like to discuss.'
-              : 'Who is the tutor, where are you and what do you want to achieve?'
+              ? tUi("Anything you want the tutor to know about you or what you like to discuss.")
+              : tUi("Who is the tutor, where are you and what do you want to achieve?")
           }
           rows={4}
           maxLength={MAX_DESCRIPTION_CHARS}
           disabled={isPending}
         />
 
-        <label className="dialogue-modal-label" htmlFor="dialogue-scenario-level">
-          Level
-        </label>
+        <label className="dialogue-modal-label" htmlFor="dialogue-scenario-level">{tUi("Level")}</label>
         <Select
           id="dialogue-scenario-level"
-          ariaLabel="Level"
+          ariaLabel={tUi("Level")}
           options={LEVEL_OPTIONS}
           value={level}
           onChange={setLevel}
@@ -196,23 +190,21 @@ export function CreateScenarioModal({ isOpen, language, onClose }: CreateScenari
 
         {isError && (
           <p className="dialogue-modal-error" role="alert">
-            {formatIpcError(error, 'Could not create the scenario. Check the AI provider in Settings.')}
+            {formatIpcError(error, tUi("Could not create the scenario. Check the AI provider in Settings."))}
           </p>
         )}
 
         <div className="dialogue-modal-actions">
-          <Button type="button" variant="ghost" size="md" onClick={onClose} disabled={isPending}>
-            Cancel
-          </Button>
+          <Button type="button" variant="ghost" size="md" onClick={onClose} disabled={isPending}>{tUi("Cancel")}</Button>
           <Button
             type="submit"
             variant="primary"
             size="md"
             disabled={!canSubmit}
             isLoading={isPending}
-            aria-label="Create scenario"
+            aria-label={tUi("Create scenario")}
           >
-            {isPending ? 'Creating…' : 'Create scenario'}
+            {isPending ? tUi("Creating…") : tUi("Create scenario")}
           </Button>
         </div>
       </form>

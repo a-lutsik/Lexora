@@ -1,7 +1,8 @@
 /* ============================================================
    LEXORA — Writing-check badge & panel («Grammarly mode»)
    Window sizes come from src-tauri/src/grammar_watch/mod.rs:
-   badge window 44×44 (hit target), panel 400×460.
+   badge window 44×44 (hit target), panel 400×460, hover card 340×200.
+   The underline window (grammar.html#marks) covers the watched field.
    ============================================================ */
 
 html.grammar-window,
@@ -37,7 +38,9 @@ html.grammar-window #root {
   border-radius: var(--radius-full);
   background: var(--color-bg-elevated);
   border: 2px solid var(--color-border-hover);
-  box-shadow: var(--shadow-md);
+  /* The window is only a few pixels larger than the circle: a big shadow
+     would be cut off at its edge and show up as a square background. */
+  box-shadow: var(--shadow-sm);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   font-size: var(--text-xs);
@@ -61,9 +64,25 @@ html.grammar-window #root {
   border-color: var(--color-danger);
 }
 
+.grammar-badge-dot.is-improvements {
+  background: var(--color-warn);
+  border-color: var(--color-warn);
+  color: var(--color-bg-primary);
+}
+
 .grammar-badge-dot.is-clean {
-  background: var(--color-success);
-  border-color: var(--color-success);
+  overflow: hidden;
+  background: var(--color-bg-primary);
+  border-color: var(--color-accent-solid);
+}
+
+/* The icon is a rounded tile: scaled up a little so the circle crops
+   its transparent corners. */
+.grammar-badge-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scale(1.18);
 }
 
 .grammar-badge-dot.is-error {
@@ -301,7 +320,114 @@ html.grammar-window #root {
   outline-offset: 2px;
 }
 
+/* ── Underlines (overlay window over the watched field) ────── */
+
+.grammar-marks {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.grammar-mark-line {
+  rx: 1px;
+}
+
+.grammar-mark-line.is-error {
+  fill: var(--color-danger);
+}
+
+.grammar-mark-line.is-improvement {
+  fill: var(--color-warn);
+}
+
+/* ── Hover card (shown under an underline) ─────────────────── */
+
+.grammar-hover-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-secondary);
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  animation: slide-up var(--transition-base);
+}
+
+.grammar-hover-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.grammar-hover-dot {
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-full);
+}
+
+.grammar-hover-dot.is-error {
+  background: var(--color-danger);
+}
+
+.grammar-hover-dot.is-improvement {
+  background: var(--color-warn);
+}
+
+.grammar-hover-change {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.grammar-hover-change del {
+  color: var(--color-text-muted);
+}
+
+.grammar-hover-change ins {
+  color: var(--color-accent-text);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.grammar-hover-why {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--line-height-normal);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.grammar-hover-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .grammar-hover-card {
+    animation: none;
+  }
+
   .grammar-badge-dot,
   .grammar-panel {
     animation: none;

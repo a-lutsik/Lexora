@@ -9,10 +9,6 @@ export const OPEN_WRITING_EVENT = 'lexora:open-writing';
 /** Pause before auto-check fires (matches popup compose debounce). */
 export const AUTO_CHECK_DEBOUNCE_MS = 2_000;
 
-/** Minimum length for auto-check: chars OR words. */
-const AUTO_CHECK_MIN_CHARS = 20;
-const AUTO_CHECK_MIN_WORDS = 4;
-
 /** Words or characters above these counts are treated as writing, not a lookup. */
 const LONG_TEXT_MIN_CHARS = 50;
 const LONG_TEXT_MIN_WORDS = 8;
@@ -38,8 +34,8 @@ export function isLongWritingText(text: string): boolean {
 
 /**
  * Whether the Writing page should fire an automatic check for `text`.
- * Does not consider settings flags (auto-check on / offline) — those are
- * gated by the caller.
+ * Any non-empty text within the length limit qualifies. Does not consider
+ * settings flags (auto-check on / offline) — those are gated by the caller.
  */
 export function shouldAutoCheckWriting(
   text: string,
@@ -51,8 +47,7 @@ export function shouldAutoCheckWriting(
   if (lastCheckedText !== null && trimmed === lastCheckedText.trim()) {
     return false;
   }
-  if (countWritingChars(trimmed) >= AUTO_CHECK_MIN_CHARS) return true;
-  return countWritingWords(trimmed) >= AUTO_CHECK_MIN_WORDS;
+  return true;
 }
 
 export function saveWritingDraft(text: string): void {

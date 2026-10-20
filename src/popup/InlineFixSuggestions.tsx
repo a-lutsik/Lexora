@@ -1,3 +1,4 @@
+import { useI18n } from "../hooks/useI18n";
 // ============================================================
 // LEXORA — Fix mode of the inline assistant (Grammarly-style)
 // Mistakes are highlighted in the selected text; each card shows
@@ -15,6 +16,7 @@ type InlineFixSuggestionsProps = {
 };
 
 export function InlineFixSuggestions({ check, issues, onSetStatus }: InlineFixSuggestionsProps) {
+  const { t: tUi } = useI18n();
   // Only fixes that can be applied to this text (valid, non-overlapping
   // ranges) are listed; dismissed ones stay listed so they can be restored.
   const applicable = new Set(
@@ -26,7 +28,7 @@ export function InlineFixSuggestions({ check, issues, onSetStatus }: InlineFixSu
   const listed = issues.filter((issue) => applicable.has(issue.id));
 
   if (listed.length === 0) {
-    return <p className="inline-fix-clean">✓ No mistakes found — the text reads well.</p>;
+    return <p className="inline-fix-clean">{tUi("✓ No mistakes found — the text reads well.")}</p>;
   }
 
   // Dismissed fixes stay in the list but are no longer highlighted.
@@ -34,7 +36,7 @@ export function InlineFixSuggestions({ check, issues, onSetStatus }: InlineFixSu
 
   return (
     <div className="inline-fix">
-      <p className="inline-fix-text" aria-label="Your text with mistakes highlighted">
+      <p className="inline-fix-text" aria-label={tUi("Your text with mistakes highlighted")}>
         {segments.map((segment, index) =>
           segment.kind === 'plain' ? (
             <span key={index}>{segment.text}</span>
@@ -50,7 +52,7 @@ export function InlineFixSuggestions({ check, issues, onSetStatus }: InlineFixSu
         )}
       </p>
 
-      <ul className="inline-fix-list" aria-label="Suggestions">
+      <ul className="inline-fix-list" aria-label={tUi("Suggestions")}>
         {listed.map((issue) => {
           const dismissed = issue.status === 'rejected';
           const change = `${issue.originalFragment} → ${issue.suggestedFix || 'remove'}`;
@@ -67,9 +69,11 @@ export function InlineFixSuggestions({ check, issues, onSetStatus }: InlineFixSu
                   type="button"
                   className="inline-fix-toggle"
                   onClick={() => onSetStatus(issue, dismissed ? 'pending' : 'rejected')}
-                  aria-label={`${dismissed ? 'Restore' : 'Dismiss'} fix: ${change}`}
+                  aria-label={dismissed
+                    ? tUi("Restore fix: {change}", { change })
+                    : tUi("Dismiss fix: {change}", { change })}
                 >
-                  {dismissed ? 'Restore' : 'Dismiss'}
+                  {dismissed ? tUi("Restore") : tUi("Dismiss")}
                 </button>
               </div>
               {issue.explanation && <p className="inline-fix-why">{issue.explanation}</p>}

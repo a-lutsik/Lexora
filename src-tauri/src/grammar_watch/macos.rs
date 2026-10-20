@@ -6,9 +6,10 @@
 // ============================================================
 
 use super::logic::{self, Decision, Observation, Rect, TextEdit, WatchState};
+use super::marks::{self, MarkGeometry, Overlay};
 use super::{
-    config_snapshot, publish, refresh_language, report, ActivityCode, FieldPayload, WatchConfig,
-    BADGE_SIZE, GRAMMAR_LABEL, PANEL_EVENT, PANEL_HEIGHT, PANEL_WIDTH,
+    clear_marks, config_snapshot, publish, refresh_language, report, ActivityCode, FieldPayload,
+    MarkInput, WatchConfig, BADGE_SIZE, GRAMMAR_LABEL, PANEL_EVENT, PANEL_HEIGHT, PANEL_WIDTH,
 };
 use crate::display::{pick_bounds_for_point, LogicalBounds};
 use crate::error::AppError;
@@ -52,6 +53,8 @@ const FOLLOW_THRESHOLD: f64 = 1.0;
 /// Matches `--radius-lg` in `src/styles/tokens.css`.
 const PANEL_CORNER_RADIUS: f64 = 16.0;
 const APP_CACHE_LIMIT: usize = 64;
+/// A range taller than this many first-character heights spans several lines.
+const WRAP_HEIGHT_FACTOR: f64 = 1.5;
 
 const ATTR_FOCUSED_APP: &str = "AXFocusedApplication";
 const ATTR_FOCUSED_UI: &str = "AXFocusedUIElement";
@@ -64,6 +67,8 @@ const ATTR_SELECTED_RANGE: &str = "AXSelectedTextRange";
 const ATTR_POSITION: &str = "AXPosition";
 const ATTR_SIZE: &str = "AXSize";
 const ATTR_WINDOW: &str = "AXWindow";
+const ATTR_BOUNDS_FOR_RANGE: &str = "AXBoundsForRange";
+const ATTR_STRING_FOR_RANGE: &str = "AXStringForRange";
 /// Chromium/Electron build their accessibility tree only on request.
 const ATTR_MANUAL_ACCESSIBILITY: &str = "AXManualAccessibility";
 /// Chrome and other Chromium browsers react to this one (VoiceOver-style hint).
@@ -76,6 +81,7 @@ type AXError = i32;
 const AX_ERROR_SUCCESS: AXError = 0;
 const AX_VALUE_CGPOINT: u32 = 1;
 const AX_VALUE_CGSIZE: u32 = 2;
+const AX_VALUE_CGRECT: u32 = 3;
 const AX_VALUE_CFRANGE: u32 = 4;
 
 #[repr(C)]
@@ -94,6 +100,13 @@ struct RawSize {
 
 #[repr(C)]
 #[derive(Default)]
+struct RawRect {
+    origin: RawPoint,
+    size: RawSize,
+}
+
+#[repr(C)]
+#[derive(Default)]
 struct RawRange {
     location: isize,
     length: isize,
@@ -106,6 +119,12 @@ extern "C" {
     fn AXUIElementCopyAttributeValue(
         element: AXUIElementRef,
         attribute: CFStringRef,
+        value: *mut CFTypeRef,
+    ) -> AXError;
+    fn AXUIElementCopyParameterizedAttributeValue(
+        element: AXUIElementRef,
+        attribute: CFStringRef,
+        parameter: CFTypeRef,
         value: *mut CFTypeRef,
     ) -> AXError;
     fn AXUIElementSetAttributeValue(
@@ -238,6 +257,94 @@ impl AxElement {
         ok
     }
 
+    /// Answer of a parameterized attribute for the character range
+    /// `[location, location + length)` (UTF-16 units). Caller releases.
+    fn copy_for_range(&self, attr: &str, location: usize, length: usize) -> Option<CFTypeRef> {
+        let range = RawRange {
+            location: isize::try_from(location).ok()?,
+            length: isize::try_from(length).ok()?,
+        };
+        let param = unsafe { AXValueCreate(AX_VALUE_CFRANGE, (&range as *const RawRange).cast()) };
+        if param.is_null() {
+            return None;
+        }
+        let name = CFString::new(attr);
+        let mut value: CFTypeRef = ptr::null();
+        let err = unsafe {
+            AXUIElementCopyParameterizedAttributeValue(
+                self.0,
+                name.as_concrete_TypeRef(),
+                param,
+                &mut value,
+            )
+        };
+        unsafe { CFRelease(param) };
+        (err == AX_ERROR_SUCCESS && !value.is_null()).then_some(value)
+    }
+
+    /// Screen rectangle (points, origin top-left) the app draws the range in.
+    /// `None` unless the range holds exactly `expected`: apps that count
+    /// characters differently would otherwise underline the wrong word.
+    fn range_rect(&self, location: usize, length: usize, expected: &str) -> Option<Rect> {
+        let covered = self.copy_for_range(ATTR_STRING_FOR_RANGE, location, length)?;
+        if unsafe { CFGetTypeID(covered) } != CFString::type_id() {
+            unsafe { CFRelease(covered) };
+            return None;
+        }
+        let covered = unsafe { CFString::wrap_under_create_rule(covered as CFStringRef) }
+            .to_string()
+            .replace('\u{a0}', " ");
+        if covered != expected {
+            return None;
+        }
+        let value = self.copy_for_range(ATTR_BOUNDS_FOR_RANGE, location, length)?;
+        let mut raw = RawRect::default();
+        let ok =
+            unsafe { AXValueGetValue(value, AX_VALUE_CGRECT, (&mut raw as *mut RawRect).cast()) }
+                != 0;
+        unsafe { CFRelease(value) };
+        let rect = Rect {
+            x: raw.origin.x,
+            y: raw.origin.y,
+            width: raw.size.width,
+            height: raw.size.height,
+        };
+        (ok && rect.is_usable()).then_some(rect)
+    }
+
+    /// Rectangles of a flagged fragment, one per line. The app answers with
+    /// a single bounding box; when it is taller than one line the fragment
+    /// wraps, so it is measured word by word instead.
+    fn fragment_rects(&self, location: usize, fragment: &str) -> Vec<Rect> {
+        let length = fragment.encode_utf16().count();
+        let Some(whole) = self.range_rect(location, length, fragment) else {
+            return Vec::new();
+        };
+        let first_char_len = fragment.chars().next().map_or(0, char::len_utf16);
+        let first = fragment
+            .chars()
+            .next()
+            .and_then(|ch| self.range_rect(location, first_char_len, &ch.to_string()));
+        let one_line = first.is_none_or(|first| whole.height <= first.height * WRAP_HEIGHT_FACTOR);
+        if one_line {
+            return vec![whole];
+        }
+        let mut rects = Vec::new();
+        let mut offset = location;
+        for piece in fragment.split_inclusive(char::is_whitespace) {
+            let units = piece.encode_utf16().count();
+            let word = piece.trim_end();
+            let word_units = word.encode_utf16().count();
+            if word_units > 0 {
+                if let Some(rect) = self.range_rect(offset, word_units, word) {
+                    rects.push(rect);
+                }
+            }
+            offset += units;
+        }
+        rects
+    }
+
     fn selected_range(&self) -> Option<(usize, usize)> {
         let range: RawRange = self.copy_ax_value(ATTR_SELECTED_RANGE, AX_VALUE_CFRANGE)?;
         Some((
@@ -308,10 +415,7 @@ impl AppCache {
                 ATTR_MANUAL_ACCESSIBILITY,
                 CFBoolean::true_value().as_CFTypeRef(),
             );
-            let _ = app_element.set_raw(
-                ATTR_ENHANCED_UI,
-                CFBoolean::true_value().as_CFTypeRef(),
-            );
+            let _ = app_element.set_raw(ATTR_ENHANCED_UI, CFBoolean::true_value().as_CFTypeRef());
         }
     }
 
@@ -354,7 +458,7 @@ struct Skipped {
 }
 
 impl Skipped {
-    fn new(code: ActivityCode, app: Option<&AppInfo>, detail: Option<String>) -> Probe {
+    fn probe(code: ActivityCode, app: Option<&AppInfo>, detail: Option<String>) -> Probe {
         Probe::Nothing(Skipped {
             code,
             app: app.cloned(),
@@ -373,22 +477,22 @@ enum Probe {
 
 fn probe(system: &AxElement, own_pid: i32, config: &WatchConfig, cache: &mut AppCache) -> Probe {
     let Some(app_element) = system.copy_element(ATTR_FOCUSED_APP) else {
-        return Skipped::new(ActivityCode::NoField, None, None);
+        return Skipped::probe(ActivityCode::NoField, None, None);
     };
     let Some(pid) = app_element.pid() else {
-        return Skipped::new(ActivityCode::NoField, None, None);
+        return Skipped::probe(ActivityCode::NoField, None, None);
     };
     if pid == own_pid {
         return Probe::OwnApp;
     }
     let app = cache.info(pid);
     if logic::is_app_excluded(app.bundle_id.as_deref(), &config.excluded_apps) {
-        return Skipped::new(ActivityCode::ExcludedApp, Some(&app), app.bundle_id.clone());
+        return Skipped::probe(ActivityCode::ExcludedApp, Some(&app), app.bundle_id.clone());
     }
     cache.enable_accessibility(&app_element, pid);
     let Some(element) = app_element.copy_element(ATTR_FOCUSED_UI) else {
         cache.retry_accessibility(pid);
-        return Skipped::new(ActivityCode::NoField, Some(&app), None);
+        return Skipped::probe(ActivityCode::NoField, Some(&app), None);
     };
     let role = element.copy_string(ATTR_ROLE);
     let subrole = element.copy_string(ATTR_SUBROLE);
@@ -399,17 +503,17 @@ fn probe(system: &AxElement, own_pid: i32, config: &WatchConfig, cache: &mut App
             (role, None) => role,
             (None, subrole) => subrole,
         };
-        return Skipped::new(ActivityCode::UnsupportedField, Some(&app), detail);
+        return Skipped::probe(ActivityCode::UnsupportedField, Some(&app), detail);
     }
     let max_chars = i64::try_from(logic::MAX_CHECK_CHARS).unwrap_or(i64::MAX);
     if element
         .copy_i64(ATTR_CHAR_COUNT)
         .is_some_and(|count| count > max_chars)
     {
-        return Skipped::new(ActivityCode::FieldTooLong, Some(&app), None);
+        return Skipped::probe(ActivityCode::FieldTooLong, Some(&app), None);
     }
     let Some(text) = element.field_value() else {
-        return Skipped::new(
+        return Skipped::probe(
             ActivityCode::UnsupportedField,
             Some(&app),
             Some("no text value".to_string()),
@@ -523,6 +627,8 @@ fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
     let now = Instant::now();
     let mut actions: Vec<UiAction> = Vec::new();
     let mut payload: Option<FieldPayload> = None;
+    // Typed text or another field: the underlines no longer match the text.
+    let stale_marks: bool;
     {
         let mut guard = lock_watcher();
         let watcher = guard.get_or_insert_with(|| Watcher::new(now));
@@ -572,6 +678,8 @@ fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
             }
         };
 
+        stale_marks =
+            field_changed || matches!(decision, Decision::Hide | Decision::Pending { .. });
         // The user went back to typing (or moved focus): close the panel.
         // Merely re-focusing the app keeps it — activation on click may lag.
         let collapsed = watcher.panel_open && (field_changed || decision != Decision::Nothing);
@@ -622,12 +730,17 @@ fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
         }
     }
 
+    if stale_marks {
+        clear_marks(app);
+    }
     if let Some(payload) = payload {
         publish(app, payload);
     }
     for action in actions {
         run_action(app, action);
     }
+    // Follow scrolling, resizing and moving of the field.
+    marks::refresh_if_due(app);
 }
 
 /// Status line for a readable field: typing, why it is skipped, or checked.
@@ -701,7 +814,7 @@ fn run_action(app: &AppHandle, action: UiAction) {
 fn build_window(app: &AppHandle) -> Result<tauri::WebviewWindow, AppError> {
     let window =
         WebviewWindowBuilder::new(app, GRAMMAR_LABEL, WebviewUrl::App("grammar.html".into()))
-            .title("Lexora Writing Check")
+            .title(crate::i18n::text(app, "Lexora Writing Check"))
             .inner_size(BADGE_SIZE, BADGE_SIZE)
             .decorations(false)
             .transparent(true)
@@ -915,6 +1028,7 @@ pub fn snooze(app: &AppHandle, field_id: u64) {
         watcher.placed_for = None;
         watcher.field.as_ref().map(|field| field.pid)
     };
+    clear_marks(app);
     hide_window(app);
     publish(app, FieldPayload::Hidden);
     if let Some(pid) = pid {
@@ -1125,5 +1239,164 @@ fn paste_fallback(
         Err(AppError::Permission(
             "Enable Accessibility for Lexora to apply fixes".to_string(),
         ))
+    }
+}
+
+// ── Underlines and hover card ────────────────────────────
+// Everything is in points with the origin at the top-left of the primary
+// display (the space Accessibility uses), so the scale is always 1.
+
+/// Accessibility needs no per-thread setup.
+pub(super) fn prepare_thread() {}
+
+/// Where each flagged word of the tracked field is drawn. `text` is the
+/// checked (trimmed) text; words that cannot be located reliably are left out.
+pub(super) fn mark_geometry(
+    field_id: u64,
+    text: &str,
+    marks: &[MarkInput],
+) -> Option<MarkGeometry> {
+    let (element, _, fallback) = current_field(field_id).ok()?;
+    let current = element.field_value()?;
+    // The field must still hold the text the offsets refer to.
+    let lead = logic::body_offset_utf16(&current, text)?;
+    let field_bounds = element.bounds().or(fallback)?;
+    let mut regions = Vec::new();
+    for mark in marks {
+        let Some(fragment) = logic::utf16_slice(text, mark.start, mark.end) else {
+            continue;
+        };
+        let rects = element.fragment_rects(lead + mark.start, &fragment);
+        if !rects.is_empty() {
+            regions.push((mark.id, rects));
+        }
+    }
+    Some(MarkGeometry {
+        field_bounds,
+        regions,
+    })
+}
+
+/// Pointer position in points, top-left origin (the space of the AX rects).
+pub(super) fn cursor_position() -> Option<(f64, f64)> {
+    let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState).ok()?;
+    let location = CGEvent::new(source).ok()?.location();
+    Some((location.x, location.y))
+}
+
+/// Visible area (points) of the screen that holds the point; the scale is 1
+/// because everything here is already in points.
+pub(super) fn screen_at(app: &AppHandle, x: f64, y: f64) -> Option<(Rect, f64)> {
+    let monitors = app.available_monitors().ok()?;
+    let areas: Vec<LogicalBounds> = monitors
+        .iter()
+        .map(|monitor| {
+            let area = monitor.work_area();
+            let scale = monitor.scale_factor();
+            LogicalBounds {
+                x: f64::from(area.position.x) / scale,
+                y: f64::from(area.position.y) / scale,
+                width: f64::from(area.size.width) / scale,
+                height: f64::from(area.size.height) / scale,
+            }
+        })
+        .collect();
+    let screen = pick_bounds_for_point(x, y, &areas)?;
+    Some((
+        Rect {
+            x: screen.x,
+            y: screen.y,
+            width: screen.width,
+            height: screen.height,
+        },
+        1.0,
+    ))
+}
+
+fn build_overlay(app: &AppHandle, overlay: Overlay) -> Result<tauri::WebviewWindow, AppError> {
+    let window =
+        WebviewWindowBuilder::new(app, overlay.label(), WebviewUrl::App(overlay.url().into()))
+            .title(crate::i18n::text(app, "Lexora Writing Check"))
+            .inner_size(BADGE_SIZE, BADGE_SIZE)
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .background_color(Color(0, 0, 0, 0))
+            .resizable(false)
+            .always_on_top(true)
+            // The first click on the card's buttons must already act.
+            .accept_first_mouse(true)
+            .visible_on_all_workspaces(true)
+            .skip_taskbar(true)
+            .focused(false)
+            .visible(false)
+            .build()?;
+    Ok(window)
+}
+
+/// Show an overlay window at `frame` (points) without taking the focus.
+pub(super) fn show_overlay(app: &AppHandle, overlay: Overlay, frame: Rect) {
+    let handle = app.clone();
+    let dispatched = app.run_on_main_thread(move || {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        if let Err(e) = place_overlay(&handle, mtm, overlay, frame) {
+            log::debug!("Writing-check overlay placement skipped: {e}");
+        }
+    });
+    if let Err(e) = dispatched {
+        log::debug!("Failed to dispatch overlay placement: {e}");
+    }
+}
+
+fn place_overlay(
+    app: &AppHandle,
+    mtm: MainThreadMarker,
+    overlay: Overlay,
+    frame: Rect,
+) -> Result<(), AppError> {
+    let window = match app.get_webview_window(overlay.label()) {
+        Some(window) => window,
+        None => build_overlay(app, overlay)?,
+    };
+    let ns_window_ptr = window.ns_window()?;
+    let Some(ns_window) = (unsafe { Retained::retain(ns_window_ptr.cast::<NSWindow>()) }) else {
+        return Err(AppError::Io("Overlay NSWindow is unavailable".to_string()));
+    };
+    configure_ns_window(&ns_window, 0.0);
+    // Underlines never catch clicks: the text below stays editable.
+    ns_window.setIgnoresMouseEvents(overlay == Overlay::Marks);
+    let screens = NSScreen::screens(mtm);
+    let Some(primary) = screens.iter().next() else {
+        return Err(AppError::Io(
+            "No screen available for the overlay".to_string(),
+        ));
+    };
+    let primary_frame = primary.frame();
+    let primary_top = primary_frame.origin.y + primary_frame.size.height;
+    let rect = NSRect::new(
+        NSPoint::new(frame.x, primary_top - (frame.y + frame.height)),
+        NSSize::new(frame.width, frame.height),
+    );
+    ns_window.setFrame_display(rect, true);
+    // Never activate Lexora: the user keeps typing in their app.
+    ns_window.orderFrontRegardless();
+    Ok(())
+}
+
+/// Hidden on the main thread like `show_overlay`, so a hide always lands
+/// after the show it follows.
+pub(super) fn hide_overlay(app: &AppHandle, overlay: Overlay) {
+    let handle = app.clone();
+    let dispatched = app.run_on_main_thread(move || {
+        if let Some(window) = handle.get_webview_window(overlay.label()) {
+            if let Err(e) = window.hide() {
+                log::debug!("Failed to hide writing-check overlay: {e}");
+            }
+        }
+    });
+    if let Err(e) = dispatched {
+        log::debug!("Failed to dispatch overlay hide: {e}");
     }
 }

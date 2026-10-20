@@ -9,7 +9,6 @@ use rusqlite::{params, Connection};
 fn parse_sticker_sources(raw: String) -> Vec<String> {
     serde_json::from_str::<Vec<String>>(&raw)
         .ok()
-        .filter(|sources| !sources.is_empty())
         .unwrap_or_else(|| vec!["all".to_string()])
 }
 
@@ -31,7 +30,8 @@ impl SettingsRepo {
                     fallback_ai_provider, fallback_ai_model, fallback_enabled,
                     writing_privacy_mode, writing_auto_check, sticker_sources,
                     image_model, fallback_image_model,
-                    setup_profile, tts_engine, model_package
+                    setup_profile, tts_engine, model_package,
+                    hotkey_voice_translate, advanced_models
              FROM user_settings WHERE id = 1",
             [],
             |row| {
@@ -86,11 +86,22 @@ impl SettingsRepo {
                         .ok()
                         .flatten()
                         .filter(|s| !s.trim().is_empty()),
+                    hotkey_voice_translate: row.get(25)?,
+                    advanced_models: row.get::<_, i64>(26)? != 0,
                 })
             },
         )?;
 
         Ok(settings)
+    }
+
+    /// Advanced model mode switch (per-role model editors in Settings).
+    pub fn set_advanced_models(conn: &Connection, enabled: bool) -> Result<(), AppError> {
+        conn.execute(
+            "UPDATE user_settings SET advanced_models = ?1, updated_at = unixepoch() WHERE id = 1",
+            params![if enabled { 1 } else { 0 }],
+        )?;
+        Ok(())
     }
 
     /// Update user settings.
@@ -122,6 +133,8 @@ impl SettingsRepo {
                 setup_profile = ?23,
                 tts_engine = ?24,
                 model_package = ?25,
+                hotkey_voice_translate = ?26,
+                advanced_models = ?27,
                 updated_at = unixepoch()
              WHERE id = 1",
             params![
@@ -150,6 +163,8 @@ impl SettingsRepo {
                 settings.setup_profile,
                 settings.tts_engine,
                 settings.model_package,
+                settings.hotkey_voice_translate,
+                if settings.advanced_models { 1 } else { 0 },
             ],
         )?;
 
@@ -191,6 +206,7 @@ mod tests {
         assert_eq!(settings.cloudflare_account_id, None);
         assert_eq!(settings.hotkey_translate, "CmdOrCtrl+Shift+L");
         assert_eq!(settings.hotkey_stickers, "CmdOrCtrl+Shift+S");
+        assert_eq!(settings.hotkey_voice_translate, "CmdOrCtrl+Shift+Space");
         assert_eq!(settings.fallback_ai_provider.as_deref(), Some("gemini"));
         assert_eq!(
             settings.fallback_ai_model.as_deref(),
@@ -232,6 +248,7 @@ mod tests {
         settings.cloudflare_account_id = Some("cf-acc-123".to_string());
         settings.hotkey_translate = "CmdOrCtrl+Shift+T".to_string();
         settings.hotkey_stickers = "CmdOrCtrl+Shift+K".to_string();
+        settings.hotkey_voice_translate = "CmdOrCtrl+Alt+V".to_string();
         settings.fallback_ai_provider = Some("groq".to_string());
         settings.fallback_ai_model = Some("openai/gpt-oss-120b".to_string());
         settings.fallback_enabled = false;
@@ -266,6 +283,7 @@ mod tests {
         );
         assert_eq!(returned.hotkey_translate, "CmdOrCtrl+Shift+T");
         assert_eq!(returned.hotkey_stickers, "CmdOrCtrl+Shift+K");
+        assert_eq!(returned.hotkey_voice_translate, "CmdOrCtrl+Alt+V");
         assert_eq!(returned.fallback_ai_provider.as_deref(), Some("groq"));
         assert_eq!(
             returned.fallback_ai_model.as_deref(),
@@ -292,6 +310,7 @@ mod tests {
         assert!(reread.offline_mode);
         assert_eq!(reread.cloudflare_account_id.as_deref(), Some("cf-acc-123"));
         assert_eq!(reread.hotkey_translate, "CmdOrCtrl+Shift+T");
+        assert_eq!(reread.hotkey_voice_translate, "CmdOrCtrl+Alt+V");
         assert_eq!(reread.fallback_ai_provider.as_deref(), Some("groq"));
         assert!(!reread.fallback_enabled);
         assert!(reread.writing_privacy_mode);
@@ -354,5 +373,30 @@ mod tests {
         settings.fallback_enabled = true;
         let on = SettingsRepo::update(&conn, &settings).expect("re-enable");
         assert!(on.fallback_enabled);
+    }
+
+    #[test]
+    fn advanced_models_switch_round_trips() -> Result<(), AppError> {
+        let pool = setup_db();
+        let conn = pool.get()?;
+        assert!(!SettingsRepo::get(&conn)?.advanced_models);
+
+        SettingsRepo::set_advanced_models(&conn, true)?;
+        assert!(SettingsRepo::get(&conn)?.advanced_models);
+
+        SettingsRepo::set_advanced_models(&conn, false)?;
+        assert!(!SettingsRepo::get(&conn)?.advanced_models);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod sticker_source_tests {
+    use super::*;
+    #[test]
+    fn explicit_empty_sources_survive_settings_round_trip() {
+        assert!(parse_sticker_sources(serialize_sticker_sources(&[])).is_empty());
+        assert_eq!(parse_sticker_sources("invalid".into()), vec!["all"]);
+        assert_eq!(parse_sticker_sources("[\"cat:2\"]".into()), vec!["cat:2"]);
     }
 }

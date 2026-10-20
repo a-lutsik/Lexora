@@ -1,3 +1,6 @@
+import { toneLabel } from '../../../lib/interfaceText';
+import { getLocale } from '../../../i18n';
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Document & PDF Translation studio
 // Dual-pane formatted translation (DeepL Pro / Smartcat).
@@ -41,13 +44,9 @@ type DocumentTranslateTabProps = {
 };
 
 type ToneOption = DocumentSessionTone;
+const TONE_OPTIONS: ToneOption[] = ['default', 'formal', 'casual', 'academic'];
 
-const TONE_LABELS: Record<ToneOption, string> = {
-  default: 'Standard',
-  formal: 'Formal',
-  casual: 'Casual',
-  academic: 'Academic',
-};
+
 
 export function DocumentTranslateTab({
   sourceLang,
@@ -55,6 +54,7 @@ export function DocumentTranslateTab({
   lexicalDomain,
   onDetectedDomain,
 }: DocumentTranslateTabProps) {
+  const { t: tUi } = useI18n();
   const [doc, setDoc] = useState<ParsedDocument | null>(
     () => loadDocumentSession()?.doc ?? null
   );
@@ -99,7 +99,7 @@ export function DocumentTranslateTab({
         setParseError(
           formatIpcError(
             err,
-            'Could not read this file. Try Markdown, TXT, SRT/VTT, DOCX, or PDF.',
+            tUi("Could not read this file. Try Markdown, TXT, SRT/VTT, DOCX, or PDF."),
           ),
         );
       if (import.meta.env.DEV) {
@@ -178,7 +178,7 @@ export function DocumentTranslateTab({
         setParseError(
           formatIpcError(
             err,
-            `Could not translate segment ${i + 1}. Check the AI provider in Settings, then retry.`,
+            tUi("Could not translate segment {value1}. Check the AI provider in Settings, then retry.", { value1: i + 1 }),
           ),
         );
         break;
@@ -239,13 +239,13 @@ export function DocumentTranslateTab({
 
   return (
     <div className="document-studio animate-fade-in">
-      <input
+      <input dir="auto"
         ref={fileInputRef}
         type="file"
         accept=".txt,.md,.markdown,.srt,.vtt,.docx,.pdf"
         className="sr-only"
         onChange={handleFileChange}
-        aria-label="Upload document file for translation"
+        aria-label={tUi("Upload document file for translation")}
       />
 
       {!doc && (
@@ -265,16 +265,15 @@ export function DocumentTranslateTab({
               fileInputRef.current?.click();
             }
           }}
-          aria-label="Upload document file"
+          aria-label={tUi("Upload document file")}
         >
           <div className="image-dropzone-icon" aria-hidden="true">
             <IconFile size={40} />
           </div>
-          <h3 className="image-dropzone-title">Document &amp; PDF Translation</h3>
-          <p className="image-dropzone-desc text-secondary text-sm">
-            Dual-pane editor with structure, glossary, and tone. Drop{' '}
-            <strong>.pdf</strong>, <strong>.docx</strong>, <strong>.md</strong>,{' '}
-            <strong>.txt</strong>, <strong>.srt</strong>, or <strong>.vtt</strong>
+          <h3 className="image-dropzone-title">{tUi("Document & PDF Translation")}</h3>
+          <p className="image-dropzone-desc text-secondary text-sm">{tUi("Dual-pane editor with structure, glossary, and tone. Drop")}{' '}
+            <strong>{tUi(".pdf")}</strong>, <strong>{tUi(".docx")}</strong>, <strong>{tUi(".md")}</strong>,{' '}
+            <strong>{tUi(".txt")}</strong>, <strong>{tUi(".srt")}</strong>{tUi(", or ")}<strong>{tUi(".vtt")}</strong>
           </p>
         </div>
       )}
@@ -293,18 +292,14 @@ export function DocumentTranslateTab({
           aria-live="polite"
         >
           <span className="doc-studio-alert-icon" aria-hidden="true">💾</span>
-          <p className="doc-studio-alert-msg text-sm">
-            Previous document translation restored. Close the file to discard it.
-          </p>
+          <p className="doc-studio-alert-msg text-sm">{tUi("Previous document translation restored. Close the file to discard it.")}</p>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={() => setRestoredNotice(false)}
-            aria-label="Dismiss restored session notice"
-          >
-            Dismiss
-          </Button>
+            aria-label={tUi("Dismiss restored session notice")}
+          >{tUi("Dismiss")}</Button>
         </div>
       )}
 
@@ -324,8 +319,7 @@ export function DocumentTranslateTab({
                     <span className="doc-diff-badge">{doc.fileType.toUpperCase()}</span>
                   </div>
                   <span className="doc-studio-stats text-xs text-secondary">
-                    {doc.chunks.length} segments · {doc.totalCharacters.toLocaleString()} characters
-                  </span>
+                    {doc.chunks.length}{tUi(" segments · ")}{doc.totalCharacters.toLocaleString(getLocale())}{tUi(" characters")}</span>
                 </div>
               </div>
 
@@ -337,7 +331,7 @@ export function DocumentTranslateTab({
                   onClick={() => setGlossaryOpen((open) => !open)}
                   aria-expanded={glossaryOpen}
                 >
-                  <span>Glossary</span>
+                  <span>{tUi("Glossary")}</span>
                   {glossary.length > 0 && (
                     <span className="doc-glossary-badge">{glossary.length}</span>
                   )}
@@ -350,10 +344,10 @@ export function DocumentTranslateTab({
                   onClick={() => void startTranslation()}
                   isLoading={isTranslating}
                   disabled={isTranslating}
-                  aria-label={translatedCount > 0 ? 'Re-translate document' : 'Start Translation'}
+                  aria-label={translatedCount > 0 ? tUi("Re-translate document") : tUi("Start Translation")}
                 >
                   <IconSparkles size={14} />
-                  <span>{translatedCount > 0 ? 'Re-translate' : 'Start Translation'}</span>
+                  <span>{translatedCount > 0 ? tUi("Re-translate") : tUi("Start Translation")}</span>
                 </Button>
 
                 <Button
@@ -361,18 +355,16 @@ export function DocumentTranslateTab({
                   variant="ghost"
                   size="sm"
                   onClick={closeFile}
-                  aria-label="Close file"
-                >
-                  Close file
-                </Button>
+                  aria-label={tUi("Close file")}
+                >{tUi("Close file")}</Button>
               </div>
             </div>
 
             <div className="doc-studio-sub-bar">
               <div className="doc-studio-tone-section">
-                <span className="doc-studio-sub-label text-xs text-muted">Tone:</span>
-                <div className="tone-segmented-control" role="group" aria-label="Translation tone">
-                  {(Object.keys(TONE_LABELS) as ToneOption[]).map((t) => (
+                <span className="doc-studio-sub-label text-xs text-muted">{tUi("Tone:")}</span>
+                <div className="tone-segmented-control" role="group" aria-label={tUi("Translation tone")}>
+                  {TONE_OPTIONS.map((t) => (
                     <button
                       key={t}
                       type="button"
@@ -380,7 +372,7 @@ export function DocumentTranslateTab({
                       onClick={() => setTone(t)}
                       disabled={isTranslating}
                     >
-                      {TONE_LABELS[t]}
+                      {toneLabel(t)}
                     </button>
                   ))}
                 </div>
@@ -393,23 +385,23 @@ export function DocumentTranslateTab({
                   size="sm"
                   onClick={() => void handleCopyAll()}
                   disabled={!canExport}
-                  aria-label="Copy all translated text"
+                  aria-label={tUi("Copy all translated text")}
                 >
                   {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-                  <span>{copied ? 'Copied' : 'Copy all'}</span>
+                  <span>{copied ? tUi("Copied") : tUi("Copy all")}</span>
                 </Button>
 
-                <div className="doc-studio-download-group" role="group" aria-label="Download translated document">
+                <div className="doc-studio-download-group" role="group" aria-label={tUi("Download translated document")}>
                   <Button
                     type="button"
                     variant="primary"
                     size="sm"
                     onClick={() => handleDownload('original')}
                     disabled={!canExport}
-                    aria-label="Download translated document"
+                    aria-label={tUi("Download translated document")}
                   >
                     <IconDownload size={14} />
-                    <span>Download translated document</span>
+                    <span>{tUi("Download translated document")}</span>
                   </Button>
                   <Button
                     type="button"
@@ -417,20 +409,16 @@ export function DocumentTranslateTab({
                     size="sm"
                     onClick={() => handleDownload('md')}
                     disabled={!canExport}
-                    aria-label="Download as Markdown"
-                  >
-                    .md
-                  </Button>
+                    aria-label={tUi("Download as Markdown")}
+                  >{tUi(".md")}</Button>
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
                     onClick={() => handleDownload('txt')}
                     disabled={!canExport}
-                    aria-label="Download as Text"
-                  >
-                    .txt
-                  </Button>
+                    aria-label={tUi("Download as Text")}
+                  >{tUi(".txt")}</Button>
                 </div>
               </div>
             </div>
@@ -440,13 +428,13 @@ export function DocumentTranslateTab({
                 className="doc-studio-progress-container"
                 role="status"
                 aria-live="polite"
-                aria-label={`Translation progress ${percent} percent`}
+                aria-label={tUi("Translation progress {percent} percent", { percent: percent })}
               >
                 <div className="doc-studio-progress-label text-xs text-secondary">
                   <span>
                     {isTranslating
-                      ? `Chunking & translating segment ${progress.current} of ${progress.total}…`
-                      : `Translated ${translatedCount} of ${doc.chunks.length} segments`}
+                      ? tUi("Chunking & translating segment {value1} of {value2}…", { value1: progress.current, value2: progress.total })
+                      : tUi("Translated {translatedCount} of {value2} segments", { translatedCount: translatedCount, value2: doc.chunks.length })}
                   </span>
                   <span className="doc-studio-progress-percent">{percent}%</span>
                 </div>

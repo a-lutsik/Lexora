@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // ============================================================
 // LEXORA — Live microphone translation (not saved to history)
 // Speech chunks → transcript (speech-to-text role); only finished
@@ -159,7 +160,7 @@ export function useLiveSpeechTranslate({ sourceLang, targetLang }: UseLiveSpeech
   const start = useCallback(async () => {
     const getUserMedia = getUserMediaFn();
     if (!getUserMedia) {
-      setError('Live microphone is not supported here. Use Record or File Upload.');
+      setError(t('Live microphone is not supported here. Use Record or File Upload.'));
       return;
     }
     generationRef.current += 1;

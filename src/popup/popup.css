@@ -864,3 +864,130 @@ html body {
     transform: none;
   }
 }
+
+/* ── Collocations entry point ───────────────────────────── */
+
+.popup-collocations-btn {
+  align-self: flex-start;
+  min-height: var(--touch-target-min);
+  margin-top: var(--space-2);
+  padding: 0 var(--space-4);
+  background: var(--color-accent-dim);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  color: var(--color-accent-hover);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.popup-collocations-btn:hover,
+.popup-collocations-btn:focus-visible {
+  background: var(--color-accent);
+  color: var(--color-text-primary);
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ── Voice translate (voice hotkey) ─────────────────────── */
+
+.voice-translator-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.voice-translator-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.voice-translator-mic {
+  width: var(--space-16);
+  height: var(--space-16);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  border: var(--glass-border);
+  background: var(--color-accent-dim);
+  color: var(--color-accent-text);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.voice-translator-mic:hover:not(:disabled),
+.voice-translator-mic:focus-visible {
+  background: var(--color-accent);
+  color: var(--color-text-primary);
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.voice-translator-mic.recording {
+  background: var(--color-danger);
+  color: var(--color-text-primary);
+  animation: voice-mic-pulse 1.4s ease-in-out infinite;
+}
+
+.voice-translator-mic:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@keyframes voice-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-accent-dim); }
+  50%      { box-shadow: 0 0 0 var(--space-3) var(--color-accent-dim); }
+}
+
+.voice-translator-status {
+  margin: 0;
+  min-height: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.voice-translator-result {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.voice-translator-source {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.voice-translator-translation {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  user-select: text;
+}
+
+.voice-translator-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: var(--glass-border);
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-translator-mic.recording {
+    animation: none;
+  }
+}

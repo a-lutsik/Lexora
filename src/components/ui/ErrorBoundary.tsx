@@ -1,3 +1,4 @@
+import { ErrorFallback } from "./ErrorFallback";
 // ============================================================
 // LEXORA — ErrorBoundary
 // Ловит ошибки рендера, чтобы окно не превращалось в пустой белый экран.
@@ -9,7 +10,6 @@
 // ============================================================
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Button } from './Button';
 import './ErrorBoundary.css';
 
 type ErrorBoundaryProps = {
@@ -56,21 +56,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return this.props.children;
     }
 
-    return (
-      <div className="error-boundary" role="alert">
-        <div className="error-boundary-card">
-          <h2 className="error-boundary-title">Something went wrong</h2>
-          <p className="error-boundary-text">
-            This screen hit an unexpected error. Your words and progress are safe.
-          </p>
-          <div className="error-boundary-actions">
-            <Button variant="primary" onClick={this.handleRetry}>
-              Try again
-            </Button>
-            <Button onClick={this.handleReload}>Reload window</Button>
-          </div>
-        </div>
-      </div>
-    );
+    return <ErrorFallback onRetry={this.handleRetry} onReload={this.handleReload} />;
   }
 }

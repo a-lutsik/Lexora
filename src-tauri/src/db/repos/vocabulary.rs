@@ -13,6 +13,35 @@ use rusqlite::{params, Connection, OptionalExtension};
 pub struct VocabularyRepo;
 
 impl VocabularyRepo {
+    /// Soft-delete a selection atomically, retaining lexemes and review history.
+    pub fn remove_batch(conn: &mut Connection, ids: &[i64]) -> Result<(), AppError> {
+        if ids.is_empty() || ids.iter().any(|id| *id <= 0) {
+            return Err(AppError::Validation(
+                "Select at least one vocabulary entry with a positive ID".to_string(),
+            ));
+        }
+
+        let tx = conn.transaction()?;
+        let mut seen = std::collections::HashSet::new();
+        for &id in ids {
+            if !seen.insert(id) {
+                continue;
+            }
+            let affected = tx.execute(
+                "UPDATE user_vocabulary SET deleted_at = unixepoch()
+                 WHERE id = ?1 AND deleted_at IS NULL",
+                params![id],
+            )?;
+            if affected == 0 {
+                return Err(AppError::NotFound(format!(
+                    "Vocabulary entry {id} not found"
+                )));
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// List vocabulary entries with full filtering, search, pagination, and joined data.
     pub fn list(
         conn: &Connection,
@@ -32,7 +61,7 @@ impl VocabularyRepo {
                 l.id, l.language_id, l.text, l.normalized_text,
                 l.part_of_speech, l.phonetic, l.frequency_rank, l.created_at,
                 rs.id, rs.status, rs.ease, rs.interval, rs.due_at,
-                rs.lapses, rs.repetitions
+                rs.lapses, rs.repetitions, uv.category_id
              FROM user_vocabulary uv
              JOIN lexeme l ON l.id = uv.lexeme_id
              LEFT JOIN review_state rs ON rs.user_vocabulary_id = uv.id
@@ -55,11 +84,8 @@ impl VocabularyRepo {
             query.push_str(" AND (1 = 1 OR ?3 = '')");
         }
 
-        if let Some(col_id) = filters.collection_id {
-            query.push_str(&format!(
-                " AND EXISTS (SELECT 1 FROM collection_item ci WHERE ci.collection_id = {col_id} AND ci.lexeme_id = l.id)"
-            ));
-        }
+        query.push_str(" AND (?6 IS NULL OR uv.category_id = ?6)");
+        query.push_str(" AND (?7 IS NULL OR EXISTS (SELECT 1 FROM collection_item ci WHERE ci.collection_id = ?7 AND ci.lexeme_id = l.id))");
 
         // Sorting
         match filters.sort_by.as_deref() {
@@ -76,7 +102,15 @@ impl VocabularyRepo {
 
         let entries = stmt
             .query_map(
-                params![language_id, search, status_val, per_page, offset],
+                params![
+                    language_id,
+                    search,
+                    status_val,
+                    per_page,
+                    offset,
+                    filters.category_id,
+                    filters.collection_id
+                ],
                 |row| {
                     let review_state = match row.get::<_, Option<i64>>(15)? {
                         Some(rs_id) => Some(crate::commands::vocabulary::ReviewStateDto {
@@ -96,6 +130,7 @@ impl VocabularyRepo {
                         id: row.get(0)?,
                         user_id: row.get(1)?,
                         lexeme_id: row.get(2)?,
+                        category_id: row.get(22)?,
                         added_at: row.get(3)?,
                         is_favorite: row.get::<_, i64>(4)? != 0,
                         notes: row.get(5)?,
@@ -115,6 +150,7 @@ impl VocabularyRepo {
                         synonyms: vec![],
                         review_state,
                         image_path: None,
+                        collocation_drill: None,
                     })
                 },
             )?
@@ -128,6 +164,8 @@ impl VocabularyRepo {
             entry.synonyms =
                 LexemeRepo::get_synonyms(conn, entry.lexeme.id, entry.lexeme.language_id)?;
             entry.image_path = LexemeRepo::get_image_path(conn, entry.lexeme.id)?;
+            entry.collocation_drill =
+                crate::db::repos::collocation::CollocationRepo::drill_for_phrase(conn, entry.lexeme.id)?;
         }
 
         Ok(full_entries)
@@ -135,6 +173,18 @@ impl VocabularyRepo {
 
     /// Add a word to user vocabulary (transactional).
     pub fn add(conn: &Connection, input: &AddVocabularyInput) -> Result<i64, AppError> {
+        if conn.is_autocommit() {
+            let tx = conn.unchecked_transaction()?;
+            let id = Self::add_inner(&tx, input)?;
+            tx.commit()?;
+            Ok(id)
+        } else {
+            // Batch callers already own the transaction and propagate failures.
+            Self::add_inner(conn, input)
+        }
+    }
+
+    fn add_inner(conn: &Connection, input: &AddVocabularyInput) -> Result<i64, AppError> {
         let language_id: i64 = conn
             .query_row(
                 "SELECT id FROM language WHERE code = ?1",
@@ -152,14 +202,39 @@ impl VocabularyRepo {
         };
         LexemeRepo::apply_seed_frequency(conn, lexeme_id)?;
 
+        let lexeme_language_id: i64 = conn.query_row(
+            "SELECT language_id FROM lexeme WHERE id = ?1",
+            [lexeme_id],
+            |row| row.get(0),
+        )?;
+        if lexeme_language_id != language_id {
+            return Err(AppError::Validation(
+                "Word must belong to the source language".into(),
+            ));
+        }
+        if let Some(category_id) = input.category_id {
+            crate::db::repos::category::CategoryRepo::validate_for_language(
+                conn,
+                category_id,
+                language_id,
+            )?;
+        }
+
         // Insert user vocabulary entry
         conn.execute(
-            "INSERT INTO user_vocabulary (user_id, lexeme_id, source, notes)
-             VALUES (1, ?1, ?2, ?3)
+            "INSERT INTO user_vocabulary (user_id, lexeme_id, source, notes, category_id)
+             VALUES (1, ?1, ?2, ?3, ?4)
              ON CONFLICT(user_id, lexeme_id) DO UPDATE SET
                 deleted_at = NULL,
-                notes = COALESCE(?3, notes)",
-            params![lexeme_id, input.source, input.notes],
+                notes = COALESCE(?3, notes),
+                category_id = COALESCE(?4, user_vocabulary.category_id),
+                source = CASE
+                    WHEN ?4 IS NOT NULL AND user_vocabulary.source = 'collection'
+                        AND COALESCE(?2, 'manual') != 'collection'
+                    THEN COALESCE(?2, 'manual')
+                    ELSE user_vocabulary.source
+                END",
+            params![lexeme_id, input.source, input.notes, input.category_id],
         )?;
 
         let uv_id: i64 = conn.query_row(
@@ -197,6 +272,7 @@ mod tests {
             source_language: "en".to_string(),
             notes: notes.map(str::to_string),
             source: source.map(str::to_string),
+            category_id: None,
         }
     }
 
@@ -210,6 +286,7 @@ mod tests {
             sort_dir: None,
             page: None,
             per_page: None,
+            category_id: None,
         }
     }
 
@@ -230,6 +307,7 @@ mod tests {
             sort_dir: None,
             page,
             per_page,
+            category_id: None,
         }
     }
 
@@ -382,6 +460,74 @@ mod tests {
     }
 
     #[test]
+    fn remove_batch_deduplicates_and_keeps_word_data_and_review_history() {
+        let pool = setup_db();
+        let mut conn = pool.get().expect("conn");
+        let first = VocabularyRepo::add(&conn, &input("Zzt First", None, None)).expect("add");
+        let second = VocabularyRepo::add(&conn, &input("Zzt Second", None, None)).expect("add");
+        let retained = VocabularyRepo::add(&conn, &input("Zzt Retained", None, None)).expect("add");
+
+        VocabularyRepo::remove_batch(&mut conn, &[first, second, first]).expect("remove selection");
+
+        let entries = VocabularyRepo::list(&conn, &filters(None, None)).expect("list");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, retained);
+        assert_eq!(active_count(&conn), 1);
+        let (deleted, lexemes, reviews): (i64, i64, i64) = conn
+            .query_row(
+                "SELECT
+                (SELECT COUNT(*) FROM user_vocabulary WHERE deleted_at IS NOT NULL),
+                (SELECT COUNT(*) FROM lexeme WHERE deleted_at IS NULL
+                    AND id IN (SELECT lexeme_id FROM user_vocabulary)),
+                (SELECT COUNT(*) FROM review_state)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("retained data");
+        assert_eq!(deleted, 2);
+        assert_eq!(lexemes, 3);
+        assert_eq!(reviews, 3);
+    }
+
+    #[test]
+    fn remove_batch_rolls_back_when_an_entry_is_missing_or_already_deleted() {
+        let pool = setup_db();
+        let mut conn = pool.get().expect("conn");
+        let active = VocabularyRepo::add(&conn, &input("Zzt Active", None, None)).expect("add");
+        let removed = VocabularyRepo::add(&conn, &input("Zzt Removed", None, None)).expect("add");
+        VocabularyRepo::remove_batch(&mut conn, &[removed]).expect("initial remove");
+
+        for unavailable in [999_999, removed] {
+            assert!(matches!(
+                VocabularyRepo::remove_batch(&mut conn, &[active, unavailable]),
+                Err(AppError::NotFound(_))
+            ));
+            let entries = VocabularyRepo::list(&conn, &filters(None, None)).expect("list");
+            assert_eq!(
+                entries.len(),
+                1,
+                "failed batch must retain the active entry"
+            );
+            assert_eq!(entries[0].id, active);
+        }
+    }
+
+    #[test]
+    fn remove_batch_rejects_invalid_selection_without_changing_entries() {
+        let pool = setup_db();
+        let mut conn = pool.get().expect("conn");
+        let active = VocabularyRepo::add(&conn, &input("Zzt Active", None, None)).expect("add");
+
+        for ids in [vec![], vec![active, 0], vec![active, -1]] {
+            assert!(matches!(
+                VocabularyRepo::remove_batch(&mut conn, &ids),
+                Err(AppError::Validation(_))
+            ));
+            assert_eq!(active_count(&conn), 1);
+        }
+    }
+
+    #[test]
     fn favorite_and_notes_updates_are_visible_in_list() {
         let pool = setup_db();
         let conn = pool.get().expect("conn");
@@ -450,6 +596,7 @@ mod tests {
                 source_language: "en".to_string(),
                 notes: None,
                 source: Some("popup".to_string()),
+                category_id: None,
             },
         )
         .expect("add");

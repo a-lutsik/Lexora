@@ -1,3 +1,6 @@
+import { writingLabel } from '../../lib/interfaceText';
+import { useI18n } from "../../hooks/useI18n";
+import { t as tUi } from "../../i18n";
 // ============================================================
 // LEXORA — Writing Assistant Page
 // Paste text, check issues, rewrite, review a side-by-side diff.
@@ -54,10 +57,7 @@ function isRewriteMode(value: string): value is RewriteMode {
   return REWRITE_OPTIONS.some((opt) => opt.value === value);
 }
 
-function formatCategory(category: string): string {
-  const spaced = category.replace(/_/g, ' ');
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
+
 
 function scoreTone(score: number): 'success' | 'warn' | 'danger' {
   if (score >= 85) return 'success';
@@ -68,7 +68,7 @@ function scoreTone(score: number): 'success' | 'warn' | 'danger' {
 function mutationErrorMessage(error: unknown): string {
   return formatIpcError(
     error,
-    'Could not check writing. Open Settings, choose a provider, and add an API key.',
+    tUi("Could not check writing. Open Settings, choose a provider, and add an API key."),
   );
 }
 
@@ -77,6 +77,7 @@ function textMatchesChecked(editorText: string, originalText: string): boolean {
 }
 
 export default function WritingPage() {
+  const { t: tUi } = useI18n();
   const [text, setText] = useState('');
   const [rewriteMode, setRewriteMode] = useState<RewriteMode>('clearer');
   const [statusOverlay, setStatusOverlay] = useState<Record<number, WritingIssueStatus>>({});
@@ -85,9 +86,11 @@ export default function WritingPage() {
   const [openIssueId, setOpenIssueId] = useState<number | null>(null);
   const [issuesListOpen, setIssuesListOpen] = useState(false);
   const [autoCheckScheduled, setAutoCheckScheduled] = useState(false);
+  const [limitNoticeOpen, setLimitNoticeOpen] = useState(false);
 
   const autoCheckTimerRef = useRef<number | null>(null);
   const checkGenerationRef = useRef(0);
+  const autoCheckBlockedByLimitRef = useRef(false);
 
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
@@ -116,6 +119,7 @@ export default function WritingPage() {
   const charCount = countWritingChars(text);
   const overLimit = charCount > MAX_WRITING_CHARS;
   const canSubmit = text.trim().length > 0 && !overLimit;
+  const autoCheckBlockedByLimit = autoCheckEnabled && overLimit;
 
   const { data: errorPatterns } = useWritingErrorPatterns(language);
 
@@ -169,6 +173,15 @@ export default function WritingPage() {
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);
+
+  useEffect(() => {
+    if (autoCheckBlockedByLimit && !autoCheckBlockedByLimitRef.current) {
+      setLimitNoticeOpen(true);
+    } else if (!autoCheckBlockedByLimit) {
+      setLimitNoticeOpen(false);
+    }
+    autoCheckBlockedByLimitRef.current = autoCheckBlockedByLimit;
+  }, [autoCheckBlockedByLimit]);
 
   const lastCheckedText = latestCheck?.originalText ?? null;
 
@@ -230,9 +243,9 @@ export default function WritingPage() {
   const pendingCount = issues.filter((issue) => issue.status === 'pending').length;
 
   const autoStatusLabel = checkPending
-    ? 'Checking…'
+    ? tUi("Checking…")
     : autoCheckScheduled
-      ? 'Waiting to check'
+      ? tUi("Waiting to check")
       : null;
 
   const closeIssue = useCallback(() => setOpenIssueId(null), []);
@@ -320,48 +333,59 @@ export default function WritingPage() {
     <div className="writing-page animate-fade-in">
       <header className="writing-header">
         <div>
-          <h1 className="writing-title">Writing Assistant</h1>
-          <p className="text-secondary text-sm">
-            Check grammar, spelling, and style — or rewrite the text in a different tone
-          </p>
+          <h1 className="writing-title">{tUi("Writing Assistant")}</h1>
+          <p className="text-secondary text-sm">{tUi("Check grammar, spelling, and style — or rewrite the text in a different tone")}</p>
         </div>
         <button
           type="button"
           role="switch"
           aria-checked={autoCheckEnabled}
-          aria-label="Auto-check writing"
+          aria-label={tUi("Auto-check writing")}
           className={`writing-auto-toggle${autoCheckEnabled ? ' is-on' : ''}`}
           onClick={handleToggleAutoCheck}
           disabled={!settings || updateSettings.isPending || offlineMode}
           title={
             offlineMode
-              ? 'Auto-check requires online mode'
-              : 'Automatically check after you pause typing'
+              ? tUi("Auto-check requires online mode")
+              : tUi("Automatically check after you pause typing")
           }
         >
           <span className="writing-auto-toggle-track" aria-hidden="true">
             <span className="writing-auto-toggle-thumb" />
           </span>
-          <span className="writing-auto-toggle-label">Auto-check</span>
+          <span className="writing-auto-toggle-label">{tUi("Auto-check")}</span>
         </button>
       </header>
 
       {privacyMode && (
-        <div className="writing-privacy-banner" role="status">
-          Privacy mode: checked text is not stored
+        <div className="writing-privacy-banner" role="status">{tUi("Privacy mode: checked text is not stored")}</div>
+      )}
+
+      {limitNoticeOpen && (
+        <div className="writing-limit-toast animate-slide-up" role="alert">
+          <p className="writing-limit-toast-text">
+            {tUi(
+              "You exceeded {limit} characters. Auto-check will not run. Shorten the text, then press Check writing.",
+              { limit: MAX_WRITING_CHARS },
+            )}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLimitNoticeOpen(false)}
+            aria-label={tUi("Close")}
+          >{tUi("Close")}</Button>
         </div>
       )}
 
-      <section className="writing-editor" aria-label="Text to check">
-        <label className="sr-only" htmlFor="writing-input">
-          Text to check
-        </label>
-        <textarea
+      <section className="writing-editor" aria-label={tUi("Text to check")}>
+        <label className="sr-only" htmlFor="writing-input">{tUi("Text to check")}</label>
+        <textarea dir="auto"
           id="writing-input"
           className="writing-textarea"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Paste or type a sentence, email, or paragraph…"
+          placeholder={tUi("Paste or type a sentence, email, or paragraph…")}
           spellCheck={false}
           aria-describedby={
             autoStatusLabel ? 'writing-char-count writing-auto-status' : 'writing-char-count'
@@ -383,9 +407,9 @@ export default function WritingPage() {
           </div>
           <div className="writing-actions">
             <Select
-              ariaLabel="Rewrite mode"
+              ariaLabel={tUi("Rewrite mode")}
               value={rewriteMode}
-              options={REWRITE_OPTIONS}
+              options={REWRITE_OPTIONS.map((option) => ({ ...option, label: tUi(option.label) }))}
               onChange={(value) => {
                 if (isRewriteMode(value)) setRewriteMode(value);
               }}
@@ -396,19 +420,15 @@ export default function WritingPage() {
               onClick={handleRewrite}
               disabled={!canSubmit}
               isLoading={rewritePending}
-              aria-label="Rewrite text"
-            >
-              Rewrite
-            </Button>
+              aria-label={tUi("Rewrite text")}
+            >{tUi("Rewrite")}</Button>
             <Button
               variant="primary"
               onClick={handleCheck}
               disabled={!canSubmit}
               isLoading={checkPending}
-              aria-label="Check writing"
-            >
-              Check writing
-            </Button>
+              aria-label={tUi("Check writing")}
+            >{tUi("Check writing")}</Button>
           </div>
         </div>
       </section>
@@ -435,11 +455,11 @@ export default function WritingPage() {
             {visibleCheck.overallScore}
           </span>
           <div className="writing-summary-copy">
-            <p className="writing-summary-text">{visibleCheck.summary ?? 'Analysis complete.'}</p>
+            <p className="writing-summary-text">{visibleCheck.summary ?? tUi("Analysis complete.")}</p>
             <p className="text-muted text-xs">
-              {visibleCheck.issueCount} {visibleCheck.issueCount === 1 ? 'issue' : 'issues'}
-              {pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
-              {' · Click a highlighted word for a fix'}
+              {visibleCheck.issueCount} {visibleCheck.issueCount === 1 ? tUi("issue") : tUi("issues")}
+              {pendingCount > 0 ? tUi(" · {pendingCount} pending", { pendingCount: pendingCount }) : ''}
+              {tUi(" · Click a highlighted word for a fix")}
             </p>
           </div>
           {pendingCount > 0 && visibleCheck.id !== 0 && (
@@ -448,10 +468,8 @@ export default function WritingPage() {
               size="sm"
               onClick={handleAcceptAll}
               isLoading={acceptAllMutation.isPending}
-              aria-label="Accept all issues"
-            >
-              Accept all
-            </Button>
+              aria-label={tUi("Accept all issues")}
+            >{tUi("Accept all")}</Button>
           )}
         </div>
       )}
@@ -460,16 +478,16 @@ export default function WritingPage() {
         <div className="writing-summary" aria-live="polite">
           <Badge variant="accent">{latestRewrite.rewriteMode ?? rewriteMode}</Badge>
           <p className="writing-summary-text">
-            {latestRewrite.summary ?? 'Text rewritten.'}
+            {latestRewrite.summary ?? tUi("Text rewritten.")}
           </p>
         </div>
       )}
 
       {(visibleCheck || showRewrite) && (
-        <section className="writing-diff" aria-label="Writing diff">
+        <section className="writing-diff" aria-label={tUi("Writing diff")}>
           <div className="writing-diff-pane">
-            <h2 className="writing-diff-label">Original</h2>
-            <div className="writing-diff-body" aria-label="Original text with issues highlighted">
+            <h2 className="writing-diff-label">{tUi("Original")}</h2>
+            <div className="writing-diff-body" aria-label={tUi("Original text with issues highlighted")}>
               {visibleCheck && !showRewrite
                 ? segments.map((segment, index) =>
                     segment.kind === 'plain' ? (
@@ -497,17 +515,15 @@ export default function WritingPage() {
           </div>
           <div className="writing-diff-pane">
             <div className="writing-diff-label-row">
-              <h2 className="writing-diff-label">Suggested</h2>
+              <h2 className="writing-diff-label">{tUi("Suggested")}</h2>
               <div className="writing-diff-tools">
-                <Button variant="ghost" size="sm" onClick={handleCopySuggested} aria-label="Copy suggested text">
-                  {copied ? 'Copied' : 'Copy'}
+                <Button variant="ghost" size="sm" onClick={handleCopySuggested} aria-label={tUi("Copy suggested text")}>
+                  {copied ? tUi("Copied") : tUi("Copy")}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={handleUseSuggested} aria-label="Use suggested text as input">
-                  Use as input
-                </Button>
+                <Button variant="ghost" size="sm" onClick={handleUseSuggested} aria-label={tUi("Use suggested text as input")}>{tUi("Use as input")}</Button>
               </div>
             </div>
-            <div className="writing-diff-body writing-diff-body--suggested" aria-label="Suggested text">
+            <div className="writing-diff-body writing-diff-body--suggested" aria-label={tUi("Suggested text")}>
               {suggestedText}
             </div>
           </div>
@@ -520,8 +536,7 @@ export default function WritingPage() {
           open={issuesListOpen}
           onToggle={(event) => setIssuesListOpen(event.currentTarget.open)}
         >
-          <summary className="writing-issues-summary">
-            All issues ({issues.length})
+          <summary className="writing-issues-summary">{tUi("All issues (")}{issues.length})
           </summary>
           {issuesListOpen && (
             <ul className="writing-issue-list">
@@ -541,24 +556,22 @@ export default function WritingPage() {
       )}
 
       {errorPatterns && errorPatterns.length > 0 && (
-        <section className="writing-patterns" aria-label="Your error patterns">
+        <section className="writing-patterns" aria-label={tUi("Your error patterns")}>
           <div className="writing-issues-header">
-            <h2 className="writing-issues-title">Your Error Patterns</h2>
+            <h2 className="writing-issues-title">{tUi("Your Error Patterns")}</h2>
             <Button
               variant="secondary"
               size="sm"
               onClick={handleGenerateExercises}
               isLoading={generateExercisesMutation.isPending}
-              aria-label="Generate exercises from error patterns"
-            >
-              Generate Exercises
-            </Button>
+              aria-label={tUi("Generate exercises from error patterns")}
+            >{tUi("Generate Exercises")}</Button>
           </div>
           <ul className="writing-pattern-list">
             {errorPatterns.map((pattern) => (
               <li key={pattern.id} className="writing-pattern">
                 <div className="writing-issue-meta">
-                  <Badge variant="accent">{formatCategory(pattern.category)}</Badge>
+                  <Badge variant="accent">{writingLabel(pattern.category)}</Badge>
                   <span className="text-muted text-xs">×{pattern.occurrenceCount}</span>
                 </div>
                 {pattern.sampleOriginal !== null && pattern.sampleFix !== null && (
@@ -573,7 +586,7 @@ export default function WritingPage() {
           </ul>
 
           {generateExercisesMutation.data && generateExercisesMutation.data.length > 0 && (
-            <div className="writing-exercises" aria-live="polite" aria-label="Generated exercises">
+            <div className="writing-exercises" aria-live="polite" aria-label={tUi("Generated exercises")}>
               {generateExercisesMutation.data.map((exercise, index) => (
                 <ExerciseCard key={`${exercise.category}-${index}`} exercise={exercise} />
               ))}
@@ -590,15 +603,16 @@ type ExerciseCardProps = {
 };
 
 function ExerciseCard({ exercise }: ExerciseCardProps) {
+  const { t: tUi } = useI18n();
   return (
     <article className="writing-exercise">
       <div className="writing-issue-meta">
-        <Badge variant="neutral">{formatCategory(exercise.exerciseType)}</Badge>
-        <Badge variant="accent">{formatCategory(exercise.category)}</Badge>
+        <Badge variant="neutral">{writingLabel(exercise.exerciseType)}</Badge>
+        <Badge variant="accent">{writingLabel(exercise.category)}</Badge>
       </div>
       <p className="writing-exercise-prompt">{exercise.prompt}</p>
       <details className="writing-exercise-answer">
-        <summary>Show answer</summary>
+        <summary>{tUi("Show answer")}</summary>
         <p className="writing-exercise-correct">{exercise.correctAnswer}</p>
         <p className="writing-issue-explanation">{exercise.explanation}</p>
       </details>

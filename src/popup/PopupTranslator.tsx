@@ -1,3 +1,4 @@
+import { useI18n } from "../hooks/useI18n";
 // ============================================================
 // LEXORA — PopupTranslator Component
 // Exact match to mockup: language badge, word header,
@@ -8,6 +9,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { listen, emit } from '@tauri-apps/api/event';
 import { AssociatedImage } from '../components/domain/AssociatedImage';
+import { CollocationList } from '../components/domain/CollocationList';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTranslate } from '../hooks/useTranslate';
 import { useAddToVocabulary } from '../hooks/useVocabulary';
@@ -24,6 +26,7 @@ import { isLongWritingText, OPEN_WRITING_EVENT, saveWritingDraft } from '../lib/
 import { classifyPopupText, formatImageProviderError, formatProviderError } from '../lib/inlineAssistant';
 import { useSessionLexicalDomain } from '../hooks/useSessionLexicalDomain';
 import { formatFrequencyHint, splitByTerm } from '../lib/utils';
+import { canHaveCollocations } from '../lib/collocations';
 import type { LexicalDomain } from '../lib/translationDomain';
 
 const AUTO_TEXT_DEBOUNCE_MS = 800;
@@ -91,6 +94,7 @@ function ClearFieldIcon() {
 }
 
 export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
+  const { t: tUi, locale } = useI18n();
   const [query, setQuery] = useState('');
   const [added, setAdded] = useState(false);
   const [enrichPatch, setEnrichPatch] = useState<EnrichPatch | null>(null);
@@ -99,6 +103,11 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
   const [imageRefreshing, setImageRefreshing] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [imageNonce, setImageNonce] = useState(0);
+  const [collocationsOpen, setCollocationsOpen] = useState(false);
+  const collocationsOpenRef = useRef(false);
+  collocationsOpenRef.current = collocationsOpen;
+  const showCollocationsRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef(false);
   const langMenuOpenRef = useRef(false);
   const lexemeIdRef = useRef<number | null>(null);
   const queryRef = useRef(query);
@@ -147,6 +156,18 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
     }
   }, [translateMutation.data]);
 
+  // Back from the collocations view: focus returns to the button that opened it.
+  useEffect(() => {
+    if (collocationsOpen || !returnFocusRef.current) return;
+    returnFocusRef.current = false;
+    showCollocationsRef.current?.focus();
+  }, [collocationsOpen]);
+
+  const closeCollocations = () => {
+    returnFocusRef.current = true;
+    setCollocationsOpen(false);
+  };
+
   const handleClose = () => {
     void ipc.window.closePopup();
   };
@@ -158,12 +179,14 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
     setImagePending(false);
     setExamplesPending(false);
     setAdded(false);
+    setCollocationsOpen(false);
     addMutation.reset();
   };
 
   const handleTranslate = (text: string, overrideTarget?: string, overrideDomain?: LexicalDomain) => {
     if (!text.trim()) return;
     setAdded(false);
+    setCollocationsOpen(false);
     addMutation.reset();
     setEnrichPatch(null);
     setImagePending(true);
@@ -244,12 +267,15 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
           setImagePending(false);
           setExamplesPending(false);
           setAdded(false);
+          setCollocationsOpen(false);
         }
         return;
       }
-      // Parent PopupApp routes sentences to the assistant; do not start a
-      // dictionary lookup that would flash the word card over the selection.
-      if (onOpenAssistantRef.current && classifyPopupText(text) === 'assistant') {
+      // Parent PopupApp routes sentences to the assistant and voice sessions to
+      // the recorder; do not start a dictionary lookup that would flash the card.
+      const kind = classifyPopupText(text);
+      if (kind === 'voice') return;
+      if (onOpenAssistantRef.current && kind === 'assistant') {
         return;
       }
       const alreadyShowing =
@@ -304,6 +330,12 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
       if (langMenuOpenRef.current) return;
       const target = e.target;
       if (target instanceof Element && target.closest('.language-select')) return;
+      // Esc on the collocations view goes back to the word, not out of the popup.
+      if (collocationsOpenRef.current) {
+        returnFocusRef.current = true;
+        setCollocationsOpen(false);
+        return;
+      }
       handleClose();
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -373,6 +405,10 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
   const isWritingQuery = isLongWritingText(query);
   const canOpenAssistant = Boolean(onOpenAssistant) && classifyPopupText(query) === 'assistant';
   const frequencyLabel = formatFrequencyHint(data?.frequencyHint);
+  const collocationLexemeId =
+    data && data.lexemeId != null && !data.isOfflineFallback && canHaveCollocations(data.text, data.partOfSpeech)
+      ? data.lexemeId
+      : null;
   const exampleSentences = data
     ? uniqueExampleSentences(data.exampleSentence, data.exampleSentence2)
     : [];
@@ -401,9 +437,9 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
           {data && (
             <span className="popup-detected-pair">
               {getLanguageEntry(sourceLang === 'auto' ? data.sourceLanguage : sourceLang)?.name
-                ?? (sourceLang === 'auto' ? 'Auto' : languageLabel(sourceLang))}
+                ?? (sourceLang === 'auto' ? tUi("Auto") : languageLabel(sourceLang, false, locale))}
               {' → '}
-              {languageLabel(targetLang)}
+              {languageLabel(targetLang, false, locale)}
             </span>
           )}
         </div>
@@ -411,7 +447,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
           type="button"
           className="popup-close-btn"
           onClick={handleClose}
-          aria-label="Close window"
+          aria-label={tUi("Close window")}
         >
           <CloseIcon />
         </button>
@@ -426,12 +462,12 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             compact
             value={sourceLang}
             options={langOptions}
-            leadingOptions={[{ value: 'auto', label: 'Auto-detect' }]}
+            leadingOptions={[{ value: 'auto', label: tUi("Auto-detect") }]}
             onChange={setSourceLang}
             onOpenChange={(open) => {
               langMenuOpenRef.current = open;
             }}
-            ariaLabel="Source language"
+            ariaLabel={tUi("Source language")}
           />
           <span className="popup-lang-arrow" aria-hidden="true">
             →
@@ -445,7 +481,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             onOpenChange={(open) => {
               langMenuOpenRef.current = open;
             }}
-            ariaLabel="Target language"
+            ariaLabel={tUi("Target language")}
           />
         </div>
         {/* Layout-only wrapper: keeps the press inside the dropdown from
@@ -463,22 +499,22 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
 
       <div className="popup-input-row">
         <div className="popup-input-wrap">
-          <input
+          <input dir="auto"
             type="text"
             className="popup-input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleTranslate(query)}
-            placeholder="Type or paste a word…"
+            placeholder={tUi("Type or paste a word…")}
             autoFocus
-            aria-label="Translate query"
+            aria-label={tUi("Translate query")}
           />
           {query.length > 0 && (
             <button
               type="button"
               className="popup-field-clear"
               onClick={handleClearQuery}
-              aria-label="Clear text"
+              aria-label={tUi("Clear text")}
             >
               <ClearFieldIcon />
             </button>
@@ -489,15 +525,15 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
           className="popup-search-btn"
           onClick={() => handleTranslate(query)}
           disabled={translateMutation.isPending}
-          aria-label={translateMutation.isPending ? 'Translating with AI...' : 'Translate'}
+          aria-label={translateMutation.isPending ? tUi("Translating with AI...") : tUi("Translate")}
         >
           {translateMutation.isPending ? (
             <>
               <div className="popup-spinner-icon" />
-              <span>Translating…</span>
+              <span>{tUi("Translating…")}</span>
             </>
           ) : (
-            'Translate'
+            tUi("Translate")
           )}
         </button>
       </div>
@@ -508,7 +544,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
           {/* AI Status Pill */}
           <div className="popup-status-pill-ai">
             <div className="popup-ai-pulse-dot" />
-            <span>Analyzing context & fetching nuances…</span>
+            <span>{tUi("Analyzing context & fetching nuances…")}</span>
           </div>
 
           {/* Word Header Skeleton */}
@@ -558,7 +594,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
       {translateMutation.isError && !translateMutation.isPending && (
         <div className="popup-body popup-body--error animate-fade-in">
           <div className="popup-error-box" role="alert">
-            <div className="popup-error-box-title">Couldn’t translate</div>
+            <div className="popup-error-box-title">{tUi("Couldn’t translate")}</div>
             <div>
               {formatProviderError(translateMutation.error)}
             </div>
@@ -568,23 +604,29 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
 
       {!data && !translateMutation.isPending && !translateMutation.isError && (
         <div className="popup-body popup-body--centered">
-          <p className="popup-empty-title">Translate a word</p>
-          <p className="popup-empty-hint">
-            Type or paste a word, then press <kbd className="popup-kbd">Enter</kbd>
+          <p className="popup-empty-title">{tUi("Translate a word")}</p>
+          <p className="popup-empty-hint">{tUi("Type or paste a word, then press ")}<kbd className="popup-kbd">{tUi("Enter")}</kbd>
           </p>
-          <p className="popup-empty-hint">
-            Open from the menu bar anytime, or select text and use your translate shortcut.
-          </p>
+          <p className="popup-empty-hint">{tUi("Open from the menu bar anytime, or select text and use your translate shortcut.")}</p>
         </div>
       )}
 
-      {data && !translateMutation.isPending && (
+      {data && !translateMutation.isPending && collocationsOpen && collocationLexemeId != null && (
+        <div className="popup-body animate-fade-in">
+          <CollocationList
+            lexemeId={collocationLexemeId}
+            word={data.text}
+            targetLanguage={data.targetLanguage || targetLang}
+            onBack={closeCollocations}
+          />
+        </div>
+      )}
+
+      {data && !translateMutation.isPending && !(collocationsOpen && collocationLexemeId != null) && (
         <div className="popup-body animate-fade-in">
           {/* Offline fallback notice */}
           {data.isOfflineFallback && (
-            <div className="popup-offline-chip" role="status">
-              ⚠ Offline result — configure AI provider in Settings
-            </div>
+            <div className="popup-offline-chip" role="status">{tUi("⚠ Offline result — configure AI provider in Settings")}</div>
           )}
 
           {/* Hero: word + IPA on the left, square photo on the right */}
@@ -598,13 +640,13 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
                     type="button"
                     className="popup-speaker-inline"
                     onClick={handleSpeak}
-                    aria-label="Pronounce word"
+                    aria-label={tUi("Pronounce word")}
                   >
                     <SpeakerIcon />
                   </button>
                 </div>
                 {data.sourceSynonyms.length > 0 && (
-                  <div className="popup-source-synonyms" aria-label="Source language synonyms">
+                  <div className="popup-source-synonyms" aria-label={tUi("Source language synonyms")}>
                     {data.sourceSynonyms.map((syn) => (
                       <span key={syn} className="popup-syn-chip">
                         {syn}
@@ -622,7 +664,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             <div className="popup-hero-visual">
               <AssociatedImage
                 path={data.imagePath}
-                alt={`Photo of ${data.text}`}
+                alt={tUi("Photo of {word}", { word: data.text })}
                 isLoading={imagePending && !data.imagePath}
                 isRefreshing={imageRefreshing}
                 size="hero"
@@ -649,10 +691,20 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
                 ))}
               </div>
             )}
+            {collocationLexemeId != null && (
+              <button
+                ref={showCollocationsRef}
+                type="button"
+                className="popup-collocations-btn"
+                onClick={() => setCollocationsOpen(true)}
+              >
+                {tUi("Show collocations")}
+              </button>
+            )}
           </div>
 
           {(exampleSentences.length > 0 || waitingForExamples) && (
-            <div className="popup-examples" aria-label="Example sentences in context">
+            <div className="popup-examples" aria-label={tUi("Example sentences in context")}>
               {exampleSentences.map((sentence) => (
                 <div key={sentence} className="popup-example-box">
                   <p className="popup-example-text">
@@ -675,9 +727,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
       )}
 
       {addMutation.isError && !added && (
-        <p className="popup-add-error" role="alert">
-          Couldn’t add this word. Please try again.
-        </p>
+        <p className="popup-add-error" role="alert">{tUi("Couldn’t add this word. Please try again.")}</p>
       )}
 
       {/* Footer action */}
@@ -688,7 +738,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             className="popup-icon-btn"
             onClick={handleSpeak}
             disabled={!data}
-            aria-label="Listen audio"
+            aria-label={tUi("Listen audio")}
           >
             <SpeakerIcon />
           </button>
@@ -697,11 +747,11 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             className="popup-icon-btn"
             onClick={handleAdd}
             disabled={!data || added || addMutation.isPending}
-            aria-label="Save bookmark"
+            aria-label={tUi("Save bookmark")}
           >
             <BookmarkIcon />
           </button>
-          <span className="popup-hotkey-hint">Press ↵ to translate · Esc to close</span>
+          <span className="popup-hotkey-hint">{tUi("Press ↵ to translate · Esc to close")}</span>
         </div>
 
         {canOpenAssistant ? (
@@ -709,28 +759,24 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             type="button"
             className="popup-add-btn"
             onClick={() => onOpenAssistant?.(query.trim())}
-            aria-label="Open AI Assistant"
-          >
-            AI Assistant
-          </button>
+            aria-label={tUi("Open AI Assistant")}
+          >{tUi("AI Assistant")}</button>
         ) : isWritingQuery ? (
           <button
             type="button"
             className="popup-add-btn"
             onClick={handleCheckWriting}
-            aria-label="Check Writing"
-          >
-            Check Writing
-          </button>
+            aria-label={tUi("Check Writing")}
+          >{tUi("Check Writing")}</button>
         ) : (
           <button
             type="button"
             className={`popup-add-btn${added ? ' added' : ''}`}
             onClick={handleAdd}
             disabled={!data || added || addMutation.isPending}
-            aria-label={added ? '✓ Added to Vocabulary' : '+ Add Word'}
+            aria-label={added ? tUi("✓ Added to Vocabulary") : tUi("+ Add Word")}
           >
-            {added ? '✓ Added to Vocabulary' : '+ Add Word'}
+            {added ? tUi("✓ Added to Vocabulary") : tUi("+ Add Word")}
           </button>
         )}
       </div>

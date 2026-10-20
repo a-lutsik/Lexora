@@ -1,3 +1,4 @@
+import { useI18n } from '../../hooks/useI18n';
 // ============================================================
 // LEXORA — FreqBadge Domain Component
 // Бейдж частотности слова по рангу (★ 1,500).
@@ -12,10 +13,11 @@ type FreqBadgeProps = {
 };
 
 export function FreqBadge({ rank }: FreqBadgeProps) {
+  const { locale } = useI18n();
   if (rank === null) return null;
   return (
     <Badge variant="warn">
-      ★ {rank.toLocaleString()}
+      ★ {rank.toLocaleString(locale)}
     </Badge>
   );
 }

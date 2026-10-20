@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // ============================================================
 // LEXORA — Microphone recording helpers
 // Capture a short clip, encode as base64 for IPC.
@@ -101,19 +102,19 @@ export function beginWavCapture(
 export function microphoneErrorMessage(error: unknown): string {
   if (error instanceof DOMException) {
     if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-      return 'Microphone permission denied. Allow access in system settings.';
+      return t('Microphone permission denied. Allow access in system settings.');
     }
     if (error.name === 'NotFoundError') {
-      return 'No microphone found.';
+      return t('No microphone found.');
     }
     if (error.name === 'NotReadableError') {
-      return 'Microphone is already in use.';
+      return t('Microphone is already in use.');
     }
   }
   if (error instanceof Error && error.message) {
-    return error.message;
+    return t(error.message);
   }
-  return 'Could not access the microphone.';
+  return t('Could not access the microphone.');
 }
 
 export async function blobToBase64(blob: Blob): Promise<string> {

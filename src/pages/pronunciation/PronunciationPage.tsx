@@ -1,3 +1,6 @@
+import { getLocale } from '../../i18n';
+import { useI18n } from "../../hooks/useI18n";
+import { t as tUi } from "../../i18n";
 // ============================================================
 // LEXORA — Pronunciation Coach page
 // Practice, Shadowing, Minimal Pairs, History.
@@ -42,17 +45,18 @@ const TAB_OPTIONS: { id: CoachTab; label: string }[] = [
 function mutationErrorMessage(error: unknown): string {
   return formatIpcError(
     error,
-    'Could not score pronunciation. Check the AI provider in Settings.',
+    tUi("Could not score pronunciation. Check the AI provider in Settings."),
   );
 }
 
 function formatWhen(unixSeconds: number): string {
   const date = new Date(unixSeconds * 1000);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString();
+  return date.toLocaleString(getLocale());
 }
 
 export default function PronunciationPage() {
+  const { t: tUi } = useI18n();
   const [searchParams] = useSearchParams();
   const { data: settings } = useSettings();
   const language = settings?.primaryLanguage ?? 'en';
@@ -250,10 +254,10 @@ export default function PronunciationPage() {
   const isPracticeProcessing =
     practiceScoring || practiceRecorder.status === 'stopping' || busy;
   const practicePrimaryLabel = isPracticeRecording
-    ? 'Stop'
+    ? tUi("Stop")
     : isPracticeProcessing
-      ? 'Scoring…'
-      : 'Say / Record';
+      ? tUi("Scoring…")
+      : tUi("Say / Record");
   const practicePrimaryAria = isPracticeRecording
     ? 'Stop recording'
     : isPracticeProcessing
@@ -269,14 +273,12 @@ export default function PronunciationPage() {
     <div className="pronunciation-page animate-fade-in">
       <header className="pronunciation-header">
         <div>
-          <h1 className="pronunciation-title">Pronunciation Coach</h1>
-          <p className="text-secondary text-sm">
-            Record, get phoneme feedback, shadow a model, and drill minimal pairs.
-          </p>
+          <h1 className="pronunciation-title">{tUi("Pronunciation Coach")}</h1>
+          <p className="text-secondary text-sm">{tUi("Record, get phoneme feedback, shadow a model, and drill minimal pairs.")}</p>
         </div>
       </header>
 
-      <div className="pronunciation-tabs" role="tablist" aria-label="Pronunciation modes">
+      <div className="pronunciation-tabs" role="tablist" aria-label={tUi("Pronunciation modes")}>
         {TAB_OPTIONS.map((item) => (
           <button
             key={item.id}
@@ -288,7 +290,7 @@ export default function PronunciationPage() {
             className={`pronunciation-tab${tab === item.id ? ' is-active' : ''}`}
             onClick={() => setTab(item.id)}
           >
-            {item.label}
+            {tUi(item.label)}
           </button>
         ))}
       </div>
@@ -314,7 +316,7 @@ export default function PronunciationPage() {
             }}
             showIpaField
             phraseInputId="pron-target"
-            phraseInputLabel="Word or phrase"
+            phraseInputLabel={tUi("Word or phrase")}
             ipaInputId="pron-ipa"
             phraseInputRef={practiceInputRef}
             inputLocked={isPracticeRecording || practiceScoring}
@@ -336,7 +338,7 @@ export default function PronunciationPage() {
             showPostpone={false}
             onNextPhrase={clearPracticePhrase}
             spaceHint
-            spaceHintText="Hold Spacebar to record"
+            spaceHintText={tUi("Hold Spacebar to record")}
             phaseMessage={
               isPracticeRecording
                 ? 'Recording… keep holding Space, then release'
@@ -352,16 +354,13 @@ export default function PronunciationPage() {
             {(latest || practiceNoSpeech) && (
               <section className="pronunciation-result pronunciation-result--inline" aria-live="polite">
                 {practiceNoSpeech && (
-                  <p className="text-secondary">
-                    No speech detected. Please try recording again and speak clearly.
-                  </p>
+                  <p className="text-secondary">{tUi("No speech detected. Please try recording again and speak clearly.")}</p>
                 )}
                 {latest && (
                   <>
                     {latest.summary && <p className="text-secondary">{latest.summary}</p>}
                     {latest.recognizedText && (
-                      <p className="text-sm">
-                        Heard: <span className="pronunciation-heard">{latest.recognizedText}</span>
+                      <p className="text-sm">{tUi("Heard: ")}<span className="pronunciation-heard">{latest.recognizedText}</span>
                       </p>
                     )}
                     {latest.stressFeedback && (
@@ -376,17 +375,16 @@ export default function PronunciationPage() {
                           size="sm"
                           isLoading={tipMutation.isPending}
                           onClick={requestTip}
-                          aria-label={`Get articulation tip for ${worstPhoneme.targetPhoneme}`}
-                        >
-                          Tip for /{worstPhoneme.targetPhoneme}/
+                          aria-label={tUi("Get articulation tip for {value1}", { value1: worstPhoneme.targetPhoneme })}
+                        >{tUi("Tip for /")}{worstPhoneme.targetPhoneme}/
                         </Button>
                         {tipMutation.data && (
                           <p className="text-sm">
                             {tipMutation.data.tip}
                             {tipMutation.data.tonguePosition
-                              ? ` Tongue: ${tipMutation.data.tonguePosition}`
+                              ? tUi(" Tongue: {value1}", { value1: tipMutation.data.tonguePosition })
                               : ''}
-                            {tipMutation.data.lipPosition ? ` Lips: ${tipMutation.data.lipPosition}` : ''}
+                            {tipMutation.data.lipPosition ? tUi(" Lips: {value1}", { value1: tipMutation.data.lipPosition }) : ''}
                           </p>
                         )}
                       </div>
@@ -398,7 +396,7 @@ export default function PronunciationPage() {
                     className="pronunciation-playback"
                     controls
                     src={playbackUrl}
-                    aria-label="Your recording"
+                    aria-label={tUi("Your recording")}
                   >
                     <track kind="captions" />
                   </audio>
@@ -439,7 +437,7 @@ export default function PronunciationPage() {
           aria-labelledby="pron-tab-history"
         >
           {!history || history.length === 0 ? (
-            <p className="text-muted">No attempts yet. Record a word to start a history.</p>
+            <p className="text-muted">{tUi("No attempts yet. Record a word to start a history.")}</p>
           ) : (
             <ul className="pronunciation-history">
               {history.map((attempt) => (
@@ -456,7 +454,7 @@ export default function PronunciationPage() {
 
       {problemPhonemes && problemPhonemes.length > 0 && tab !== 'pairs' && (
         <aside className="pronunciation-problems">
-          <h2 className="pronunciation-subtitle">Problem sounds</h2>
+          <h2 className="pronunciation-subtitle">{tUi("Problem sounds")}</h2>
           <ul className="phoneme-row">
             {problemPhonemes.map((pattern) => (
               <li key={pattern.id} className="phoneme-chip phoneme-chip--miss">

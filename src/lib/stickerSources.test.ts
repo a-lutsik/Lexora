@@ -31,8 +31,8 @@ describe('stickerSources', () => {
     ).toEqual([STICKER_SOURCE_ALL]);
   });
 
-  it('keeps at least "mine" when every token is removed', () => {
-    expect(normalizeStickerSources([], [1])).toEqual([STICKER_SOURCE_MINE]);
+  it('keeps an empty selection when every token is removed', () => {
+    expect(normalizeStickerSources([], [1])).toEqual([]);
   });
 
   it('toggles all → mine, then back to all', () => {
@@ -49,5 +49,26 @@ describe('stickerSources', () => {
   it('toggles a single collection off an "all" selection', () => {
     const next = toggleStickerSource([STICKER_SOURCE_ALL], collectionSourceToken(2), [1, 2]);
     expect(next).toEqual([STICKER_SOURCE_MINE, 'c:1']);
+  });
+});
+
+describe('category selection', () => {
+  it('selects only a topic without broadening to all my words', () => {
+    expect(toggleStickerSource(['mine'], 'cat:2', [], [1, 2])).toEqual(['cat:1']);
+    expect(normalizeStickerSources(['cat:2'], [])).toEqual(['cat:2']);
+  });
+
+  it('removes one category from all while retaining collections', () => {
+    expect(toggleStickerSource(['all'], 'cat:2', [9], [1, 2])).toEqual(['c:9', 'cat:1']);
+  });
+
+  it('allows no selected sources without falling back to unrelated words', () => {
+    expect(toggleStickerSource(['cat:2'], 'cat:2', [], [1, 2])).toEqual([]);
+    expect(normalizeStickerSources([], [])).toEqual([]);
+  });
+
+  it('all my words includes future categories, an explicit subset does not', () => {
+    expect(toggleStickerSource(['cat:1'], 'mine', [], [1, 2])).toEqual(['mine']);
+    expect(isAllStickerSources(['cat:1', 'cat:2'], [])).toBe(false);
   });
 });

@@ -1,3 +1,4 @@
+import type { CategoryDto } from './types';
 // ============================================================
 // LEXORA — IPC Layer
 // Все вызовы invoke() только здесь. В компонентах — запрещено.
@@ -6,10 +7,17 @@
 import { invoke, type Channel } from '@tauri-apps/api/core';
 import type {
   ApplyGrammarFixInput,
+  GrammarMark,
+  GrammarMarkActionKind,
+  GrammarMarksPayload,
+  SetGrammarMarksInput,
+  RemoteModel,
   GrammarFieldPayload,
   GrammarWatchSettings,
   GrammarWatchStatus,
   AddVocabularyInput,
+  AddCollocationsInput,
+  CollocationDto,
   AddVocabularyBatchInput,
   AddVocabularyBatchResult,
   AppSettings,
@@ -75,6 +83,16 @@ import type {
 // ── Vocabulary ────────────────────────────────────────────
 
 export const ipc = {
+  categories: {
+    list: (languageId: number) => invoke<CategoryDto[]>('list_categories', { languageId }),
+    create: (name: string, languageId: number) => invoke<CategoryDto>('create_category', { name, languageId }),
+    rename: (id: number, name: string) => invoke<CategoryDto>('rename_category', { id, name }),
+    remove: (id: number) => invoke<void>('delete_category', { id }),
+    move: (ids: number[], categoryId: number) => invoke<void>('move_vocabulary_to_category', { ids, categoryId }),
+  },
+  interface: {
+    setLocale: (locale: string) => invoke<void>('set_interface_locale', { locale }),
+  },
   vocabulary: {
     list: (filters: VocabularyFilters) =>
       invoke<VocabularyEntryDto[]>('list_vocabulary', { filters }),
@@ -94,6 +112,9 @@ export const ipc = {
     remove: (id: number) =>
       invoke<void>('remove_from_vocabulary', { id }),
 
+    removeBatch: (ids: number[]) =>
+      invoke<void>('remove_vocabulary_batch', { ids }),
+
     toggleFavorite: (id: number) =>
       invoke<VocabularyEntryDto>('toggle_favorite', { id }),
 
@@ -111,6 +132,18 @@ export const ipc = {
 
     importData: (path: string) =>
       invoke<ImportResult>('import_vocabulary', { path }),
+  },
+
+  // ── Collocations ──────────────────────────────────────
+
+  collocations: {
+    /** Cached in SQLite after the first AI call for this word and target language. */
+    get: (lexemeId: number, targetLanguage: string) =>
+      invoke<CollocationDto[]>('get_collocations', { lexemeId, targetLanguage }),
+
+    /** Adds chosen collocations as vocabulary cards; returns the refreshed list. */
+    add: (input: AddCollocationsInput) =>
+      invoke<CollocationDto[]>('add_collocations_to_vocabulary', { input }),
   },
 
   // ── Translation/AI ────────────────────────────────────
@@ -291,6 +324,12 @@ export const ipc = {
     setRoleRoute: (role: ModelRole, targets: RouteTarget[]) =>
       invoke<ModelSetup>('set_role_route', { input: { role, targets } }),
 
+    providerModels: (provider: string) =>
+      invoke<RemoteModel[]>('list_provider_models', { provider }),
+
+    setAdvanced: (enabled: boolean) =>
+      invoke<AppSettings>('set_advanced_models', { enabled }),
+
     testRole: (role: ModelRole) =>
       invoke<TestConnectionResult>('test_model_role', { role }),
 
@@ -437,6 +476,20 @@ export const ipc = {
 
     excludeApp: (bundleId: string) =>
       invoke<GrammarWatchSettings>('exclude_grammar_app', { bundleId }),
+
+    /** Underline these suggestions in the watched field (null clears them). */
+    setMarks: (input: SetGrammarMarksInput | null) =>
+      invoke<void>('set_grammar_marks', { input }),
+
+    getMarks: () =>
+      invoke<GrammarMarksPayload>('get_grammar_marks'),
+
+    getCard: () =>
+      invoke<GrammarMark | null>('get_grammar_card'),
+
+    /** A button of the hover card: the writing-check window carries it out. */
+    cardAction: (issueId: number, action: GrammarMarkActionKind) =>
+      invoke<void>('grammar_card_action', { issueId, action }),
   },
 
   // ── Popup (inline assistant + dictionary card) ────────

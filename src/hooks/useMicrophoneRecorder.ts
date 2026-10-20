@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // ============================================================
 // LEXORA — useMicrophoneRecorder
 // Start/stop capture with an auto-stop ceiling and optional VAD.
@@ -138,7 +139,7 @@ export function useMicrophoneRecorder(options: UseMicrophoneRecorderOptions = {}
     if (status === 'recording' || status === 'stopping') return false;
     const getUserMedia = getUserMediaFn();
     if (!getUserMedia) {
-      setError('Recording is not supported in this environment.');
+      setError(t('Recording is not supported in this environment.'));
       return false;
     }
     setError(null);

@@ -93,6 +93,18 @@ describe('StickerApp', () => {
     expect(invokeMock).toHaveBeenCalledWith('get_sticker_card');
   });
 
+  it('shows an empty topic message without substituting other words', async () => {
+    invokeMock.mockImplementation((cmd: string) => Promise.resolve(
+      cmd === 'get_settings' ? { primaryLanguage: 'en', stickerSources: ['cat:2'] } : null,
+    ));
+    renderWithQueryClient(<StickerApp />);
+    expect(await screen.findByRole('status')).toHaveTextContent('No words in selected sources.');
+    expect(screen.queryByText('apple')).not.toBeInTheDocument();
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('show_sticker_window'));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Close sticker' }));
+    expect(tauriWindowMock.hide).toHaveBeenCalled();
+  });
+
   it('shows the window only when this sticker slot has a card', async () => {
     invokeMock.mockImplementation((cmd: string) =>
       Promise.resolve(cmd === 'get_sticker_card' ? makeEntry() : null),
@@ -144,7 +156,7 @@ describe('StickerApp', () => {
     renderWithQueryClient(<StickerApp />);
 
     expect(await screen.findByText('apple')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Помню/ }));
+    await user.click(screen.getByRole('button', { name: /Remembered/ }));
 
     await waitFor(() => {
       expect(tauriWindowMock.hide).toHaveBeenCalled();
@@ -291,7 +303,7 @@ describe('StickerApp', () => {
     renderWithQueryClient(<StickerApp />);
 
     expect(await screen.findByText('apple')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Помню/ }));
+    await user.click(screen.getByRole('button', { name: /Remembered/ }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('submit_review', {
@@ -315,7 +327,7 @@ describe('StickerApp', () => {
     renderWithQueryClient(<StickerApp />);
 
     expect(await screen.findByText('apple')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Не помню/ }));
+    await user.click(screen.getByRole('button', { name: /Forgot/ }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('submit_review', {
@@ -337,7 +349,7 @@ describe('StickerApp', () => {
     renderWithQueryClient(<StickerApp />);
 
     expect(await screen.findByText('apple')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Помню/ }));
+    await user.click(screen.getByRole('button', { name: /Remembered/ }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('dismiss_sticker_card', { entryId: 10 });
@@ -354,7 +366,7 @@ describe('StickerApp', () => {
     renderWithQueryClient(<StickerApp />);
 
     expect(await screen.findByText('apple')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Не помню/ }));
+    await user.click(screen.getByRole('button', { name: /Forgot/ }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('submit_review', {
@@ -426,15 +438,15 @@ describe('StickerApp', () => {
     renderWithQueryClient(<StickerApp />);
 
     expect(await screen.findByText('apple')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Помню/ }));
+    await user.click(screen.getByRole('button', { name: /Remembered/ }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Оценка не сохранена');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Grade was not saved');
     expect(screen.getByText('apple')).toBeInTheDocument();
     expect(invokeMock).not.toHaveBeenCalledWith('dismiss_sticker_card', expect.anything());
-    expect(screen.getByRole('button', { name: /Помню/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Remembered/ })).toBeEnabled();
   });
 
-  it('announces the word politely and labels "Позже" in Russian like the other actions', async () => {
+  it('announces the word politely and localizes the Later action in English', async () => {
     invokeMock.mockImplementation((cmd: string) =>
       Promise.resolve(cmd === 'get_sticker_card' ? makeEntry() : null),
     );
@@ -442,7 +454,7 @@ describe('StickerApp', () => {
 
     const word = await screen.findByText('apple');
     expect(word.closest('[aria-live="polite"]')).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Позже' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: "Later" })).toBeInTheDocument();
   });
 
   it('pin and close buttons talk to the current window', async () => {
@@ -455,6 +467,7 @@ describe('StickerApp', () => {
     await screen.findByText('apple');
 
     const pin = screen.getByRole('button', { name: 'Pin on top' });
+    expect(invokeMock).toHaveBeenCalledWith('set_sticker_pinned', { pinned: false });
     expect(pin).toHaveAttribute('aria-pressed', 'false');
     expect(pin).not.toHaveClass('pinned');
 
@@ -468,6 +481,23 @@ describe('StickerApp', () => {
       'dismiss_sticker_card',
       expect.objectContaining({ entryId: 10 }),
     );
+  });
+
+  it('whole card is a drag region except the source filter panel', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sticker_card') return Promise.resolve(makeEntry());
+      if (cmd === 'list_categories' || cmd === 'list_collections') return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithQueryClient(<StickerApp />);
+
+    const word = await screen.findByText('apple');
+    expect(word.closest('.sticker-card')).toHaveAttribute('data-tauri-drag-region', 'deep');
+
+    await user.click(screen.getByRole('button', { name: 'Filter sticker sources' }));
+    const closeFilter = screen.getByRole('button', { name: 'Close source filter' });
+    expect(closeFilter.closest('.sticker-filter-panel')).toHaveAttribute('data-tauri-drag-region', 'false');
   });
 
   it('does not show another sticker\'s card after Помню', async () => {
@@ -497,7 +527,7 @@ describe('StickerApp', () => {
     renderWithQueryClient(<StickerApp />);
 
     expect(await screen.findByText('apple')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Помню/ }));
+    await user.click(screen.getByRole('button', { name: /Remembered/ }));
 
     expect(await screen.findByText('cherry')).toBeInTheDocument();
     expect(screen.queryByText('banana')).not.toBeInTheDocument();
@@ -512,6 +542,7 @@ describe('StickerApp', () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'get_sticker_card') return Promise.resolve(makeEntry());
+      if (cmd === 'list_categories') return Promise.resolve([]);
       if (cmd === 'list_collections') {
         return Promise.resolve([
           {

@@ -157,6 +157,7 @@ mod tests {
             source_language: "en".to_string(),
             notes: None,
             source: Some("manual".to_string()),
+            category_id: None,
         };
         let uv_id = VocabularyRepo::add(conn, &input).expect("add word");
         let rs_id: i64 = conn

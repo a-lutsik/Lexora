@@ -809,3 +809,68 @@ describe('PopupTranslator', () => {
     });
   });
 });
+
+describe('PopupTranslator collocations', () => {
+  const endResult: TranslationResult = { ...translationResult, text: 'end', mainTranslation: 'конец', lexemeId: 7 };
+
+  function mockTranslate(result: TranslationResult) {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'translate_text') return Promise.resolve(result);
+      if (cmd === 'get_collocations') {
+        return Promise.resolve([
+          {
+            id: 1, lexemeId: 7, text: 'in the end', pattern: 'prep + noun', translation: 'в конце концов',
+            example: 'In the end, it worked.', focus: 'in', distractors: ['at'], nuance: null, vocabularyEntryId: null,
+          },
+        ]);
+      }
+      return Promise.resolve(null);
+    });
+  }
+
+  it('switches to the collocations view and Esc goes back to the word instead of closing', async () => {
+    const user = userEvent.setup();
+    mockTranslate(endResult);
+    renderWithQueryClient(<PopupTranslator />);
+
+    await user.type(screen.getByRole('textbox', { name: 'Translate query' }), 'end{Enter}');
+    await user.click(await screen.findByRole('button', { name: 'Show collocations' }));
+
+    expect(await screen.findByText('в конце концов')).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith('get_collocations', { lexemeId: 7, targetLanguage: 'ru' });
+    expect(screen.queryByText('конец')).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(await screen.findByText('конец')).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith('close_popup_window');
+  });
+
+  it('moves focus into the view and back to the button', async () => {
+    const user = userEvent.setup();
+    mockTranslate(endResult);
+    renderWithQueryClient(<PopupTranslator />);
+
+    await user.type(screen.getByRole('textbox', { name: 'Translate query' }), 'end{Enter}');
+    await user.click(await screen.findByRole('button', { name: 'Show collocations' }));
+    const back = screen.getByRole('button', { name: 'Back to translation' });
+    expect(back).toHaveFocus();
+
+    await user.click(back);
+    expect(await screen.findByRole('button', { name: 'Show collocations' })).toHaveFocus();
+  });
+
+  it.each([
+    ['a multi-word phrase', { text: 'in the end', partOfSpeech: null }],
+    ['a phrase part of speech', { text: 'goodbye', partOfSpeech: 'phrase' as const }],
+    ['an offline result', { isOfflineFallback: true }],
+    ['an unsaved word', { lexemeId: null }],
+  ])('hides the button for %s', async (_case, patch) => {
+    const user = userEvent.setup();
+    mockTranslate({ ...endResult, ...patch });
+    renderWithQueryClient(<PopupTranslator />);
+
+    await user.type(screen.getByRole('textbox', { name: 'Translate query' }), 'end{Enter}');
+    expect(await screen.findByText('конец')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show collocations' })).not.toBeInTheDocument();
+  });
+});

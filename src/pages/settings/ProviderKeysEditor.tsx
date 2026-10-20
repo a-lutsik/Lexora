@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — ProviderKeysEditor (Settings → AI-модели → Расширенные)
 // Keys of every provider the role routes use, plus connection
@@ -37,6 +38,7 @@ export function ProviderKeysEditor({
   needsBaseUrl,
   onSettingsChanged,
 }: ProviderKeysEditorProps) {
+  const { t: tUi } = useI18n();
   const setApiKey = useSetApiKey();
   const updateSettings = useUpdateSettings();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -55,9 +57,9 @@ export function ProviderKeysEditor({
     try {
       await setApiKey.mutateAsync({ provider, key });
       setDrafts((d) => ({ ...d, [provider]: '' }));
-      setNotice({ ok: true, text: `Ключ ${providerLabel(provider)} сохранён` });
+      setNotice({ ok: true, text: tUi("Ключ {value1} сохранён", { value1: providerLabel(provider) }) });
     } catch (err) {
-      setNotice({ ok: false, text: formatIpcError(err, 'Не удалось сохранить ключ') });
+      setNotice({ ok: false, text: formatIpcError(err, tUi("Не удалось сохранить ключ")) });
     }
   };
 
@@ -75,17 +77,17 @@ export function ProviderKeysEditor({
       setAccount(null);
       setBaseUrl(null);
       onSettingsChanged(updated);
-      setNotice({ ok: true, text: 'Параметры подключения сохранены' });
+      setNotice({ ok: true, text: tUi("Параметры подключения сохранены") });
     } catch (err) {
-      setNotice({ ok: false, text: formatIpcError(err, 'Не удалось сохранить') });
+      setNotice({ ok: false, text: formatIpcError(err, tUi("Не удалось сохранить")) });
     }
   };
 
   return (
     <div className="ai-keys">
-      <h4 className="ai-subtitle">Ключи провайдеров</h4>
+      <h4 className="ai-subtitle">{tUi("Ключи провайдеров")}</h4>
       {providers.length === 0 ? (
-        <p className="settings-field-hint text-muted text-xs">Текущие модели не требуют ключей.</p>
+        <p className="settings-field-hint text-muted text-xs">{tUi("Текущие модели не требуют ключей.")}</p>
       ) : (
         <ul className="ai-key-list">
           {providers.map((provider) => {
@@ -95,18 +97,18 @@ export function ProviderKeysEditor({
             return (
               <li key={provider} className="ai-key-row">
                 <label htmlFor={inputId} className="ai-key-label">
-                  {label}
+                  {tUi(label)}
                   <span className={`ai-key-state ai-key-state--${stored ? 'ok' : 'missing'}`}>
-                    {stored ? 'ключ сохранён' : 'нет ключа'}
+                    {stored ? tUi("ключ сохранён") : tUi("нет ключа")}
                   </span>
                 </label>
-                <input
+                <input dir="auto"
                   id={inputId}
                   type="password"
                   className="settings-input settings-input--mono"
                   value={drafts[provider] ?? ''}
                   autoComplete="off"
-                  placeholder={stored ? 'Вставьте новый ключ, чтобы заменить' : 'Вставьте ключ'}
+                  placeholder={stored ? tUi("Вставьте новый ключ, чтобы заменить") : tUi("Вставьте ключ")}
                   onChange={(e) => setDrafts((d) => ({ ...d, [provider]: e.target.value }))}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -121,12 +123,10 @@ export function ProviderKeysEditor({
                   onClick={() => void saveKey(provider)}
                   disabled={!drafts[provider]?.trim()}
                   isLoading={setApiKey.isPending && setApiKey.variables?.provider === provider}
-                  aria-label={`Сохранить ключ ${label}`}
-                >
-                  Сохранить
-                </Button>
+                  aria-label={tUi("Сохранить ключ {label}", { label: label })}
+                >{tUi("Сохранить")}</Button>
                 {KEY_HINTS[provider] && (
-                  <p className="ai-key-hint text-muted text-xs">{KEY_HINTS[provider]}</p>
+                  <p className="ai-key-hint text-muted text-xs">{tUi(KEY_HINTS[provider])}</p>
                 )}
               </li>
             );
@@ -138,33 +138,29 @@ export function ProviderKeysEditor({
         <div className="ai-connection">
           {needsCloudflareAccount && (
             <div className="ai-field">
-              <label htmlFor="ai-cf-account" className="settings-label text-secondary text-xs font-medium">
-                CLOUDFLARE ACCOUNT ID
-              </label>
-              <input
+              <label htmlFor="ai-cf-account" className="settings-label text-secondary text-xs font-medium">{tUi("CLOUDFLARE ACCOUNT ID")}</label>
+              <input dir="auto"
                 id="ai-cf-account"
                 type="text"
                 className="settings-input settings-input--mono"
                 value={accountValue}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="32 hex-символа из адреса Cloudflare Dashboard"
+                placeholder={tUi("32 hex-символа из адреса Cloudflare Dashboard")}
                 aria-invalid={isCloudflareAccountIdInvalid(accountValue)}
                 onChange={(e) => setAccount(e.target.value)}
               />
               {isCloudflareAccountIdInvalid(accountValue) && (
                 <p className="settings-field-warning text-xs" role="alert">
-                  {CLOUDFLARE_ACCOUNT_ID_WARNING}
+                  {tUi(CLOUDFLARE_ACCOUNT_ID_WARNING)}
                 </p>
               )}
             </div>
           )}
           {needsBaseUrl && (
             <div className="ai-field">
-              <label htmlFor="ai-base-url" className="settings-label text-secondary text-xs font-medium">
-                АДРЕС ЛОКАЛЬНОГО СЕРВЕРА (OPENAI-СОВМЕСТИМЫЙ)
-              </label>
-              <input
+              <label htmlFor="ai-base-url" className="settings-label text-secondary text-xs font-medium">{tUi("АДРЕС ЛОКАЛЬНОГО СЕРВЕРА (OPENAI-СОВМЕСТИМЫЙ)")}</label>
+              <input dir="auto"
                 id="ai-base-url"
                 type="url"
                 className="settings-input settings-input--mono"
@@ -182,10 +178,8 @@ export function ProviderKeysEditor({
             onClick={() => void saveConnection()}
             disabled={!connectionDirty || !settings}
             isLoading={updateSettings.isPending}
-            aria-label="Сохранить параметры подключения"
-          >
-            Сохранить подключение
-          </Button>
+            aria-label={tUi("Сохранить параметры подключения")}
+          >{tUi("Сохранить подключение")}</Button>
         </div>
       )}
 

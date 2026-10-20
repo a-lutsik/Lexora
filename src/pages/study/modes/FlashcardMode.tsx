@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Flashcard Study Mode
 // Классическая карточка: слово → (необязательный выбор перевода) →
@@ -42,6 +43,7 @@ function CopyIcon() {
 }
 
 export function FlashcardMode({ entry, distractorPool, onGrade }: FlashcardModeProps) {
+  const { t: tUi } = useI18n();
   const [revealed, setRevealed] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [shownAt] = useState(() => Date.now());
@@ -86,11 +88,11 @@ export function FlashcardMode({ entry, distractorPool, onGrade }: FlashcardModeP
       <div className="study-main-col">
         <div className="study-card">
           <div className="study-card-top-badge">
-            <span>{options.length > 0 ? 'What does this mean?' : 'Do you remember this word?'}</span>
+            <span>{options.length > 0 ? tUi("What does this mean?") : tUi("Do you remember this word?")}</span>
           </div>
 
           <div className="study-card-content">
-            <h1 className="study-card-word">{lexeme.text}</h1>
+            <h1 dir="auto" className="study-card-word">{lexeme.text}</h1>
             <div className="study-card-phonetic-row">
               {lexeme.phonetic && <span className="study-card-phonetic">{lexeme.phonetic}</span>}
               <AudioButton text={lexeme.text} />
@@ -104,7 +106,7 @@ export function FlashcardMode({ entry, distractorPool, onGrade }: FlashcardModeP
               type="button"
               className="study-copy-btn"
               onClick={() => { void copyToClipboard(lexeme.text); }}
-              aria-label="Copy word"
+              aria-label={tUi("Copy word")}
             >
               <CopyIcon />
             </button>
@@ -112,7 +114,7 @@ export function FlashcardMode({ entry, distractorPool, onGrade }: FlashcardModeP
         </div>
 
         {options.length > 0 && (
-          <div className="study-options-grid" role="group" aria-label="Select translation">
+          <div className="study-options-grid" role="group" aria-label={tUi("Select translation")}>
             {options.map((opt) => {
               let className = 'study-option-card';
               if (revealed && opt.isCorrect) {
@@ -141,7 +143,7 @@ export function FlashcardMode({ entry, distractorPool, onGrade }: FlashcardModeP
             className={`study-answer-reveal${mainTranslation ? '' : ' study-answer-reveal--missing'}`}
             aria-live="polite"
           >
-            {mainTranslation ?? 'No translation saved for this word yet.'}
+            {mainTranslation ?? tUi("No translation saved for this word yet.")}
           </p>
         )}
 
@@ -150,13 +152,11 @@ export function FlashcardMode({ entry, distractorPool, onGrade }: FlashcardModeP
             type="button"
             className="study-reveal-btn"
             onClick={() => setRevealed(true)}
-            aria-label="Show translation"
-          >
-            Show Answer (Space)
-          </button>
+            aria-label={tUi("Show translation")}
+          >{tUi("Show Answer (Space)")}</button>
         ) : (
           <div className="study-revealed-section animate-slide-up">
-            <div className="study-grading-row" role="group" aria-label="Rate your recall">
+            <div className="study-grading-row" role="group" aria-label={tUi("Rate your recall")}>
               {GRADE_BUTTONS.map(({ grade, label, className }) => (
                 <button
                   key={grade}
@@ -165,37 +165,35 @@ export function FlashcardMode({ entry, distractorPool, onGrade }: FlashcardModeP
                   onClick={() => handleGrade(grade)}
                   disabled={submitReview.isPending}
                 >
-                  <span className="grade-btn-label">{label}</span>
+                  <span className="grade-btn-label">{tUi(label)}</span>
                 </button>
               ))}
             </div>
             {submitReview.isError && (
-              <p className="study-save-error" role="alert">
-                Couldn’t save your rating. Please try again.
-              </p>
+              <p className="study-save-error" role="alert">{tUi("Couldn’t save your rating. Please try again.")}</p>
             )}
           </div>
         )}
       </div>
 
       {hasContext && (
-        <aside className="study-ai-panel" aria-label="Notes and example">
+        <aside className="study-ai-panel" aria-label={tUi("Notes and example")}>
           <div className="study-ai-header">
             <span className="study-ai-icon" aria-hidden="true">📝</span>
-            <span className="study-ai-title">Context</span>
+            <span className="study-ai-title">{tUi("Context")}</span>
           </div>
           <div className="study-ai-body">
             {entry.notes && (
               <div className="study-ai-tip">
                 <span className="study-ai-bulb" aria-hidden="true">💡</span>
                 <p>
-                  <strong>Notes:</strong> <SafeHtml html={entry.notes} as="span" />
+                  <strong>{tUi("Notes:")}</strong> <SafeHtml html={entry.notes} as="span" />
                 </p>
               </div>
             )}
             {example && (
               <div className="study-ai-mnemonic">
-                <p className="study-ai-mnemonic-title">Example:</p>
+                <p className="study-ai-mnemonic-title">{tUi("Example:")}</p>
                 <p className="study-ai-mnemonic-text">{example}</p>
               </div>
             )}

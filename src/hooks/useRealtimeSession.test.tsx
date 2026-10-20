@@ -177,7 +177,7 @@ describe('useRealtimeSession', () => {
       await result.current.start({ mode: 'interpreter', targetLanguage: 'ru' });
     });
     emit({ type: 'goAway', timeLeft: '50s' });
-    expect(result.current.notice).toMatch(/15 минут/);
+    expect(result.current.notice).toMatch(/15-minute/);
     emit({ type: 'closed', reason: null });
     await waitFor(() => expect(result.current.status).toBe('idle'));
     expect(audio.trackStop).toHaveBeenCalled();

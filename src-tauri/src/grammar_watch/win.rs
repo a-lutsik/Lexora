@@ -10,13 +10,15 @@
 // ============================================================
 
 use super::logic::{self, Decision, Observation, Rect, TextEdit, WatchState};
+use super::marks::{self, MarkGeometry, Overlay};
 use super::{
-    config_snapshot, publish, refresh_language, report, ActivityCode, FieldPayload, WatchConfig,
-    BADGE_SIZE, GRAMMAR_LABEL, PANEL_EVENT, PANEL_HEIGHT, PANEL_WIDTH,
+    clear_marks, config_snapshot, publish, refresh_language, report, ActivityCode, FieldPayload,
+    MarkInput, WatchConfig, BADGE_SIZE, GRAMMAR_LABEL, PANEL_EVENT, PANEL_HEIGHT, PANEL_WIDTH,
 };
 use crate::display::{pick_bounds_for_point, LogicalBounds};
 use crate::error::AppError;
 use std::collections::HashMap;
+use std::ffi::c_void;
 use std::mem::size_of;
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
@@ -25,9 +27,14 @@ use tauri::window::Color;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use windows::core::{BSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, HWND, RECT, LPARAM, WPARAM};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::{CreateEllipticRgn, SetWindowRgn};
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
+    CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, SAFEARRAY,
+};
+use windows::Win32::System::Ole::{
+    SafeArrayAccessData, SafeArrayDestroy, SafeArrayGetLBound, SafeArrayGetUBound,
+    SafeArrayUnaccessData,
 };
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
@@ -46,7 +53,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VIRTUAL_KEY, VK_A, VK_CONTROL, VK_DELETE, VK_V,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongPtrW, GetWindowRect,
+    GetClassNameW, GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongPtrW,
+    GetWindowRect,
     GetWindowThreadProcessId, SendMessageTimeoutW, SetForegroundWindow, SetWindowLongPtrW,
     SetWindowPos, GUITHREADINFO, GWL_EXSTYLE, HWND_TOPMOST, SMTO_ABORTIFHUNG, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_SHOWWINDOW, WM_GETTEXT,
     WM_GETTEXTLENGTH, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
@@ -395,6 +403,34 @@ impl Elem {
         select().unwrap_or(false)
     }
 
+    /// Screen rectangles (physical px, one per line) of `len` UTF-16 units
+    /// from `start`. The range must hold exactly `expected`: a control that
+    /// counts characters differently (line breaks, hidden markup) would
+    /// otherwise put the underline under the wrong words.
+    fn range_rects(&self, start: usize, len: usize, expected: &str) -> Option<Vec<Rect>> {
+        let pattern = self.text_pattern()?;
+        let (start, len) = (i32::try_from(start).ok()?, i32::try_from(len).ok()?);
+        unsafe {
+            let range = pattern.DocumentRange().ok()?;
+            range
+                .MoveEndpointByRange(
+                    TextPatternRangeEndpoint_End,
+                    &range,
+                    TextPatternRangeEndpoint_Start,
+                )
+                .ok()?;
+            range.Move(TextUnit_Character, start).ok()?;
+            range
+                .MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, len)
+                .ok()?;
+            let covered = range.GetText(-1).ok()?;
+            if normalize_newlines(&covered.to_string()) != expected {
+                return None;
+            }
+            read_rectangles(range.GetBoundingRectangles().ok()?)
+        }
+    }
+
     fn select_all(&self) -> bool {
         if let Some(window) = self.scintilla() {
             return sci_send(window, SCI_SELECTALL, 0, 0).is_some();
@@ -404,6 +440,42 @@ impl Elem {
         };
         unsafe { pattern.DocumentRange().and_then(|range| range.Select()) }.is_ok()
     }
+}
+
+/// `GetBoundingRectangles` answer: a SAFEARRAY of doubles, four per line
+/// (left, top, width, height). Frees the array.
+fn read_rectangles(array: *mut SAFEARRAY) -> Option<Vec<Rect>> {
+    if array.is_null() {
+        return None;
+    }
+    let rects = unsafe {
+        let measured = (|| {
+            let lower = SafeArrayGetLBound(array, 1).ok()?;
+            let upper = SafeArrayGetUBound(array, 1).ok()?;
+            let count = usize::try_from(upper.checked_sub(lower)?.checked_add(1)?).ok()?;
+            let mut data: *mut c_void = std::ptr::null_mut();
+            SafeArrayAccessData(array, &mut data).ok()?;
+            let rects = if data.is_null() {
+                Vec::new()
+            } else {
+                std::slice::from_raw_parts(data as *const f64, count)
+                    .chunks_exact(4)
+                    .map(|line| Rect {
+                        x: line[0],
+                        y: line[1],
+                        width: line[2],
+                        height: line[3],
+                    })
+                    .filter(Rect::is_usable)
+                    .collect()
+            };
+            let _ = SafeArrayUnaccessData(array);
+            Some(rects)
+        })();
+        let _ = SafeArrayDestroy(array);
+        measured
+    };
+    rects.filter(|rects: &Vec<Rect>| !rects.is_empty())
 }
 
 fn process_exe(pid: u32) -> Option<String> {
@@ -750,6 +822,8 @@ fn tick(app: &AppHandle, automation: &IUIAutomation, observed: Probe, config: &W
     let now = Instant::now();
     let mut actions: Vec<UiAction> = Vec::new();
     let mut payload: Option<FieldPayload> = None;
+    // Typed text or another field: the underlines no longer match the text.
+    let stale_marks: bool;
     {
         let mut guard = lock_watcher();
         let watcher = guard.get_or_insert_with(|| Watcher::new(now));
@@ -798,6 +872,8 @@ fn tick(app: &AppHandle, automation: &IUIAutomation, observed: Probe, config: &W
             }
         };
 
+        stale_marks = field_changed
+            || matches!(decision, Decision::Hide | Decision::Pending { .. });
         let collapsed = watcher.panel_open && (field_changed || decision != Decision::Nothing);
         if collapsed {
             watcher.panel_open = false;
@@ -846,12 +922,17 @@ fn tick(app: &AppHandle, automation: &IUIAutomation, observed: Probe, config: &W
         }
     }
 
+    if stale_marks {
+        clear_marks(app);
+    }
     if let Some(payload) = payload {
         publish(app, payload);
     }
     for action in actions {
         run_action(app, action);
     }
+    // Follow scrolling, resizing and moving of the field.
+    marks::refresh_if_due(app);
 }
 
 fn report_field(
@@ -924,7 +1005,7 @@ fn run_action(app: &AppHandle, action: UiAction) {
 fn build_window(app: &AppHandle) -> Result<tauri::WebviewWindow, AppError> {
     let window =
         WebviewWindowBuilder::new(app, GRAMMAR_LABEL, WebviewUrl::App("grammar.html".into()))
-            .title("Lexora Writing Check")
+            .title(crate::i18n::text(app, "Lexora Writing Check"))
             .inner_size(BADGE_SIZE, BADGE_SIZE)
             .decorations(false)
             .transparent(true)
@@ -952,12 +1033,10 @@ fn place_window_async(app: &AppHandle, field: Rect, panel: bool) {
     }
 }
 
-fn place_window(app: &AppHandle, field: Rect, panel: bool) -> Result<(), AppError> {
-    let window = match app.get_webview_window(GRAMMAR_LABEL) {
-        Some(window) => window,
-        None => build_window(app)?,
-    };
-    let monitors = app.available_monitors()?;
+/// Visible work area (physical px) and scale factor of the screen that
+/// holds the point.
+pub(super) fn screen_at(app: &AppHandle, x: f64, y: f64) -> Option<(Rect, f64)> {
+    let monitors = app.available_monitors().ok()?;
     let areas: Vec<LogicalBounds> = monitors
         .iter()
         .map(|monitor| {
@@ -971,20 +1050,29 @@ fn place_window(app: &AppHandle, field: Rect, panel: bool) -> Result<(), AppErro
             )
         })
         .collect();
-    let (center_x, center_y) = field.center();
-    let no_screen = || AppError::Io("No screen available for the badge".to_string());
-    let screen = pick_bounds_for_point(center_x, center_y, &areas).ok_or_else(no_screen)?;
+    let screen = pick_bounds_for_point(x, y, &areas)?;
     let scale = areas
         .iter()
         .zip(&monitors)
         .find(|(area, _)| area.x == screen.x && area.y == screen.y)
         .map_or(1.0, |(_, monitor)| monitor.scale_factor());
-    let screen = Rect {
+    let visible = Rect {
         x: screen.x,
         y: screen.y,
         width: screen.width,
         height: screen.height,
     };
+    Some((visible, scale))
+}
+
+fn place_window(app: &AppHandle, field: Rect, panel: bool) -> Result<(), AppError> {
+    let window = match app.get_webview_window(GRAMMAR_LABEL) {
+        Some(window) => window,
+        None => build_window(app)?,
+    };
+    let (center_x, center_y) = field.center();
+    let no_screen = || AppError::Io("No screen available for the badge".to_string());
+    let (screen, scale) = screen_at(app, center_x, center_y).ok_or_else(no_screen)?;
 
     let badge = logic::badge_frame(&field, BADGE_SIZE * scale, &screen);
     let frame = if panel {
@@ -1009,18 +1097,26 @@ fn place_window(app: &AppHandle, field: Rect, panel: bool) -> Result<(), AppErro
         if !panel {
             flags |= SWP_NOACTIVATE;
         }
+        let (width, height) = (frame.width.round() as i32, frame.height.round() as i32);
         SetWindowPos(
             hwnd,
             Some(HWND_TOPMOST),
             frame.x.round() as i32,
             frame.y.round() as i32,
-            frame.width.round() as i32,
-            frame.height.round() as i32,
+            width,
+            height,
             flags,
         )
         .map_err(|e| AppError::Io(format!("Could not place the badge: {e}")))?;
+        // The badge is a circle: clip the window to one so nothing square
+        // (shadow, webview background) can show around it. The panel is
+        // a rectangle again.
         if panel {
+            SetWindowRgn(hwnd, None, true);
             let _ = SetForegroundWindow(hwnd);
+        } else {
+            // The system owns the region after this call.
+            SetWindowRgn(hwnd, Some(CreateEllipticRgn(0, 0, width, height)), true);
         }
     }
     Ok(())
@@ -1031,6 +1127,145 @@ fn hide_window(app: &AppHandle) {
         if let Err(e) = window.hide() {
             log::debug!("Failed to hide writing-check badge: {e}");
         }
+    }
+}
+
+// ── Underlines and hover card ────────────────────────────
+
+/// Talk to UI Automation from the calling thread (watcher, blocking pool).
+pub(super) fn prepare_thread() {
+    ensure_com();
+}
+
+/// Pointer position in physical screen px (the space UI Automation uses).
+pub(super) fn cursor_position() -> Option<(f64, f64)> {
+    let mut point = POINT::default();
+    unsafe { GetCursorPos(&mut point) }.ok()?;
+    Some((f64::from(point.x), f64::from(point.y)))
+}
+
+/// Where each flagged word of the tracked field is drawn. `text` is the
+/// checked (trimmed) text; words that cannot be located reliably are left out.
+pub(super) fn mark_geometry(
+    field_id: u64,
+    text: &str,
+    marks: &[MarkInput],
+) -> Option<MarkGeometry> {
+    let (element, _, fallback) = current_field(field_id).ok()?;
+    // Only UI Automation can measure text; Scintilla windows cannot.
+    element.uia()?;
+    let current = element.read_text()?;
+    // The field must still hold the text the offsets refer to.
+    let lead = logic::body_offset_utf16(&current, text)?;
+    let field_bounds = element.bounds().or(fallback)?;
+    let mut regions = Vec::new();
+    for mark in marks {
+        let Some(fragment) = logic::utf16_slice(text, mark.start, mark.end) else {
+            continue;
+        };
+        let start = lead + mark.start;
+        let len = mark.end - mark.start;
+        // Some controls count every line break as two characters.
+        let shifted = start + logic::newlines_before_utf16(&current, start);
+        let rects = element
+            .range_rects(start, len, &fragment)
+            .or_else(|| {
+                (shifted != start)
+                    .then(|| element.range_rects(shifted, len, &fragment))
+                    .flatten()
+            })
+            .unwrap_or_default();
+        if !rects.is_empty() {
+            regions.push((mark.id, rects));
+        }
+    }
+    Some(MarkGeometry {
+        field_bounds,
+        regions,
+    })
+}
+
+fn build_overlay(app: &AppHandle, overlay: Overlay) -> Result<tauri::WebviewWindow, AppError> {
+    let window = WebviewWindowBuilder::new(app, overlay.label(), WebviewUrl::App(overlay.url().into()))
+        .title(crate::i18n::text(app, "Lexora Writing Check"))
+        .inner_size(BADGE_SIZE, BADGE_SIZE)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .background_color(Color(0, 0, 0, 0))
+        .resizable(false)
+        .always_on_top(true)
+        .accept_first_mouse(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .visible(false)
+        .build()?;
+    if overlay == Overlay::Marks {
+        // Underlines never catch clicks: the text below stays editable.
+        window.set_ignore_cursor_events(true)?;
+    }
+    Ok(window)
+}
+
+/// Show an overlay window at `frame` (physical px) without taking the focus.
+pub(super) fn show_overlay(app: &AppHandle, overlay: Overlay, frame: Rect) {
+    let handle = app.clone();
+    let dispatched = app.run_on_main_thread(move || {
+        if let Err(e) = place_overlay(&handle, overlay, frame) {
+            log::debug!("Writing-check overlay placement skipped: {e}");
+        }
+    });
+    if let Err(e) = dispatched {
+        log::debug!("Failed to dispatch overlay placement: {e}");
+    }
+}
+
+fn place_overlay(app: &AppHandle, overlay: Overlay, frame: Rect) -> Result<(), AppError> {
+    let window = match app.get_webview_window(overlay.label()) {
+        Some(window) => window,
+        None => build_overlay(app, overlay)?,
+    };
+    let hwnd = window.hwnd()?;
+    let target_scale = screen_at(app, frame.x + frame.width / 2.0, frame.y + frame.height / 2.0)
+        .map(|(_, scale)| scale);
+    let position = |hwnd: HWND| unsafe {
+        SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            frame.x.round() as i32,
+            frame.y.round() as i32,
+            frame.width.round() as i32,
+            frame.height.round() as i32,
+            SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOACTIVATE,
+        )
+    };
+    unsafe {
+        let mut style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        style |= (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0) as isize;
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style);
+    }
+    position(hwnd).map_err(|e| AppError::Io(format!("Could not place the overlay: {e}")))?;
+    // Moving to a screen with another DPI makes the window resize itself
+    // to keep its logical size: put it back to the exact frame.
+    if window.scale_factor().ok() != target_scale {
+        let _ = position(hwnd);
+    }
+    Ok(())
+}
+
+/// Hidden on the main thread like `show_overlay`, so a hide always lands
+/// after the show it follows.
+pub(super) fn hide_overlay(app: &AppHandle, overlay: Overlay) {
+    let handle = app.clone();
+    let dispatched = app.run_on_main_thread(move || {
+        if let Some(window) = handle.get_webview_window(overlay.label()) {
+            if let Err(e) = window.hide() {
+                log::debug!("Failed to hide writing-check overlay: {e}");
+            }
+        }
+    });
+    if let Err(e) = dispatched {
+        log::debug!("Failed to dispatch overlay hide: {e}");
     }
 }
 
@@ -1094,6 +1329,7 @@ pub fn snooze(app: &AppHandle, field_id: u64) {
         watcher.placed_for = None;
         watcher.field.as_ref().and_then(|field| field.window)
     };
+    clear_marks(app);
     hide_window(app);
     publish(app, FieldPayload::Hidden);
     return_focus(window);

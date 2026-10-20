@@ -4,6 +4,7 @@
 // ============================================================
 
 use super::{
+    collocations_from_json, render_collocations_prompt, CollocationsRequest, CollocationsResult,
     generated_scenario_from_json, render_generate_scenario_prompt, GenerateScenarioRequest,
     GeneratedScenario,
     articulation_tip_from_json, check_writing_from_json, dialogue_turn_from_json,
@@ -205,6 +206,21 @@ impl AIProvider for CloudflareProvider {
             .await?;
         let parsed = extract_json(&content)?;
         Ok(enrich_from_json(&parsed))
+    }
+
+    async fn collocations(
+        &self,
+        req: CollocationsRequest,
+    ) -> Result<CollocationsResult, AppError> {
+        let prompt = render_collocations_prompt(&req);
+        let content = self
+            .send_completion(
+                "You are a language tutor that outputs strict JSON for word collocations.",
+                &prompt,
+            )
+            .await?;
+        let parsed = extract_json(&content)?;
+        collocations_from_json(&parsed, &req.text)
     }
 
     async fn mnemonic_concepts(

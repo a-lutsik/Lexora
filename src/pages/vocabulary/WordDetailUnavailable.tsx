@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Word Detail: «не удалось загрузить» / «слово удалено»
 // Вместо вечного "Loading…" даёт понятный итог и выход из модалки.
@@ -16,6 +17,7 @@ type WordDetailUnavailableProps = {
 };
 
 export function WordDetailUnavailable({ failed, onRetry, onClose }: WordDetailUnavailableProps) {
+  const { t: tUi } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,20 +40,16 @@ export function WordDetailUnavailable({ failed, onRetry, onClose }: WordDetailUn
     >
       <div ref={dialogRef} className="word-detail-dialog word-detail-unavailable" tabIndex={-1}>
         <h2 id="word-detail-unavailable-title" className="word-detail-unavailable-title">
-          {failed ? 'Couldn’t load this word' : 'This word is no longer in your vocabulary'}
+          {failed ? tUi("Couldn’t load this word") : tUi("This word is no longer in your vocabulary")}
         </h2>
         {failed && (
-          <p className="word-detail-unavailable-text">
-            Something went wrong while reading it from your library. Your data is not affected.
-          </p>
+          <p className="word-detail-unavailable-text">{tUi("Something went wrong while reading it from your library. Your data is not affected.")}</p>
         )}
         <div className="word-detail-unavailable-actions">
           {failed && (
-            <Button variant="primary" onClick={onRetry}>
-              Try again
-            </Button>
+            <Button variant="primary" onClick={onRetry}>{tUi("Try again")}</Button>
           )}
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{tUi("Close")}</Button>
         </div>
       </div>
     </div>

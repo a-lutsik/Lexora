@@ -1,3 +1,5 @@
+import { getLocale } from '../../i18n';
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Vocabulary pager
 // Словарь отдаётся страницами (perPage слов): без пейджера всё,
@@ -18,6 +20,7 @@ type VocabularyPagerProps = {
 };
 
 export function VocabularyPager({ page, perPage, shown, total, onPageChange }: VocabularyPagerProps) {
+  const { t: tUi } = useI18n();
   const hasPrevious = page > 1;
   // Полная страница — значит, дальше, скорее всего, есть ещё.
   const hasNext = shown >= perPage;
@@ -26,32 +29,28 @@ export function VocabularyPager({ page, perPage, shown, total, onPageChange }: V
 
   const from = (page - 1) * perPage + 1;
   const to = (page - 1) * perPage + shown;
-  const range = shown === 0 ? `Page ${page}` : `${from.toLocaleString()}–${to.toLocaleString()}`;
-  const label = total != null && shown > 0 ? `${range} of ${total.toLocaleString()}` : range;
+  const range = shown === 0 ? tUi("Page {page}", { page }) : `${from.toLocaleString(getLocale())}–${to.toLocaleString(getLocale())}`;
+  const label = total != null && shown > 0 ? tUi("{range} of {total}", { range, total: total.toLocaleString(getLocale()) }) : range;
 
   return (
-    <nav className="vocabulary-pager" aria-label="Vocabulary pages">
+    <nav className="vocabulary-pager" aria-label={tUi("Vocabulary pages")}>
       <Button
         variant="secondary"
         size="sm"
         disabled={!hasPrevious}
         onClick={() => onPageChange(page - 1)}
-        aria-label="Previous page"
-      >
-        ← Previous
-      </Button>
+        aria-label={tUi("Previous page")}
+      >{tUi("← Previous")}</Button>
       <span className="vocabulary-pager-status text-secondary text-sm" aria-live="polite">
-        {label}
+        {tUi(label)}
       </span>
       <Button
         variant="secondary"
         size="sm"
         disabled={!hasNext}
         onClick={() => onPageChange(page + 1)}
-        aria-label="Next page"
-      >
-        Next →
-      </Button>
+        aria-label={tUi("Next page")}
+      >{tUi("Next →")}</Button>
     </nav>
   );
 }

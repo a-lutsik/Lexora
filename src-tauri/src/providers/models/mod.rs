@@ -5,10 +5,14 @@
 // packages  — one-key presets that fill every role
 // router    — builds provider chains for a role, role statuses
 // usage     — counts AI calls per role and model (Settings panel)
+// health    — skips models that stopped working, for a cooldown
+// remote    — model lists published by providers for a saved key
 // ============================================================
 
 pub mod catalog;
+pub mod health;
 pub mod packages;
+pub mod remote;
 pub mod roles;
 pub mod router;
 pub mod usage;
@@ -265,6 +269,7 @@ mod tests {
             fallback_ai_model: Some("openai/gpt-oss-120b".into()),
             fallback_enabled: true,
             model_package: None,
+            advanced_models: false,
             setup_profile: Some("advanced".into()),
             image_model: "cloudflare:@cf/black-forest-labs/flux-1-schnell".into(),
             fallback_image_model: "none".into(),
@@ -308,6 +313,7 @@ mod tests {
     fn explicit_package_wins_over_legacy_columns() {
         let settings = AppSettings {
             model_package: Some("gemini".into()),
+            advanced_models: false,
             ..legacy_openai()
         };
         let routes = routes_map(initial_routes(&settings));
@@ -325,6 +331,7 @@ mod tests {
     fn paid_setup_profile_enables_illustrations() {
         let settings = AppSettings {
             model_package: None,
+            advanced_models: false,
             setup_profile: Some("paid-gemini".into()),
             ..AppSettings::default()
         };

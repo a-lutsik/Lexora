@@ -1,6 +1,6 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GrammarApp } from './GrammarApp';
 import { invokeMock, listenMock } from '../test/mocks';
 import { renderWithQueryClient } from '../test/render';
@@ -169,6 +169,50 @@ describe('GrammarApp', () => {
     expect(argsOf('exclude_grammar_app')).toEqual([{ bundleId: 'com.apple.mail' }]);
   });
 
+  it('underlines the open suggestions inside the field', async () => {
+    renderWithQueryClient(<GrammarApp />);
+    await screen.findByRole('button', { name: /2 writing suggestions/i });
+    const lastMarks = () => argsOf('set_grammar_marks').slice(-1)[0];
+    await waitFor(() => expect(lastMarks()).not.toEqual({ input: null }));
+    expect(lastMarks()).toMatchObject({
+      input: {
+        fieldId: 7,
+        text: TEXT,
+        marks: [
+          { id: 1, start: 4, end: 8, kind: 'error', original: 'dont', suggestion: "doesn't" },
+          { id: 2, start: 29, end: 31, kind: 'error', original: 'go', suggestion: 'goes' },
+        ],
+      },
+    });
+  });
+
+  it('carries out the buttons of the hover card', async () => {
+    renderWithQueryClient(<GrammarApp />);
+    await screen.findByRole('button', { name: /2 writing suggestions/i });
+    await waitFor(() => expect(listenMock).toHaveBeenCalled());
+    const cardListener = listenMock.mock.calls.find(
+      (call: unknown[]) => call[0] === 'lexora:grammar-mark-action',
+    ) as unknown as [string, (event: { payload: unknown }) => void] | undefined;
+    expect(cardListener).toBeDefined();
+
+    act(() => cardListener?.[1]({ payload: { issueId: 1, action: 'apply' } }));
+    await waitFor(() =>
+      expect(argsOf('apply_grammar_fix')).toEqual([
+        {
+          input: {
+            fieldId: 7,
+            checkedText: TEXT,
+            correctedText: "She doesn't like apples and she go home.",
+          },
+        },
+      ]),
+    );
+
+    act(() => cardListener?.[1]({ payload: { issueId: 2, action: 'dismiss' } }));
+    expect(await screen.findByRole('button', { name: /checking your text|writing suggestion|No mistakes/i })).toBeInTheDocument();
+    expect(argsOf('apply_grammar_fix')).toHaveLength(1);
+  });
+
   it('follows field events from the backend', async () => {
     field = { kind: 'hidden' };
     renderWithQueryClient(<GrammarApp />);
@@ -188,4 +232,21 @@ describe('GrammarApp', () => {
     act(() => fieldListener?.[1]({ payload: { kind: 'bogus' } }));
     expect(screen.getByRole('button', { name: /2 writing suggestions/i })).toBeInTheDocument();
   });
+});
+
+
+it('cancels the delayed panel close when its window unmounts', async () => {
+  const view = renderWithQueryClient(<GrammarApp />);
+  await openPanel();
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(screen.getByRole('button', { name: /Apply all/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(argsOf('apply_grammar_fix')).toHaveLength(1);
+    view.unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(argsOf('set_grammar_panel_open')).toEqual([{ open: true }]);
+  } finally {
+    vi.useRealTimers();
+  }
 });

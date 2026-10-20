@@ -4,6 +4,7 @@
 // ============================================================
 
 use super::{
+    collocations_from_json, render_collocations_prompt, CollocationsRequest, CollocationsResult,
     generated_scenario_from_json, render_generate_scenario_prompt, GenerateScenarioRequest,
     GeneratedScenario,
     articulation_tip_from_json, audio_translation_from_json, check_writing_from_json,
@@ -63,6 +64,44 @@ fn json_generation_config(model: &str) -> serde_json::Value {
     }
 
     serde_json::Value::Object(cfg)
+}
+
+/// Thinking levels tried in order when a Gemini 3 model rejects the current one:
+/// some models (e.g. gemini-3.8-flash) do not support "minimal".
+const THINKING_LEVEL_FALLBACKS: [Option<&str>; 2] = [Some("low"), None];
+
+/// Thinking level that worked per model, so the rejected one is not resent.
+fn thinking_overrides() -> &'static std::sync::RwLock<std::collections::HashMap<String, Option<String>>> {
+    static OVERRIDES: std::sync::OnceLock<
+        std::sync::RwLock<std::collections::HashMap<String, Option<String>>>,
+    > = std::sync::OnceLock::new();
+    OVERRIDES.get_or_init(Default::default)
+}
+
+/// True when Gemini refused the request because of the thinking configuration.
+fn is_thinking_level_rejection(err: &AppError) -> bool {
+    let text = err.to_string().to_ascii_lowercase();
+    text.contains("thinking level") && text.contains("not supported")
+}
+
+/// Set (or with `None` remove) the thinking level of a request body (pure).
+fn set_thinking_level(body: &mut serde_json::Value, level: Option<&str>) {
+    let Some(cfg) = body["generationConfig"].as_object_mut() else {
+        return;
+    };
+    match level {
+        Some(level) => {
+            cfg.insert("thinkingConfig".into(), json!({ "thinkingLevel": level }));
+        }
+        None => {
+            cfg.remove("thinkingConfig");
+        }
+    }
+}
+
+/// True when the body asks for a thinking level (Gemini 3 requests).
+fn has_thinking_level(body: &serde_json::Value) -> bool {
+    body["generationConfig"]["thinkingConfig"]["thinkingLevel"].is_string()
 }
 
 /// Build the generateContent request body (pure — no network).
@@ -165,42 +204,42 @@ impl GeminiProvider {
     }
 
     async fn send_content(&self, prompt: &str) -> Result<String, AppError> {
-        use super::rate_limit::{
-            check_response_rate_limit, RateLimitOutcome, RATE_LIMIT_MAX_RETRIES,
-        };
-
-        let url = build_request_url(&self.model, &self.api_key);
-        let body = build_request_body(prompt, &self.model);
-        let mut attempt = 0u32;
-        loop {
-            let resp = self
-                .client
-                .post(&url)
-                .json(&body)
-                .send()
-                .await
-                .map_err(|e| AppError::Http(e.to_string()))?;
-
-            match check_response_rate_limit("Gemini", resp, attempt).await {
-                RateLimitOutcome::Ok(resp) => {
-                    let json_resp: serde_json::Value = resp
-                        .json()
-                        .await
-                        .map_err(|e| AppError::Serialization(e.to_string()))?;
-                    return extract_response_text(&json_resp);
-                }
-                RateLimitOutcome::Retry => {
-                    attempt += 1;
-                    if attempt > RATE_LIMIT_MAX_RETRIES {
-                        return Err(super::rate_limit::rate_limit_error("Gemini"));
-                    }
-                }
-                RateLimitOutcome::Err(e) => return Err(e),
-            }
-        }
+        self.send_json_body(build_request_body(prompt, &self.model))
+            .await
     }
 
-    async fn send_json_body(&self, body: serde_json::Value) -> Result<String, AppError> {
+    /// Send a request, stepping down the thinking level when the model rejects it.
+    async fn send_json_body(&self, mut body: serde_json::Value) -> Result<String, AppError> {
+        if !has_thinking_level(&body) {
+            return self.send_body_once(&body).await;
+        }
+        let remembered = thinking_overrides()
+            .read()
+            .ok()
+            .and_then(|map| map.get(&self.model).cloned());
+        if let Some(level) = &remembered {
+            set_thinking_level(&mut body, level.as_deref());
+        }
+        let mut result = self.send_body_once(&body).await;
+        for level in THINKING_LEVEL_FALLBACKS {
+            match &result {
+                Err(e) if is_thinking_level_rejection(e) && has_thinking_level(&body) => {
+                    log::warn!("{} rejected its thinking level, retrying with {level:?}", self.model);
+                    set_thinking_level(&mut body, level);
+                    result = self.send_body_once(&body).await;
+                    if result.is_ok() {
+                        if let Ok(mut map) = thinking_overrides().write() {
+                            map.insert(self.model.clone(), level.map(String::from));
+                        }
+                    }
+                }
+                _ => break,
+            }
+        }
+        result
+    }
+
+    async fn send_body_once(&self, body: &serde_json::Value) -> Result<String, AppError> {
         use super::rate_limit::{
             check_response_rate_limit, RateLimitOutcome, RATE_LIMIT_MAX_RETRIES,
         };
@@ -254,6 +293,16 @@ impl AIProvider for GeminiProvider {
         let content = self.send_content(&prompt).await?;
         let parsed = extract_json(&content)?;
         Ok(enrich_from_json(&parsed))
+    }
+
+    async fn collocations(
+        &self,
+        req: CollocationsRequest,
+    ) -> Result<CollocationsResult, AppError> {
+        let prompt = render_collocations_prompt(&req);
+        let content = self.send_content(&prompt).await?;
+        let parsed = extract_json(&content)?;
+        collocations_from_json(&parsed, &req.text)
     }
 
     async fn mnemonic_concepts(
@@ -462,6 +511,28 @@ mod tests {
             "minimal"
         );
         assert!(body["generationConfig"]["temperature"].is_null());
+    }
+
+    #[test]
+    fn thinking_level_rejection_is_recognized() {
+        let err = AppError::Provider(
+            "Gemini API error 400 Bad Request: { \"message\": \"Thinking level MINIMAL is not supported for this model. Please retry with other thinking level.\" }".to_string(),
+        );
+        assert!(is_thinking_level_rejection(&err));
+        assert!(!is_thinking_level_rejection(&AppError::Provider("Gemini API error 429".into())));
+    }
+
+    #[test]
+    fn thinking_level_can_be_lowered_or_removed() {
+        let mut body = build_request_body("hi", "gemini-3.8-flash");
+        assert!(has_thinking_level(&body));
+        set_thinking_level(&mut body, Some("low"));
+        assert_eq!(body["generationConfig"]["thinkingConfig"]["thinkingLevel"], "low");
+        set_thinking_level(&mut body, None);
+        assert!(body["generationConfig"]["thinkingConfig"].is_null());
+        assert!(!has_thinking_level(&body));
+        assert_eq!(body["generationConfig"]["responseMimeType"], "application/json");
+        assert!(!has_thinking_level(&build_request_body("hi", "gemini-2.5-flash")));
     }
 
     #[test]

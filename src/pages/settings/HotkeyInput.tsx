@@ -1,3 +1,4 @@
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — HotkeyInput
 // Captures a global shortcut combo in tauri-plugin-global-shortcut
@@ -41,6 +42,7 @@ type HotkeyInputProps = {
 };
 
 export function HotkeyInput({ value, onChange, label, hasError = false }: HotkeyInputProps) {
+  const { t: tUi } = useI18n();
   const [isRecording, setIsRecording] = useState(false);
 
   const stopRecording = () => setIsRecording(false);
@@ -83,12 +85,12 @@ export function HotkeyInput({ value, onChange, label, hasError = false }: Hotkey
       onBlur={stopRecording}
       aria-label={
         isRecording
-          ? `${label}: recording, press new shortcut or Escape to cancel`
-          : `${label}: ${formatHotkey(value)}, activate to change shortcut`
+          ? tUi("{label}: recording, press new shortcut or Escape to cancel", { label: label })
+          : tUi("{label}: {value2}, activate to change shortcut", { label: label, value2: formatHotkey(value) })
       }
     >
       <kbd className="settings-kbd">
-        {isRecording ? 'Press shortcut…' : formatHotkey(value)}
+        {isRecording ? tUi("Press shortcut…") : formatHotkey(value)}
       </kbd>
     </button>
   );

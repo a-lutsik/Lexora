@@ -301,8 +301,39 @@
   gap: var(--space-3);
 }
 
-.ai-advanced-toggle {
-  align-self: flex-start;
+.ai-advanced-switch {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.ai-advanced-switch:hover,
+.ai-advanced-switch:focus-within {
+  border-color: var(--color-border-focus);
+}
+
+.ai-advanced-switch .settings-checkbox {
+  grid-row: 1 / span 2;
+  margin-top: var(--space-1);
+}
+
+.ai-advanced-switch-desc {
+  grid-column: 2;
+}
+
+.ai-advanced-switch-title {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
 }
 
 .ai-advanced-body {
@@ -363,6 +394,16 @@
   display: grid;
   grid-template-columns: minmax(8rem, 1fr) 2fr;
   gap: var(--space-2);
+}
+
+.ai-route-models-status {
+  grid-column: 1 / -1;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.ai-route-models-status--error {
+  color: var(--color-warn);
 }
 
 .ai-route-actions {

@@ -54,6 +54,7 @@ describe('WordDetail', () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'get_vocabulary_entry') return Promise.resolve(entry);
       if (cmd === 'get_image_path') return Promise.resolve('/tmp/apple.jpg');
+      if (cmd === 'list_categories') return Promise.resolve([]);
       return Promise.resolve(null);
     });
 
@@ -88,7 +89,8 @@ describe('WordDetail', () => {
         if (cmd === 'get_vocabulary_entry') {
           return failing ? Promise.reject(new Error('db is locked')) : Promise.resolve(entry);
         }
-        return Promise.resolve(null);
+        if (cmd === 'list_categories') return Promise.resolve([]);
+      return Promise.resolve(null);
       });
 
       renderDetail();
@@ -170,6 +172,7 @@ describe('WordDetail', () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'get_vocabulary_entry') return Promise.resolve(entry);
       if (cmd === 'update_vocabulary_notes') return Promise.reject(new Error('disk full'));
+      if (cmd === 'list_categories') return Promise.resolve([]);
       return Promise.resolve(null);
     });
 
@@ -192,7 +195,8 @@ describe('WordDetail', () => {
       invokeMock.mockImplementation((cmd: string) => {
         if (cmd === 'get_vocabulary_entry') return Promise.resolve(entry);
         if (cmd === 'remove_from_vocabulary') return removeResult();
-        return Promise.resolve(null);
+        if (cmd === 'list_categories') return Promise.resolve([]);
+      return Promise.resolve(null);
       });
       renderWithQueryClient(
         <MemoryRouter>

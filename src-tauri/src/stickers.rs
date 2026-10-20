@@ -398,7 +398,7 @@ fn close_sticker_window(app: &AppHandle, slot: usize, window: &WebviewWindow) ->
 /// Фильтр очереди стикеров строится только из настроек: все окна получают один
 /// и тот же фильтр, и окно с устаревшими настройками не сбрасывает ростер.
 fn sticker_queue_filters(sources: &[String], language_id: i64) -> StudyQueueFilters {
-    let restrict = !sources.is_empty() && !sources.iter().any(|s| s == STICKER_SOURCE_ALL);
+    let restrict = !sources.iter().any(|s| s == STICKER_SOURCE_ALL);
     let (include_mine, collection_ids) = if restrict {
         let collection_ids = sources
             .iter()
@@ -413,7 +413,14 @@ fn sticker_queue_filters(sources: &[String], language_id: i64) -> StudyQueueFilt
     } else {
         (None, Vec::new())
     };
+    let category_ids = if restrict {
+        sources.iter().filter_map(|token| token.strip_prefix("cat:"))
+            .filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+            .filter_map(|id| id.parse::<i64>().ok()).filter(|id| *id > 0).collect()
+    } else { Vec::new() };
     StudyQueueFilters {
+        category_ids,
+        collocations_only: false,
         language_id,
         limit: STICKER_QUEUE_LIMIT,
         include_new: true,
@@ -426,9 +433,11 @@ fn sticker_queue_filters(sources: &[String], language_id: i64) -> StudyQueueFilt
 fn filter_fingerprint(filters: &StudyQueueFilters) -> String {
     let mut cols = filters.collection_ids.clone();
     cols.sort_unstable();
+    let mut categories = filters.category_ids.clone();
+    categories.sort_unstable();
     format!(
-        "{}|{:?}|{:?}|{}",
-        filters.language_id, filters.include_mine, cols, filters.include_new
+        "{}|{:?}|{:?}|{:?}|{}",
+        filters.language_id, filters.include_mine, cols, categories, filters.include_new
     )
 }
 
@@ -629,7 +638,7 @@ pub fn apply_sticker_policy(app: &AppHandle) -> Result<(), AppError> {
         }
 
         let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("sticker.html".into()))
-            .title("Lexora Sticker")
+            .title(crate::i18n::text(app, "Lexora Sticker"))
             .inner_size(STICKER_WIDTH, STICKER_HEIGHT)
             .decorations(false)
             .transparent(true)
@@ -939,7 +948,7 @@ mod tests {
 
     #[test]
     fn sticker_filters_without_restriction_take_every_word() {
-        for tokens in [&["all"][..], &[], &["all", "c:3"]] {
+        for tokens in [&["all"][..], &["all", "c:3"]] {
             let filters = sticker_queue_filters(&sources(tokens), 2);
             assert_eq!(filters.include_mine, None, "{tokens:?}");
             assert!(filters.collection_ids.is_empty(), "{tokens:?}");
@@ -947,6 +956,18 @@ mod tests {
             assert_eq!(filters.limit, STICKER_QUEUE_LIMIT);
             assert!(filters.include_new && filters.include_mature_refresh);
         }
+    }
+
+    #[test]
+    fn sticker_categories_do_not_enable_all_user_words() {
+        let filters = sticker_queue_filters(&sources(&["cat:2", "cat:5", "c:9"]), 1);
+        assert_eq!(filters.include_mine, Some(false));
+        assert_eq!(filters.category_ids, vec![2, 5]);
+        assert_eq!(filters.collection_ids, vec![9]);
+        let empty = sticker_queue_filters(&[], 1);
+        assert_eq!(empty.include_mine, Some(false));
+        assert!(empty.category_ids.is_empty() && empty.collection_ids.is_empty());
+        assert_ne!(filter_fingerprint(&filters), filter_fingerprint(&empty));
     }
 
     #[test]
@@ -1253,7 +1274,8 @@ mod macos {
         );
         ns_window.setHidesOnDeactivate(false);
         ns_window.setCanHide(false);
-        ns_window.setLevel(NSNormalWindowLevel);
+        // Уровень окна не трогаем: его задаёт apply_pin_level (при создании —
+        // незакреплённый), иначе каждый повторный показ снимал бы закрепление.
         Ok(())
     }
 

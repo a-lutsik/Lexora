@@ -1,3 +1,5 @@
+import { collectionDisplayName } from '../../lib/collectionLabels';
+import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Collections Page
 // System packs: Load into DB (lazy) → Enable in SRS.
@@ -20,6 +22,7 @@ import './collections.css';
 const PACK_LOAD_EVENT = 'lexora:pack-load-progress';
 
 export default function CollectionsPage() {
+  const { t: tUi } = useI18n();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [loadProgress, setLoadProgress] = useState<PackLoadProgress | null>(null);
   const [withImages, setWithImages] = useState(false);
@@ -69,7 +72,7 @@ export default function CollectionsPage() {
         total: 0,
         phase: 'error',
         text: null,
-        error: formatIpcError(err, 'Could not load this pack. Check the AI provider in Settings.'),
+        error: formatIpcError(err, tUi("Could not load this pack. Check the AI provider in Settings.")),
       });
     },
   });
@@ -78,20 +81,15 @@ export default function CollectionsPage() {
     <div className="collections-page animate-fade-in">
       <div className="collections-header">
         <div>
-          <h1 className="collections-title">Collections</h1>
-          <p className="text-secondary text-sm">
-            Curated lists for your learning language. Load a pack into the database when you need it,
-            then enable it in SRS.
-          </p>
+          <h1 className="collections-title">{tUi("Collections")}</h1>
+          <p className="text-secondary text-sm">{tUi("Curated lists for your learning language. Load a pack into the database when you need it, then enable it in SRS.")}</p>
         </div>
         <Button
           variant="primary"
           size="md"
           onClick={() => setIsCreateOpen(true)}
-          aria-label="Create new collection"
-        >
-          + New Collection
-        </Button>
+          aria-label={tUi("Create new collection")}
+        >{tUi("+ New Collection")}</Button>
       </div>
 
       {loadProgress && (
@@ -101,19 +99,16 @@ export default function CollectionsPage() {
           aria-live="polite"
         >
           {loadProgress.phase === 'error' ? (
-            <span className="text-sm collections-load-error">
-              Load failed:{' '}
+            <span className="text-sm collections-load-error">{tUi("Load failed:")}{' '}
               {formatIpcError(
                 loadProgress.error,
-                'Could not load this pack. Check the AI provider in Settings.',
+                tUi("Could not load this pack. Check the AI provider in Settings."),
               )}
             </span>
           ) : (
-            <span className="text-sm text-secondary">
-              Loading pack… {loadProgress.done}/{loadProgress.total}
+            <span className="text-sm text-secondary">{tUi("Loading pack… ")}{loadProgress.done}/{loadProgress.total}
               {loadProgress.text ? ` — ${loadProgress.text}` : ''}
-              {' '}({loadProgress.phase}). Runs in the background.
-            </span>
+              {' '}({loadProgress.phase}{tUi("). Runs in the background.")}</span>
           )}
           {loadProgress.total > 0 && loadProgress.phase !== 'error' && (
             <div
@@ -140,31 +135,25 @@ export default function CollectionsPage() {
       )}
 
       <label className="collections-images-option text-secondary text-sm">
-        <input
+        <input dir="auto"
           type="checkbox"
           checked={withImages}
           onChange={(e) => setWithImages(e.target.checked)}
-        />
-        Also fetch pictures when loading a pack (slower; sends each word to your image provider)
-      </label>
+        />{tUi("Also fetch pictures when loading a pack (slower; sends each word to your image provider)")}</label>
 
       {toggleMutation.isError && (
-        <p className="collections-error text-sm" role="alert">
-          Couldn’t update this collection. Please try again.
-        </p>
+        <p className="collections-error text-sm" role="alert">{tUi("Couldn’t update this collection. Please try again.")}</p>
       )}
 
       {isError && !isLoading && (
         <div className="collections-error-block" role="alert">
-          <p className="text-secondary text-sm">Couldn’t load your collections.</p>
-          <Button variant="secondary" size="md" onClick={() => void refetch()}>
-            Try again
-          </Button>
+          <p className="text-secondary text-sm">{tUi("Couldn’t load your collections.")}</p>
+          <Button variant="secondary" size="md" onClick={() => void refetch()}>{tUi("Try again")}</Button>
         </div>
       )}
 
       {isLoading ? (
-        <div className="text-muted text-sm animate-pulse">Loading collections…</div>
+        <div className="text-muted text-sm animate-pulse">{tUi("Loading collections…")}</div>
       ) : (
         <div className="collections-grid">
           {collections?.map((col) => {
@@ -184,7 +173,7 @@ export default function CollectionsPage() {
               <div key={col.id} className="collection-card">
                 <div className="collection-card-header">
                   <div>
-                    <h3 className="collection-name">{col.name}</h3>
+                    <h3 className="collection-name">{collectionDisplayName(col)}</h3>
                     <p className="text-muted text-xs">{col.description}</p>
                   </div>
                   <Badge variant={col.collectionType === 'system' ? 'accent' : 'neutral'}>
@@ -195,7 +184,7 @@ export default function CollectionsPage() {
                 <div className="collection-card-footer">
                   <span className="text-secondary text-xs">
                     {needsLoad && expected
-                      ? `Not loaded · ~${pluralize(expected, 'word')}`
+                      ? tUi("Not loaded · ~{value1}", { value1: pluralize(expected, 'word') })
                       : pluralize(col.wordCount, 'word')}
                   </span>
 
@@ -211,37 +200,30 @@ export default function CollectionsPage() {
                           done: 0,
                           total: expected ?? 0,
                           phase: 'words',
-                          text: 'Starting…',
+                          text: tUi("Starting…"),
                           error: null,
                         });
                         loadMutation.mutate({ id: col.id, images: withImages });
                       }}
-                      aria-label={`Load ${col.name} into database`}
+                      aria-label={tUi("Load {value1} into database", { value1: collectionDisplayName(col) })}
                     >
-                      {status === 'error' ? 'Retry Load' : 'Load into database'}
+                      {status === 'error' ? tUi("Retry Load") : tUi("Load into database")}
                     </Button>
                   ) : confirmingDisableId === col.id ? (
-                    <div className="collection-confirm" role="group" aria-label={`Confirm disabling ${col.name}`}>
-                      <p className="collection-confirm-text text-xs">
-                        Disable “{col.name}”? Its words leave your vocabulary and study queue
-                        (unless another active pack has them) and return when you enable it again.
-                      </p>
+                    <div className="collection-confirm" role="group" aria-label={tUi("Confirm disabling {value1}", { value1: collectionDisplayName(col) })}>
+                      <p className="collection-confirm-text text-xs">{tUi("Disable “")}{collectionDisplayName(col)}{tUi("”? Its words leave your vocabulary and study queue (unless another active pack has them) and return when you enable it again.")}</p>
                       <div className="collection-confirm-actions">
                         <Button
                           variant="danger"
                           size="sm"
                           isLoading={toggleMutation.isPending}
                           onClick={() => toggleMutation.mutate({ id: col.id, active: false })}
-                        >
-                          Disable
-                        </Button>
+                        >{tUi("Disable")}</Button>
                         <Button
                           size="sm"
                           disabled={toggleMutation.isPending}
                           onClick={() => setConfirmingDisableId(null)}
-                        >
-                          Keep enabled
-                        </Button>
+                        >{tUi("Keep enabled")}</Button>
                       </div>
                     </div>
                   ) : (
@@ -251,8 +233,8 @@ export default function CollectionsPage() {
                       isLoading={toggleMutation.isPending && toggleMutation.variables?.id === col.id}
                       aria-label={
                         col.isActive
-                          ? `Active in SRS, disable ${col.name}`
-                          : `Enable ${col.name} in SRS`
+                          ? tUi("Active in SRS, disable {value1}", { value1: collectionDisplayName(col) })
+                          : tUi("Enable {value1} in SRS", { value1: collectionDisplayName(col) })
                       }
                       onClick={() => {
                         if (col.isActive) {
@@ -263,7 +245,7 @@ export default function CollectionsPage() {
                         }
                       }}
                     >
-                      {col.isActive ? '✓ Active in SRS' : 'Enable in SRS'}
+                      {col.isActive ? tUi("✓ Active in SRS") : tUi("Enable in SRS")}
                     </Button>
                   )}
                 </div>

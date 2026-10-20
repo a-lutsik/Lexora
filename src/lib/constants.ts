@@ -26,6 +26,7 @@ export const DEFAULT_VOCABULARY_FILTERS = {
   languageId: null,
   status: 'all' as const,
   collectionId: null,
+  categoryId: null,
   sortBy: 'added_date' as const,
   sortDir: 'desc' as const,
   page: 1,
@@ -44,6 +45,8 @@ export const QUERY_KEYS = {
   STUDY_QUEUE:  'study-queue',
   STICKER_CARD: 'sticker-card',
   COLLECTIONS:  'collections',
+  CATEGORIES: 'categories',
+  COLLOCATIONS: 'collocations',
   LANGUAGES:    'languages',
   SETTINGS:     'settings',
   STATS:        'stats',
@@ -57,11 +60,15 @@ export const QUERY_KEYS = {
   DIALOGUE_SESSION: 'dialogue-session',
   MODEL_ROUTES: 'model-routes',
   MODEL_CATALOG: 'model-catalog',
+  PROVIDER_MODELS: 'provider-models',
   AI_USAGE: 'ai-usage',
   GRAMMAR_WATCH_SETTINGS: 'grammar-watch-settings',
   GRAMMAR_WATCH_STATUS: 'grammar-watch-status',
   GRAMMAR_CHECK: 'grammar-check',
 } as const;
+
+/** Most underlines drawn in another app's field at once (keep in sync with `MAX_MARKS` in grammar_watch/mod.rs). */
+export const MAX_GRAMMAR_MARKS = 32;
 
 /** Backend events emitted with `app.emit`. */
 export const APP_EVENTS = {
@@ -71,6 +78,12 @@ export const APP_EVENTS = {
   GRAMMAR_FIELD: 'lexora:grammar-field',
   /** The backend collapsed the writing-check panel (payload: `false`). */
   GRAMMAR_PANEL: 'lexora:grammar-panel',
+  /** Underline rectangles for the overlay window (`GrammarMarksPayload`). */
+  GRAMMAR_MARKS: 'lexora:grammar-marks',
+  /** The suggestion shown in the hover card (`GrammarMark`, or null). */
+  GRAMMAR_CARD: 'lexora:grammar-card',
+  /** A button was pressed in the hover card (`GrammarMarkAction`). */
+  GRAMMAR_MARK_ACTION: 'lexora:grammar-mark-action',
 } as const;
 
 export const STALE_TIME = {

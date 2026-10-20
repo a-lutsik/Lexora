@@ -61,6 +61,7 @@ describe('AddWordModal', () => {
           reviewState: null,
         });
       }
+      if (cmd === 'list_categories') return Promise.resolve([]);
       return Promise.resolve(null);
     });
 
@@ -122,6 +123,7 @@ describe('AddWordModal', () => {
       if (cmd === 'translate_text') {
         return Promise.reject(new Error('Empty response from Gemini (finishReason: MAX_TOKENS)'));
       }
+      if (cmd === 'list_categories') return Promise.resolve([]);
       return Promise.resolve(null);
     });
 
@@ -138,6 +140,7 @@ describe('AddWordModal', () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'translate_text') return Promise.resolve(translationResult);
+      if (cmd === 'list_categories') return Promise.resolve([]);
       return Promise.resolve(null);
     });
 
@@ -172,4 +175,59 @@ describe('AddWordModal', () => {
     expect(screen.getByLabelText(/personal notes/i)).toHaveValue('');
     expect(screen.queryByText('яблоко')).not.toBeInTheDocument();
   });
+});
+
+describe('AddWordModal categories', () => {
+  it('saves the chosen category with the word', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_categories') return Promise.resolve([
+        { id: 1, languageId: 1, name: 'General', isGeneral: true, wordCount: 0 },
+        { id: 2, languageId: 1, name: 'Travel', isGeneral: false, wordCount: 0 },
+      ]);
+      if (cmd === 'list_categories') return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithQueryClient(<AddWordModal isOpen onClose={() => undefined} />);
+    await screen.findByRole('option', { name: 'Travel' });
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Category' }), '2');
+    await user.type(screen.getByRole('textbox', { name: 'Word or phrase to translate' }), 'airport');
+    await user.click(screen.getByRole('button', { name: '+ Add to Vocabulary' }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('add_to_vocabulary', {
+      input: expect.objectContaining({ text: 'airport', categoryId: 2 }),
+    }));
+  });
+
+  it('never silently replaces an explicitly chosen unavailable category with General', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_categories') return Promise.reject(new Error('offline database'));
+      if (cmd === 'add_to_vocabulary') return Promise.reject(new Error('Category no longer exists'));
+      if (cmd === 'list_categories') return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    renderWithQueryClient(<AddWordModal isOpen initialCategoryId={99} onClose={() => undefined} />);
+    await user.type(screen.getByRole('textbox', { name: 'Word or phrase to translate' }), 'airport');
+    await user.click(screen.getByRole('button', { name: '+ Add to Vocabulary' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Category no longer exists');
+    expect(invokeMock).toHaveBeenCalledWith('add_to_vocabulary', {
+      input: expect.objectContaining({ categoryId: 99 }),
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+it('uses the stored General id when adding without selecting another category', async () => {
+  const user = userEvent.setup();
+  invokeMock.mockImplementation((cmd: string) => {
+    if (cmd === 'list_categories') return Promise.resolve([{ id: 17, languageId: 1, name: 'General', isGeneral: true, wordCount: 0 }]);
+    return Promise.resolve(null);
+  });
+  renderWithQueryClient(<AddWordModal isOpen onClose={() => undefined} />);
+  await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('list_categories', { languageId: 1 }));
+  await user.type(screen.getByRole('textbox', { name: 'Word or phrase to translate' }), 'apple');
+  await user.click(screen.getByRole('button', { name: '+ Add to Vocabulary' }));
+  await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('add_to_vocabulary', {
+    input: expect.objectContaining({ categoryId: 17 }),
+  }));
 });

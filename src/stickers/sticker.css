@@ -58,6 +58,7 @@ html body {
   flex-direction: column;
   justify-content: space-between;
   position: relative;
+  cursor: move;
   overflow: hidden;
   animation: sticker-enter var(--transition-slow) both;
   transition:
@@ -92,7 +93,6 @@ html body {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  cursor: move;
 }
 
 .sticker-word-block {
@@ -286,6 +286,7 @@ html body {
   -webkit-backdrop-filter: var(--glass-blur);
   padding: var(--space-2) var(--space-3);
   overflow: auto;
+  cursor: default;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -391,4 +392,37 @@ html body {
   .sticker-card {
     animation: none;
   }
+}
+
+.sticker-empty-topic {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.sticker-empty-topic p {
+  margin: 0;
+}
+
+.sticker-source-empty-button {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: var(--glass-border);
+  border-radius: var(--radius-sm);
+  min-height: var(--space-12);
+  cursor: pointer;
+}
+
+.sticker-source-empty-button:hover,
+.sticker-source-empty-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: var(--space-1);
+}
+
+.sticker-empty-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.sticker-empty-actions > button {
+  min-width: var(--space-12);
 }

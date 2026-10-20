@@ -6,6 +6,7 @@
 // size-модификатор — в ./domain.css.
 // ============================================================
 
+import { useI18n } from "../../hooks/useI18n";
 import { useEffect, useRef, useState } from 'react';
 import { ipc } from '../../lib/ipc';
 import { cx } from '../../lib/utils';
@@ -38,10 +39,11 @@ export function AudioButton({
   text,
   language,
   size = 'md',
-  ariaLabel = 'Play pronunciation',
+  ariaLabel,
   onSpeak,
   onPlayed,
 }: AudioButtonProps) {
+  const { t: tUi } = useI18n();
   const [isPlaying, setIsPlaying] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -71,7 +73,7 @@ export function AudioButton({
       className={cx('popup-audio-btn', size === 'sm' && 'popup-audio-btn--sm')}
       onClick={handleClick}
       disabled={isPlaying}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? tUi("Play pronunciation")}
     >
       <SpeakerIcon size={size === 'sm' ? 13 : 15} />
     </button>

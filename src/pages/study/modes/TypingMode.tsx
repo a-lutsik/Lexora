@@ -1,3 +1,4 @@
+import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Typing Study Mode
 // Input text box, instant feedback with typo tolerance.
@@ -17,6 +18,7 @@ type TypingModeProps = {
 };
 
 export function TypingMode({ entry, onComplete }: TypingModeProps) {
+  const { t: tUi } = useI18n();
   const [input, setInput] = useState('');
   const [result, setResult] = useState<EvaluationResult | null>(null);
   const startTime = useRef<number>(Date.now());
@@ -69,9 +71,7 @@ export function TypingMode({ entry, onComplete }: TypingModeProps) {
 
       {/* Prompt: Translation to translate back */}
       <div className="typing-prompt">
-        <div className="typing-prompt-label">
-          Translate into target language:
-        </div>
+        <div className="typing-prompt-label">{tUi("Translate into target language:")}</div>
         <div className="typing-prompt-word">
           {mainTranslation}
         </div>
@@ -79,18 +79,18 @@ export function TypingMode({ entry, onComplete }: TypingModeProps) {
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="typing-form">
-        <input
+        <input dir="auto"
           ref={inputRef}
           type="text"
           className="typing-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type in English…"
+          placeholder={tUi("Type in English…")}
           disabled={result !== null}
           autoComplete="off"
           autoCorrect="off"
           spellCheck={false}
-          aria-label="Your answer"
+          aria-label={tUi("Your answer")}
         />
 
         {!result && (
@@ -100,9 +100,7 @@ export function TypingMode({ entry, onComplete }: TypingModeProps) {
               variant="primary"
               size="md"
               isLoading={evaluateMutation.isPending}
-            >
-              Check Answer (↵)
-            </Button>
+            >{tUi("Check Answer (↵)")}</Button>
           </div>
         )}
       </form>
@@ -119,16 +117,14 @@ export function TypingMode({ entry, onComplete }: TypingModeProps) {
           }`}
         >
           <div className="typing-feedback-title">
-            {result.isCorrect ? '✓ Excellent!' : `Expected: ${result.correctAnswer}`}
+            {result.isCorrect ? tUi("✓ Excellent!") : tUi("Expected: {value1}", { value1: result.correctAnswer })}
           </div>
           {result.explanation && (
             <SafeHtml html={result.explanation} className="typing-feedback-explanation" />
           )}
 
           <div className="typing-feedback-actions">
-            <Button variant="secondary" size="md" onClick={handleNext}>
-              Continue (Space)
-            </Button>
+            <Button variant="secondary" size="md" onClick={handleNext}>{tUi("Continue (Space)")}</Button>
           </div>
         </div>
       )}
