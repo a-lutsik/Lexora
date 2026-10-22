@@ -8,9 +8,9 @@ const catalogs: Record<string, Record<string, string>> = Object.fromEntries(
   ]),
 );
 const routes = [
-  ['vocabulary', 'My Vocabulary'], ['study', 'Study Session'], ['writing', 'Writing Assistant'],
-  ['translate', 'Translation Hub'], ['pronunciation', 'Pronunciation Coach'],
-  ['collections', 'Collections'], ['stats', 'Learning Statistics'], ['settings', 'Settings'],
+  ['vocabulary', 'Vocabulary'], ['study', 'Study'], ['writing', 'Writing'],
+  ['translate', 'Translate'], ['pronunciation', 'Speak'],
+  ['collections', 'Collections'], ['stats', 'Statistics'], ['settings', 'Settings'],
 ];
 
 for (const [locale, dictionary] of Object.entries(catalogs)) {
@@ -34,16 +34,18 @@ for (const [locale, dictionary] of Object.entries(catalogs)) {
       await expect(page.getByRole('link', { name: dictionary['Settings'], exact: true })).toBeVisible();
     }
     await page.goto('/#/dialogue');
-    await expect(page.getByRole('tab', { name: dictionary['AI Dialogue'], exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: dictionary['Conversation'], exact: true })).toBeVisible();
 
     // Exercise dynamic metadata, without translating the learner's English text.
     await page.goto('/#/writing');
     await page.locator('textarea').fill('She go to school yesterday.');
     await page.getByRole('button', { name: dictionary['Check writing'], exact: true }).click();
-    await page.locator('.writing-issues-summary').click();
     await expect(page.locator('.writing-issue--pending')).toBeVisible();
+    // The explanation lives in the collapsible card: open it first.
+    await page.locator('.writing-issue--pending .writing-issue__head').first().click();
     await expect(page.locator('.writing-issue-meta').getByText(dictionary['Grammar'], { exact: true }).first()).toBeVisible();
-    await expect(page.locator('.writing-issue-meta').getByText(dictionary['error'], { exact: true }).first()).toBeVisible();
+    // Severity is the dot's colour; its translated name is kept for screen readers.
+    await expect(page.locator('.writing-issue-meta').getByText(dictionary['error'], { exact: true }).first()).toBeAttached();
     await expect(page.getByText('Past tense requires "went".', { exact: true })).toBeVisible();
     if (locale === 'fr') await page.screenshot({ path: info.outputPath('french-writing.png') });
 

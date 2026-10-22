@@ -28,18 +28,22 @@ test('categories support creation, filtered adding, moving and sticker sources',
     };
   });
 
-  await page.getByRole('button', { name: '+ Category', exact: true }).click();
+  // Category creation is the last entry of the category filter list (frame 1a has no separate button).
+  await page.getByRole('combobox', { name: 'Filter by category' }).click();
+  await page.getByRole('option', { name: 'New category…', exact: true }).click();
   await page.getByRole('textbox', { name: 'Category name' }).fill('Work');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__categoryCalls')))
     .toContainEqual({ cmd: 'create_category', args: { name: 'Work', languageId: 1 } });
 
-  await page.getByRole('combobox', { name: 'Filter by category' }).selectOption('2');
+  await page.getByRole('combobox', { name: 'Filter by category' }).click();
+  await page.getByRole('option', { name: 'Travel', exact: true }).click();
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__categoryCalls')))
     .toContainEqual({ cmd: 'list_vocabulary', args: { filters: expect.objectContaining({ categoryId: 2, page: 1 }) } });
   await page.getByRole('checkbox', { name: 'Select apple', exact: true }).check();
-  await page.getByRole('combobox', { name: 'Move to category', exact: true }).selectOption('2');
+  await page.getByRole('combobox', { name: 'Move to category', exact: true }).click();
+  await page.getByRole('option', { name: 'Travel', exact: true }).click();
   await page.getByRole('button', { name: 'Move selected', exact: true }).click();
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__categoryCalls')))
     .toContainEqual({ cmd: 'move_vocabulary_to_category', args: { ids: [1], categoryId: 2 } });
@@ -55,16 +59,16 @@ test('categories support creation, filtered adding, moving and sticker sources',
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: '/private/tmp/lexora-categories.png' });
 
-  await page.getByRole('button', { name: 'Add Word', exact: true }).click();
-  await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Category', exact: true })).toHaveValue('2');
+  await page.getByRole('button', { name: 'Add word', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Category', exact: true })).toHaveText('Travel');
   await page.getByRole('textbox', { name: 'Word or phrase to translate' }).fill('airport');
-  await page.getByRole('button', { name: '+ Add to Vocabulary', exact: true }).click();
+  await page.getByRole('button', { name: 'Add to vocabulary', exact: true }).click();
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__categoryCalls')))
     .toContainEqual({ cmd: 'add_to_vocabulary', args: { input: expect.objectContaining({ text: 'airport', categoryId: 2 }) } });
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Stickers', exact: true }).click();
+  await page.getByRole('button', { name: 'Stickers & ambient review', exact: true }).click();
   const sourcePicker = page.getByRole('group', { name: 'Words on stickers' });
   await sourcePicker.getByText('Categories', { exact: true }).click();
   await expect(sourcePicker.locator('details').getByRole('checkbox', { name: 'Travel', exact: true })).toBeVisible();
@@ -73,16 +77,14 @@ test('categories support creation, filtered adding, moving and sticker sources',
   await sourcePicker.locator('details').getByRole('checkbox', { name: 'Travel', exact: true }).check();
   await expect(sourcePicker.locator('details').getByRole('checkbox', { name: 'Travel', exact: true })).toBeChecked();
   await expect(sourcePicker.locator('details').getByRole('checkbox', { name: 'General', exact: true })).not.toBeChecked();
-  await page.getByRole('button', { name: 'Save Settings', exact: true }).click();
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__categoryCalls')))
     .toContainEqual({ cmd: 'update_settings', args: { settings: expect.objectContaining({ stickerSources: ['cat:2'] }) } });
   await sourcePicker.locator('details').getByRole('checkbox', { name: 'Travel', exact: true }).uncheck();
-  await page.getByRole('button', { name: 'Save Settings', exact: true }).click();
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__categoryCalls')))
     .toContainEqual({ cmd: 'update_settings', args: { settings: expect.objectContaining({ stickerSources: [] }) } });
   await expect(sourcePicker.getByRole('checkbox', { name: 'All vocabulary', exact: true })).not.toBeChecked();
   await page.getByRole('link', { name: 'Vocabulary', exact: true }).click();
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Stickers', exact: true }).click();
+  await page.getByRole('button', { name: 'Stickers & ambient review', exact: true }).click();
   await expect(page.getByRole('group', { name: 'Words on stickers' }).getByRole('checkbox', { name: 'All vocabulary', exact: true })).not.toBeChecked();
 });

@@ -1,21 +1,23 @@
 // ============================================================
 // LEXORA — E2E Test 13: Settings navigation
-// Settings is one long scroll; every section must be reachable in one
-// click from the sticky bar, and none may hide under it.
+// Settings is two columns: grouped sections on the left, exactly
+// one section open on the right. Every section is one click away
+// and can be opened by deep link.
 // ============================================================
 
 import { test, expect } from '@playwright/test';
 import { mockTauriIpc } from './helpers/tauri-mock';
 
-const SECTIONS: Array<{ link: string; id: string }> = [
-  { link: 'AI models', id: 'settings-ai-models' },
-  { link: 'AI usage', id: 'settings-ai-usage' },
-  { link: 'Language', id: 'settings-language' },
-  { link: 'Privacy', id: 'settings-privacy' },
-  { link: 'Writing check', id: 'settings-writing-check' },
-  { link: 'Stickers', id: 'settings-stickers' },
-  { link: 'Shortcuts', id: 'settings-shortcuts' },
-  { link: 'Backup', id: 'settings-backup' },
+const SECTIONS: Array<{ link: string; id: string; group: string }> = [
+  { link: 'AI models', id: 'settings-ai-models', group: 'AI' },
+  { link: 'AI usage', id: 'settings-ai-usage', group: 'AI' },
+  { link: 'Languages', id: 'settings-language', group: 'Learning' },
+  { link: 'Appearance', id: 'settings-appearance', group: 'Desktop' },
+  { link: 'Writing check in other apps', id: 'settings-writing-check', group: 'Desktop' },
+  { link: 'Stickers & ambient review', id: 'settings-stickers', group: 'Desktop' },
+  { link: 'Global shortcuts', id: 'settings-shortcuts', group: 'Desktop' },
+  { link: 'Privacy', id: 'settings-privacy', group: 'Data' },
+  { link: 'Backup & export', id: 'settings-backup', group: 'Data' },
 ];
 
 test.describe('Settings navigation', () => {
@@ -30,36 +32,48 @@ test.describe('Settings navigation', () => {
     await page.waitForSelector('.settings-page');
   });
 
-  test('the nav lists every section and every target exists', async ({ page }) => {
+  test('the nav lists every section in its group and opens AI models first', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Settings sections' });
     await expect(nav.getByRole('button')).toHaveCount(SECTIONS.length);
     for (const section of SECTIONS) {
-      await expect(nav.getByRole('button', { name: section.link, exact: true })).toBeVisible();
-      await expect(page.locator(`#${section.id}`)).toHaveCount(1);
+      const group = nav.getByRole('group', { name: section.group });
+      await expect(group.getByRole('button', { name: section.link, exact: true })).toBeVisible();
     }
+    await expect(page.locator('#settings-ai-models')).toBeVisible();
+    await expect(nav.getByRole('button', { name: 'AI models', exact: true })).toHaveAttribute('aria-current', 'page');
   });
 
   for (const section of SECTIONS) {
-    test(`«${section.link}» jumps to its section, below the bar`, async ({ page }) => {
+    test(`«${section.link}» opens its section and closes the others`, async ({ page }) => {
       const nav = page.getByRole('navigation', { name: 'Settings sections' });
       await nav.getByRole('button', { name: section.link, exact: true }).click();
-      const target = page.locator(`#${section.id}`);
-      await expect(target).toBeInViewport();
-      const navBox = await nav.boundingBox();
-      const targetBox = await target.boundingBox();
-      if (!navBox || !targetBox) throw new Error('Nav or section is not laid out');
-      expect(targetBox.y).toBeGreaterThanOrEqual(navBox.y + navBox.height - 1);
+      await expect(page.locator(`#${section.id}`)).toBeVisible();
+      await expect(nav.getByRole('button', { name: section.link, exact: true })).toHaveAttribute('aria-current', 'page');
+      for (const other of SECTIONS) {
+        if (other.id !== section.id) await expect(page.locator(`#${other.id}`)).toHaveCount(0);
+      }
+      // The open section is kept in the URL, so reload and deep links land on it.
+      await expect(page).toHaveURL(new RegExp(`section=${section.id.replace('settings-', '')}`));
     });
   }
 
-  test('the nav stays visible while scrolling', async ({ page }) => {
+  test('a deep link opens the section directly', async ({ page }) => {
+    await page.goto('/#/settings?section=backup');
+    await expect(page.locator('#settings-backup')).toBeVisible();
+    await expect(page.locator('#settings-ai-models')).toHaveCount(0);
+  });
+
+  test('the search box narrows the list to matching sections', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Settings sections' });
-    await nav.getByRole('button', { name: 'Backup', exact: true }).click();
-    await expect(nav).toBeInViewport({ ratio: 1 });
+    await nav.getByRole('searchbox', { name: 'Search settings' }).fill('stick');
+    await expect(nav.getByRole('button')).toHaveCount(1);
+    await expect(nav.getByRole('button', { name: 'Stickers & ambient review', exact: true })).toBeVisible();
+    await nav.getByRole('searchbox', { name: 'Search settings' }).fill('zzz');
+    await expect(nav.getByRole('status')).toHaveText('No settings match your search');
   });
 
   test('the writing check setting is one click away', async ({ page }, info) => {
-    await page.getByRole('button', { name: 'Writing check', exact: true }).click();
+    await page.getByRole('button', { name: 'Writing check in other apps', exact: true }).click();
     const toggle = page.getByRole('checkbox', { name: 'Suggest fixes while I type in any app' });
     await expect(toggle).toBeInViewport();
     await info.attach('writing-check', { body: await page.screenshot(), contentType: 'image/png' });

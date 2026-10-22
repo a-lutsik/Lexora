@@ -17,8 +17,8 @@ test.describe('AI Dialogue', () => {
     await expect(nav).toBeVisible();
     await expect(nav).toHaveClass(/active/);
 
-    const dialogueTab = page.getByRole('tab', { name: 'AI Dialogue' });
-    const scenariosTab = page.getByRole('tab', { name: 'Practice Scenarios' });
+    const dialogueTab = page.getByRole('tab', { name: 'Conversation', exact: true });
+    const scenariosTab = page.getByRole('tab', { name: 'Scenarios', exact: true });
     await expect(dialogueTab).toBeVisible();
     await expect(scenariosTab).toBeVisible();
     await expect(dialogueTab).toHaveAttribute('aria-selected', 'true');
@@ -36,8 +36,8 @@ test.describe('AI Dialogue', () => {
     await expect(page.getByRole('button', { name: 'Play tutor line' })).toBeVisible();
   });
 
-  test('Practice Scenarios tab lists catalog', async ({ page }) => {
-    await page.getByRole('tab', { name: 'Practice Scenarios' }).click();
+  test('Scenarios tab lists catalog', async ({ page }) => {
+    await page.getByRole('tab', { name: 'Scenarios', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Practice Scenarios' })).toBeVisible();
     await expect(page.getByText('Airport Check-in (B1 Level)')).toBeVisible();
   });
@@ -53,6 +53,6 @@ test.describe('AI Dialogue', () => {
       'aria-valuenow',
       '95',
     );
-    await expect(page.getByText('92%', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('meter', { name: 'Session', exact: true })).toHaveText('92');
   });
 });

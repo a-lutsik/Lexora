@@ -15,7 +15,7 @@ test.describe('Stage 4: Multimodal Translation Hub Flow', () => {
   });
 
   test('01: renders Translation Hub header, tabs, and language selector', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Translation Hub' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Translate' })).toBeVisible();
     await expect(page.getByRole('tab', { name: /Text/i })).toBeVisible();
     await expect(page.getByRole('tab', { name: /Image & Photo/i })).toBeVisible();
     await expect(page.getByRole('tab', { name: /Document/i })).toBeVisible();

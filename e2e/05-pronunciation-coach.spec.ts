@@ -6,12 +6,19 @@
 
 import { test, expect } from '@playwright/test';
 import { DEFAULT_IPC_RESPONSES, MOCK_VOCABULARY_ENTRY, mockTauriIpc } from './helpers/tauri-mock';
-import { isNearRgb, recordAndStop } from './helpers/record';
+import { recordAndStop } from './helpers/record';
 
-const BG_PRIMARY: [number, number, number] = [15, 15, 19];
-const ACCENT: [number, number, number] = [99, 102, 241];
-const ACCENT_HOVER: [number, number, number] = [129, 140, 248];
-const DANGER_TEXT: [number, number, number] = [248, 113, 113];
+/** Computed colour of a CSS token (`--bg`, `--live`…) in the live page — the palette is oklch, so RGB constants would be stale. */
+async function tokenColor(page: import('@playwright/test').Page, token: string): Promise<string> {
+  return page.evaluate((name) => {
+    const probe = document.createElement('span');
+    probe.style.color = `var(${name})`;
+    document.body.appendChild(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  }, token);
+}
 
 test.describe('Pronunciation Coach Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -21,7 +28,7 @@ test.describe('Pronunciation Coach Flow', () => {
   });
 
   test('renders pronunciation coach header and tabs', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Pronunciation Coach' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Speak' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Practice' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Shadowing' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Minimal pairs' })).toBeVisible();
@@ -34,8 +41,8 @@ test.describe('Pronunciation Coach Flow', () => {
     await expect(speak).toBeVisible();
     await expect(speak).toHaveClass(/active/);
 
-    const color = await speak.evaluate((el) => getComputedStyle(el).color);
-    expect(isNearRgb(color, ACCENT_HOVER), `Speak color ${color}`).toBe(true);
+    const iconColor = await speak.locator('.nav-icon').evaluate((el) => getComputedStyle(el).color);
+    expect(iconColor, `Speak icon color ${iconColor}`).toBe(await tokenColor(page, '--acc-text'));
   });
 
   test('practice tab allows typing target text and shows play button', async ({ page }) => {
@@ -43,8 +50,8 @@ test.describe('Pronunciation Coach Flow', () => {
     await expect(input).toBeVisible();
     await input.fill('apple');
 
-    await expect(page.getByRole('button', { name: 'Listen to Model' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Record attempt/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Listen', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Hold to record/i })).toBeVisible();
   });
 
   test('pre-fills word and IPA from the query string', async ({ page }) => {
@@ -55,7 +62,7 @@ test.describe('Pronunciation Coach Flow', () => {
 
   test('records an attempt and shows phoneme feedback, score, and tip', async ({ page }) => {
     await page.locator('input#pron-target').fill('apple');
-    await recordAndStop(page, /Record attempt/i);
+    await recordAndStop(page, /Hold to record/i);
 
     await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toBeVisible({
       timeout: 8000,
@@ -78,9 +85,9 @@ test.describe('Pronunciation Coach Flow', () => {
 
   test('does not show the unsupported-environment error after Record', async ({ page }) => {
     await page.locator('input#pron-target').fill('Self-healing');
-    await page.getByRole('button', { name: /Record attempt/i }).click();
+    await page.getByRole('button', { name: /Hold to record/i }).click();
     await expect(page.getByText('Recording is not supported in this environment.')).toHaveCount(0);
-    await expect(page.getByText('Recording…')).toBeVisible();
+    await expect(page.getByText('Recording…', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Stop recording' }).click();
   });
 
@@ -100,7 +107,7 @@ test.describe('Pronunciation Coach Flow', () => {
     await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toBeVisible({
       timeout: 8000,
     });
-    await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toContainText('92%');
+    await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toContainText('92');
     await expect(page.getByText('Passed', { exact: true })).toBeVisible();
     await expect(page.getByText(/Round \d of 3/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Postpone phrase' })).toHaveCount(0);
@@ -146,27 +153,31 @@ test.describe('Pronunciation Coach Flow', () => {
     const pageEl = page.locator('.pronunciation-page');
     const pageBg = await pageEl.evaluate((el) => getComputedStyle(el).backgroundColor);
     const layoutBg = await page.locator('.app-layout').evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(isNearRgb(layoutBg, BG_PRIMARY), `layout bg ${layoutBg}`).toBe(true);
-    expect(
-      isNearRgb(pageBg, BG_PRIMARY) || pageBg === 'rgba(0, 0, 0, 0)',
-      `page bg ${pageBg}`,
-    ).toBe(true);
+    const bgToken = await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.backgroundColor = 'var(--bg)';
+      document.body.appendChild(probe);
+      const value = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return value;
+    });
+    expect(layoutBg, `layout bg ${layoutBg}`).toBe(bgToken);
+    expect(pageBg === bgToken || pageBg === 'rgba(0, 0, 0, 0)', `page bg ${pageBg}`).toBe(true);
 
-    const scene = page.locator('.drill-scene');
-    await expect(scene).toBeVisible();
-    const sceneRadius = await scene.evaluate((el) => getComputedStyle(el).borderRadius);
-    expect(parseFloat(sceneRadius)).toBeGreaterThanOrEqual(16);
+    await expect(page.locator('.drill-scene')).toBeVisible();
 
+    // Lingora: активная вкладка — сегмент (.seg__item) с кольцом из линии, без акцентной рамки
     const activeTab = page.getByRole('tab', { name: 'Practice' });
+    await expect(activeTab).toHaveAttribute('aria-selected', 'true');
     const tabRadius = await activeTab.evaluate((el) => getComputedStyle(el).borderRadius);
-    expect(parseFloat(tabRadius)).toBeGreaterThanOrEqual(16);
-    const tabBorder = await activeTab.evaluate((el) => getComputedStyle(el).borderTopColor);
-    expect(isNearRgb(tabBorder, ACCENT), `active tab border ${tabBorder}`).toBe(true);
+    expect(parseFloat(tabRadius)).toBeGreaterThanOrEqual(6);
 
-    const recordBtn = page.getByRole('button', { name: /Record attempt/i });
+    const recordBtn = page.getByRole('button', { name: /Hold to record/i });
     const box = await recordBtn.boundingBox();
     expect(box).not.toBeNull();
-    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    // 40px pill; ::after extends the hit target to 44px (AGENTS §10).
+    const hitOutset = await recordBtn.evaluate((el) => -parseFloat(getComputedStyle(el, '::after').top));
+    expect((box?.height ?? 0) + 2 * hitOutset).toBeGreaterThanOrEqual(44);
     expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -183,7 +194,7 @@ test.describe('Pronunciation Coach Flow', () => {
       host.appendChild(p);
     });
     const color = await page.locator('.record-control-error').evaluate((el) => getComputedStyle(el).color);
-    expect(isNearRgb(color, DANGER_TEXT), `error color ${color}`).toBe(true);
+    expect(color, `error color ${color}`).toBe(await tokenColor(page, '--live'));
   });
 });
 
@@ -222,7 +233,7 @@ test.describe('Shadowing below pass threshold', () => {
     await page.waitForTimeout(250);
     await page.getByRole('button', { name: 'Stop recording' }).click();
 
-    await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toContainText('84%', { timeout: 8000 });
+    await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toContainText('84', { timeout: 8000 });
     await expect(page.getByText('Need 90% to pass')).toBeVisible();
     await expect(page.getByLabel('Phrase to shadow')).toHaveText('apple');
     await expect(page.getByText(/Close both lips/)).toBeVisible({ timeout: 5000 });
@@ -241,10 +252,10 @@ test.describe('Speaking study mode', () => {
   test('starts a speaking session and scores a recording', async ({ page }) => {
     await mockTauriIpc(page);
     await page.goto('/#/study');
-    await page.waitForSelector('text=Study Session', { timeout: 10_000 });
+    await page.waitForSelector('h1:has-text("Study")', { timeout: 10_000 });
 
     await page.getByRole('radio', { name: /Speaking/ }).click();
-    await page.getByRole('button', { name: /^Start Session/ }).click();
+    await page.getByRole('button', { name: /^Start session/ }).click();
 
     await expect(page.getByText('Say this word aloud:')).toBeVisible({ timeout: 8000 });
     await expect(page.locator('.flashcard-word')).toHaveText('apple');

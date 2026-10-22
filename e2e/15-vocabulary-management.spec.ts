@@ -19,9 +19,19 @@ test('word actions and selection stay visible and work at desktop widths', async
     await expect(remove).toBeVisible();
     const box = await remove.boundingBox();
     expect(box).not.toBeNull();
+    // The icon is 28px; an ::after outset keeps the clickable area at 44×44 (AGENTS §10).
+    const hit = await remove.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const after = getComputedStyle(el, '::after');
+      const out = (v: string) => Math.max(0, -(parseFloat(v) || 0));
+      return {
+        width: rect.width + out(after.left) + out(after.right),
+        height: rect.height + out(after.top) + out(after.bottom),
+      };
+    });
+    expect(hit.width).toBeGreaterThanOrEqual(44);
+    expect(hit.height).toBeGreaterThanOrEqual(44);
     if (box) {
-      expect(box.width).toBeGreaterThanOrEqual(44);
-      expect(box.height).toBeGreaterThanOrEqual(44);
       expect(box.x + box.width).toBeLessThanOrEqual(width);
     }
   }

@@ -1,7 +1,7 @@
 // ============================================================
 // LEXORA — E2E Test 4: Writing Assistant Flow
-// Tests checking text, diff view, applying/ignoring fixes,
-// accept all, rewriting, and error pattern exercises.
+// Tests checking text (underlines in the text itself), issue
+// cards, applying/ignoring fixes, rewriting, and auto-check.
 // ============================================================
 
 import { test, expect } from '@playwright/test';
@@ -15,7 +15,7 @@ test.describe('Writing Assistant Flow', () => {
   });
 
   test('renders writing editor and actions', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Writing Assistant' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Writing' })).toBeVisible();
     await expect(page.locator('textarea#writing-input')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Check writing' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Rewrite text' })).toBeDisabled();
@@ -33,14 +33,20 @@ test.describe('Writing Assistant Flow', () => {
     await expect(page.getByText('Subject-verb agreement and tense errors found.')).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('70')).toBeVisible();
 
-    // Verify diff panes
-    await expect(page.getByRole('heading', { name: 'Original' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Suggested' })).toBeVisible();
+    // The checked text replaces the editor; the mistake is underlined inside it.
+    const annotated = page.getByRole('group', { name: 'Original text with issues highlighted' });
+    await expect(annotated).toHaveText('She go to school yesterday.');
+    await expect(page.locator('textarea#writing-input')).toBeHidden();
     await expect(page.locator('.writing-mark')).toHaveText('go');
-    await expect(page.locator('.writing-diff-body--suggested')).toHaveText('She went to school yesterday.');
+    await expect(page.getByRole('heading', { name: 'Original' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Suggested' })).toHaveCount(0);
+    // The fix is visible on the issue card; the corrected text stays reachable.
+    await expect(page.locator('.writing-issue-fix')).toHaveText('went');
+    await expect(page.getByRole('button', { name: 'Copy suggested text' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Use suggested text as input' })).toBeVisible();
 
     await page.locator('.writing-mark').click();
-    await expect(page.getByRole('dialog', { name: /Fix for go/i })).toBeVisible();
+    await expect(page.getByRole('group', { name: /Fix for go/i })).toBeVisible();
     await expect(page.getByText('Past tense requires "went".')).toBeVisible();
     await expect(page.getByRole('button', { name: /Apply fix/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /Ignore issue/i })).toBeVisible();
@@ -57,6 +63,24 @@ test.describe('Writing Assistant Flow', () => {
     await page.getByRole('button', { name: /Apply fix/i }).click();
 
     await expect(page.getByText('accepted')).toBeVisible({ timeout: 5000 });
+    // The applied fix replaces the fragment in the text…
+    await expect(page.locator('.writing-mark')).toHaveText('went');
+    // …and the corrected text can become the editor input.
+    await page.getByRole('button', { name: 'Use suggested text as input' }).click();
+    await expect(page.locator('textarea#writing-input')).toHaveValue('She went to school yesterday.');
+  });
+
+  test('clicking the checked text returns to the editor', async ({ page }) => {
+    const input = page.locator('textarea#writing-input');
+    await input.fill('She go to school yesterday.');
+    await page.getByRole('button', { name: 'Check writing' }).click();
+
+    const annotated = page.getByRole('group', { name: 'Original text with issues highlighted' });
+    await expect(annotated).toBeVisible({ timeout: 8000 });
+    await annotated.getByText('to school yesterday.').click();
+    await expect(input).toBeVisible();
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue('She go to school yesterday.');
   });
 
   test('rewrites text with chosen mode', async ({ page }) => {
@@ -67,7 +91,7 @@ test.describe('Writing Assistant Flow', () => {
     await rewriteBtn.click();
 
     await expect(page.getByText('Elevated formality.')).toBeVisible({ timeout: 8000 });
-    await expect(page.locator('.writing-diff-body--suggested')).toHaveText(
+    await expect(page.getByRole('group', { name: 'Suggested text' })).toHaveText(
       'Please review this at your earliest convenience.'
     );
   });
@@ -180,13 +204,15 @@ test.describe('Writing Assistant Flow', () => {
     await page.locator('textarea#writing-input').fill(original);
     await page.getByRole('button', { name: 'Check writing' }).click();
 
-    await expect(page.locator('.writing-diff-body--suggested')).toHaveText(
-      "Hi Andrew, I would say I can't do it, but I had to fix that bug.",
-      { timeout: 8000 },
-    );
-    await expect(page.locator('.writing-mark')).toHaveText([greeting, but, bug]);
+    await expect(page.locator('.writing-mark')).toHaveText([greeting, but, bug], { timeout: 8000 });
     await expect(page.getByText('II')).toHaveCount(0);
     await expect(page.getByText('butt')).toHaveCount(0);
     await expect(page.getByText('bug.g')).toHaveCount(0);
+
+    // The corrected text (all fixes applied) is not garbled either.
+    await page.getByRole('button', { name: 'Use suggested text as input' }).click();
+    await expect(page.locator('textarea#writing-input')).toHaveValue(
+      "Hi Andrew, I would say I can't do it, but I had to fix that bug.",
+    );
   });
 });

@@ -8,12 +8,12 @@ import { expect, type Page } from '@playwright/test';
 
 export async function recordAndStop(page: Page, idleName: string | RegExp): Promise<void> {
   await page.getByRole('button', { name: idleName }).click();
-  await expect(page.getByText('Recording…')).toBeVisible();
+  await expect(page.getByText('Recording…', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Stop recording' })).toBeVisible();
   // Let MediaRecorder emit at least one timeslice (100ms) of fake audio.
   await page.waitForTimeout(250);
   await page.getByRole('button', { name: 'Stop recording' }).click();
-  await expect(page.getByText('Recording…')).toBeHidden();
+  await expect(page.getByText('Recording…', { exact: true })).toBeHidden();
 }
 
 export function rgbOf(color: string): [number, number, number] | null {

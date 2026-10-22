@@ -44,13 +44,13 @@ test.describe('Manual QA walkthrough', () => {
     await page.waitForSelector('[aria-label="Vocabulary list"]', { timeout: 10_000 });
 
     const nav: Array<{ name: string | RegExp; heading: string | RegExp }> = [
-      { name: 'Vocabulary', heading: 'My Vocabulary' },
-      { name: /Study/, heading: 'Study Session' },
-      { name: 'Writing', heading: 'Writing Assistant' },
-      { name: 'Translate', heading: 'Translation Hub' },
-      { name: 'Pronunciation', heading: 'Pronunciation Coach' },
+      { name: 'Vocabulary', heading: 'Vocabulary' },
+      { name: /Study/, heading: 'Study' },
+      { name: 'Writing', heading: 'Writing' },
+      { name: 'Translate', heading: 'Translate' },
+      { name: 'Pronunciation', heading: 'Speak' },
       { name: 'Collections', heading: 'Collections' },
-      { name: 'Statistics', heading: 'Learning Statistics' },
+      { name: 'Statistics', heading: 'Statistics' },
       { name: 'Settings', heading: 'Settings' },
     ];
 
@@ -89,14 +89,14 @@ test.describe('Manual QA walkthrough', () => {
     await page.getByLabel('PERSONAL NOTES').fill('QA mnemonic');
     await page.getByRole('button', { name: 'Save Notes' }).click();
     await page.getByRole('button', { name: 'Practice pronunciation of apple' }).click();
-    await expect(page.getByRole('heading', { name: 'Pronunciation Coach' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Speak' })).toBeVisible({
       timeout: 8000,
     });
     await expect(page.locator('input#pron-target')).toHaveValue('apple');
 
     await page.getByRole('link', { name: 'Vocabulary' }).click();
     await page.getByRole('button', { name: 'Study Now' }).click();
-    await expect(page.getByRole('heading', { name: 'Study Session' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Study' })).toBeVisible();
 
     await page.getByRole('link', { name: 'Vocabulary' }).click();
     await page.getByRole('button', { name: 'More add options' }).click();
@@ -122,15 +122,15 @@ test.describe('Manual QA walkthrough', () => {
 
   test('Study: all 8 modes start and complete a card', async ({ page }) => {
     await openApp(page, '/#/study');
-    await page.waitForSelector('text=Study Session', { timeout: 10_000 });
+    await page.waitForSelector('h1:has-text("Study")', { timeout: 10_000 });
 
     const modes = [
       'Flashcards',
-      'Typing Mode',
+      'Typing',
       'Listening',
-      'Fill the Gap',
-      'Image Association',
-      'Irregular Verbs',
+      'Fill the gap',
+      'Image association',
+      'Irregular verbs',
       'Definition',
       'Speaking',
     ] as const;
@@ -141,7 +141,7 @@ test.describe('Manual QA walkthrough', () => {
         'aria-checked',
         'true',
       );
-      await page.getByRole('button', { name: /^Start Session/ }).click();
+      await page.getByRole('button', { name: /^Start session/ }).click();
 
       if (mode === 'Flashcards') {
         await expect(page.locator('.study-card-word')).toHaveText('apple', { timeout: 8000 });
@@ -158,7 +158,7 @@ test.describe('Manual QA walkthrough', () => {
           timeout: 8000,
         });
         await page.getByRole('button', { name: /Continue/ }).click();
-      } else if (mode === 'Fill the Gap') {
+      } else if (mode === 'Fill the gap') {
         await expect(page.getByLabel('Missing word')).toBeVisible({ timeout: 8000 });
         await page.getByLabel('Missing word').fill('apple');
         await page.getByRole('button', { name: /Check/i }).click();
@@ -180,9 +180,9 @@ test.describe('Manual QA walkthrough', () => {
         await page.getByRole('button', { name: /Continue/ }).click();
       }
 
-      await expect(page.getByText('🎉')).toBeVisible({ timeout: 8000 });
+      await expect(page.getByRole('heading', { name: 'Session Complete!' })).toBeVisible({ timeout: 8000 });
       await page.getByRole('button', { name: 'Back to Study Overview' }).click();
-      await expect(page.getByRole('heading', { name: 'Study Session' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Study' })).toBeVisible();
     }
   });
 
@@ -215,7 +215,7 @@ test.describe('Manual QA walkthrough', () => {
 
   test('Translate: text, image, document, audio, history controls', async ({ page }) => {
     await openApp(page, '/#/translate');
-    await expect(page.getByRole('heading', { name: 'Translation Hub' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Translate' })).toBeVisible({
       timeout: 10_000,
     });
 
@@ -304,8 +304,8 @@ test.describe('Manual QA walkthrough', () => {
     await page.waitForSelector('.pronunciation-page', { timeout: 10_000 });
 
     await page.locator('input#pron-target').fill('apple');
-    await page.getByRole('button', { name: 'Listen to Model' }).click();
-    await recordAndStop(page, /Record attempt/i);
+    await page.getByRole('button', { name: 'Listen', exact: true }).click();
+    await recordAndStop(page, /Hold to record/i);
     await expect(page.getByRole('meter', { name: 'Current pronunciation score' })).toBeVisible({
       timeout: 8000,
     });
@@ -333,7 +333,7 @@ test.describe('Manual QA walkthrough', () => {
     await expect(page.locator('.pronunciation-history-word').first()).toHaveText('apple');
   });
 
-  test('Collections: enable SRS; New Collection is wired', async ({ page }) => {
+  test('Collections: enable SRS; New collection is wired', async ({ page }) => {
     // A system pack that is already loaded can be enabled in SRS
     // (empty packs show «Load into database» instead).
     const collections = DEFAULT_IPC_RESPONSES.list_collections as Array<Record<string, unknown>>;
@@ -344,13 +344,16 @@ test.describe('Manual QA walkthrough', () => {
     });
     await page.waitForSelector('.collections-page', { timeout: 10_000 });
 
-    // System packs start empty: they are loaded first, then enabled for SRS.
-    await page.getByRole('button', { name: 'Load Top 5000 Words into database' }).click();
-    await expect(page.getByRole('heading', { name: 'Top 5000 Words' })).toBeVisible();
+    // The loaded pack is turned on for SRS with its «In Study» switch;
+    // the empty packs offer «Load … into database» instead.
+    await expect(page.getByRole('button', { name: 'Load Phrasal verbs into database' })).toBeVisible();
+    const enable = page.getByRole('button', { name: /^Enable Top 5000 words in SRS$/i });
+    await enable.click();
+    await expect(page.getByRole('heading', { name: /Top 5000 words/i })).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Create new collection' }).click();
-    const dialog = page.getByRole('dialog', { name: 'New Collection' });
+    const dialog = page.getByRole('dialog', { name: 'New collection' });
     await expect(dialog).toBeVisible();
     await dialog.getByLabel('Collection name').fill('Work emails');
     await dialog.getByRole('button', { name: 'Create collection' }).click();
@@ -360,30 +363,36 @@ test.describe('Manual QA walkthrough', () => {
   test('Stats page shows all metric sections', async ({ page }) => {
     await openApp(page, '/#/stats');
     await page.waitForSelector('.stats-page', { timeout: 10_000 });
-    await expect(page.getByText('TOTAL VOCABULARY')).toBeVisible();
+    await expect(page.getByText('Total vocabulary')).toBeVisible();
     await expect(page.getByText('42')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Accuracy by Error Type' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Writing Mistake Patterns' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Accuracy by error type' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Writing mistake patterns' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Pronunciation' })).toBeVisible();
   });
 
-  test('Settings: toggles, model check, shortcuts, save', async ({ page }) => {
+  test('Settings: toggles, model check, shortcuts, autosave', async ({ page }) => {
     await openApp(page, '/#/settings');
     await page.waitForSelector('.settings-page', { timeout: 10_000 });
+    const nav = page.getByRole('navigation', { name: 'Settings sections' });
 
-    const privacy = page.getByRole('checkbox', { name: /Writing privacy mode/i });
-    await privacy.check();
-    await expect(privacy).toBeChecked();
-
-    // Provider checks live in the «AI-модели» panel (per-role «Проверить»).
-    const check = page.locator('.ai-models button:enabled', { hasText: 'Проверить' }).first();
+    // Provider checks live in the AI models panel (per-role «Test»).
+    const check = page.locator('#settings-ai-models button:enabled', { hasText: /^Test$/ }).first();
     if ((await check.count()) > 0) {
       await check.click();
-      await expect(page.getByRole('status').filter({ hasText: /Работает/ }).first()).toBeVisible({
+      await expect(page.getByRole('status').filter({ hasText: /Connected/ }).first()).toBeVisible({
         timeout: 8000,
       });
     }
 
+    await nav.getByRole('button', { name: 'Privacy', exact: true }).click();
+    const privacy = page.getByRole('checkbox', { name: /Writing privacy mode/i });
+    await privacy.check();
+    await expect(privacy).toBeChecked();
+
+    await nav.getByRole('button', { name: 'Global shortcuts', exact: true }).click();
+    await page.getByRole('button', { name: 'Open Translator' }).click();
+
+    await nav.getByRole('button', { name: 'Stickers & ambient review', exact: true }).click();
     const quiet = page.getByRole('checkbox', { name: /Quiet hours/i });
     await quiet.check();
     await expect(page.getByLabel('Quiet hours start')).toBeVisible();
@@ -393,9 +402,9 @@ test.describe('Manual QA walkthrough', () => {
     await page.locator('#settings-sticker-count').fill('4');
     await page.locator('#settings-sticker-opacity').fill('0.7');
 
-    await page.getByRole('button', { name: 'Open Translator' }).click();
-    await page.getByRole('button', { name: 'Save Settings' }).click();
-    await expect(page.getByText(/Settings saved successfully/i)).toBeVisible({ timeout: 5000 });
+    // No Save button: the change is written as soon as the slider settles.
+    // The live region is a zero-height sticky anchor; the visible part is its «✓ Saved» note.
+    await expect(page.getByRole('status').getByText(/Saved/)).toBeVisible({ timeout: 5000 });
   });
 
   test('Popup: translate extras and assistant entry points', async ({ page }) => {
@@ -416,7 +425,7 @@ test.describe('Manual QA walkthrough', () => {
 
   test('Desktop sticker controls respond', async ({ page }) => {
     await openApp(page, '/sticker.html');
-    const remember = page.getByRole('button', { name: 'Помню ✓' });
+    const remember = page.getByRole('button', { name: 'Remembered ✓' });
     await expect(remember).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: 'Toggle translation visibility' }).click();
@@ -426,7 +435,7 @@ test.describe('Manual QA walkthrough', () => {
     await expect(remember).toBeHidden();
 
     await page.reload();
-    const forgot = page.getByRole('button', { name: 'Не помню ✕' });
+    const forgot = page.getByRole('button', { name: 'Forgot ✕' });
     await expect(forgot).toBeVisible({ timeout: 10_000 });
     await forgot.click();
     await expect(forgot).toBeHidden();
@@ -438,15 +447,15 @@ test.describe('Manual QA walkthrough', () => {
   // Grading dismisses the card (the sticker hides itself), so each answer
   // needs a fresh card — one test per button.
   for (const [label, button] of [
-    ['remember', /Помню/],
-    ['forgot', /Не помню/],
+    ['remember', /^Remembered/],
+    ['forgot', /^Forgot/],
   ] as const) {
     test(`Desktop sticker: "${label}" grades the card and dismisses it`, async ({ page }) => {
       await openApp(page, '/sticker.html');
       const answer = page.getByRole('button', { name: button }).first();
       await expect(answer).toBeVisible({ timeout: 8000 });
       await answer.click();
-      await expect(page.getByRole('button', { name: /Помню|Не помню/ })).toHaveCount(0, {
+      await expect(page.getByRole('button', { name: /^(Remembered|Forgot)/ })).toHaveCount(0, {
         timeout: 5000,
       });
     });

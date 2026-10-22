@@ -29,8 +29,13 @@ test.describe('Popup Translate Flow', () => {
     // Кнопка закрытия (строка 116) — aria-label="Close window"
     await expect(page.getByRole('button', { name: 'Close window' })).toBeVisible();
 
-    // Подсказка по горячим клавишам (строка 187)
-    await expect(page.getByText('Press ↵ to translate · Esc to close')).toBeVisible();
+    // Подсказки по горячим клавишам в подвале: ↵ Translate · Esc Close
+    const hints = page.locator('.popup-hints');
+    await expect(hints).toBeVisible();
+    await expect(hints).toContainText('↵');
+    await expect(hints).toContainText('Translate');
+    await expect(hints).toContainText('Esc');
+    await expect(hints).toContainText('Close');
   });
 
   test('pressing Enter in input triggers translation', async ({ page }) => {

@@ -257,7 +257,11 @@ test.describe('Writing check badge & panel', () => {
 test.describe('Settings → Writing check in other apps', () => {
   async function openSection(page: Page) {
     await page.goto('/#/settings');
-    const section = page.locator('[aria-labelledby="grammar-watch-title"]');
+    await page
+      .getByRole('navigation', { name: 'Settings sections' })
+      .getByRole('button', { name: 'Writing check in other apps', exact: true })
+      .click();
+    const section = page.locator('#settings-writing-check');
     await section.scrollIntoViewIfNeeded();
     await expect(section.getByRole('heading', { name: 'Writing check in other apps' })).toBeVisible();
     return section;
@@ -314,7 +318,7 @@ test.describe('Settings → Writing check in other apps', () => {
   test('disabled with a note where the platform is not supported', async ({ page }) => {
     await mockGrammar(page, { status: { supported: false, accessibilityTrusted: false } });
     const section = await openSection(page);
-    await expect(section.getByText('Available on macOS.')).toBeVisible();
+    await expect(section.getByText(/^Available on macOS/)).toBeVisible();
     await expect(section.getByRole('checkbox', { name: 'Suggest fixes while I type in any app' })).toBeDisabled();
   });
 });

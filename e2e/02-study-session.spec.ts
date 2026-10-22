@@ -11,7 +11,7 @@ test.describe('Study Session Flow', () => {
     await mockTauriIpc(page);
     await page.goto('/#/study');
     // Ждём setup screen
-    await page.waitForSelector('text=Study Session', { timeout: 10_000 });
+    await page.waitForSelector('h1:has-text("Study")', { timeout: 10_000 });
   });
 
   test('setup screen shows due count from mock', async ({ page }) => {
@@ -23,12 +23,12 @@ test.describe('Study Session Flow', () => {
   });
 
   test('Start Session button has correct label', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /^Start Session/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Start session/ })).toBeVisible();
   });
 
   test('shell fills a tall viewport without clipping the start button', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1100 });
-    await expect(page.getByRole('button', { name: /^Start Session/ })).toBeInViewport();
+    await expect(page.getByRole('button', { name: /^Start session/ })).toBeInViewport();
 
     const filled = await page.evaluate(() => {
       const layout = document.querySelector('.app-layout');
@@ -50,16 +50,16 @@ test.describe('Study Session Flow', () => {
   });
 
   test('starting session shows flashcard with word from mock', async ({ page }) => {
-    await page.getByRole('button', { name: /^Start Session/ }).click();
+    await page.getByRole('button', { name: /^Start session/ }).click();
 
     // Карточка с словом 'apple'
     await expect(page.locator('.study-card-word')).toHaveText('apple', { timeout: 8000 });
     // Прогресс "Card 1 of 1"
-    await expect(page.getByText(/Card 1 of/i)).toBeVisible();
+    await expect(page.getByText(/^1 \/ /)).toBeVisible();
   });
 
   test('Show Answer button reveals translation', async ({ page }) => {
-    await page.getByRole('button', { name: /^Start Session/ }).click();
+    await page.getByRole('button', { name: /^Start session/ }).click();
     await expect(page.locator('.study-card-word')).toHaveText('apple', { timeout: 8000 });
 
     await page.getByRole('button', { name: 'Show translation' }).click();
@@ -67,7 +67,7 @@ test.describe('Study Session Flow', () => {
   });
 
   test('grading buttons appear after reveal (SM-2 grades)', async ({ page }) => {
-    await page.getByRole('button', { name: /^Start Session/ }).click();
+    await page.getByRole('button', { name: /^Start session/ }).click();
     await expect(page.locator('.study-card-word')).toHaveText('apple', { timeout: 8000 });
     await page.getByRole('button', { name: 'Show translation' }).click();
 
@@ -78,16 +78,16 @@ test.describe('Study Session Flow', () => {
   });
 
   test('clicking Good completes the session (1 card queue → done screen)', async ({ page }) => {
-    await page.getByRole('button', { name: /^Start Session/ }).click();
+    await page.getByRole('button', { name: /^Start session/ }).click();
     await expect(page.locator('.study-card-word')).toHaveText('apple', { timeout: 8000 });
     await page.getByRole('button', { name: 'Show translation' }).click();
     await page.getByRole('button', { name: /Good/i }).click();
 
-    await expect(page.getByText('🎉')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('heading', { name: 'Session Complete!' })).toBeVisible({ timeout: 8000 });
   });
 
   test('rating group has all 4 SM-2 grade options', async ({ page }) => {
-    await page.getByRole('button', { name: /^Start Session/ }).click();
+    await page.getByRole('button', { name: /^Start session/ }).click();
     await expect(page.locator('.study-card-word')).toHaveText('apple', { timeout: 8000 });
     await page.getByRole('button', { name: 'Show translation' }).click();
 
@@ -105,15 +105,15 @@ test.describe('Study Session Flow — rating persistence', () => {
   test('a failed save keeps the card on screen and shows an error', async ({ page }) => {
     await mockTauriIpc(page, { submit_review: { __error: 'database is locked' } });
     await page.goto('/#/study');
-    await page.waitForSelector('text=Study Session', { timeout: 10_000 });
+    await page.waitForSelector('h1:has-text("Study")', { timeout: 10_000 });
 
-    await page.getByRole('button', { name: /^Start Session/ }).click();
+    await page.getByRole('button', { name: /^Start session/ }).click();
     await expect(page.locator('.study-card-word')).toHaveText('apple', { timeout: 8000 });
     await page.getByRole('button', { name: 'Show translation' }).click();
     await page.getByRole('button', { name: 'Good', exact: true }).click();
 
     await expect(page.getByRole('alert')).toContainText(/couldn.t save/i, { timeout: 5000 });
-    await expect(page.getByText('🎉')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Session Complete!' })).toHaveCount(0);
     await expect(page.locator('.study-card-word')).toHaveText('apple');
   });
 });

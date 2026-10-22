@@ -244,6 +244,7 @@ export const DEFAULT_IPC_RESPONSES: Record<string, unknown> = {
   toggle_favorite: { ...MOCK_VOCABULARY_ENTRY, isFavorite: true },
   update_vocabulary_notes: MOCK_VOCABULARY_ENTRY,
   count_vocabulary: 1,
+  count_vocabulary_by_status: { new: 1, learning: 0, review: 0, mature: 0, suspended: 0 },
 
   translate_text: MOCK_TRANSLATION,
 
@@ -275,6 +276,13 @@ export const DEFAULT_IPC_RESPONSES: Record<string, unknown> = {
   submit_review: { dueAt: Math.floor(Date.now() / 1000) + 86_400 },
   get_review_history: [],
   get_due_count: 5,
+  // SM-2 dry run for the mock card (fresh: interval 0, repetitions 0) → 1 day for every grade.
+  preview_review_intervals: [
+    { grade: 0, dueInSeconds: 86_400 },
+    { grade: 2, dueInSeconds: 86_400 },
+    { grade: 3, dueInSeconds: 86_400 },
+    { grade: 4, dueInSeconds: 86_400 },
+  ],
 
   get_stats_summary: { totalWords: 42, dueToday: 5, streak: 3, accuracyPercent: 87, wordsAddedThisWeek: 7, matureCount: 12 },
   get_daily_activity: [],

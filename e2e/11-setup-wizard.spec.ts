@@ -10,11 +10,17 @@
 //  - платный путь OpenAI (валидация ключа sk-…, применение);
 //  - «Пропустить — настроить вручную» (advanced);
 //  - повторное открытие мастера из Настроек («AI-модели» →
-//    «Сменить сценарий») с финальным экраном «Готово!».
+//    «Сменить сценарий» → «Открыть мастер настройки») с финальным
+//    экраном «Готово!».
 // ============================================================
 
 import { test, expect, type Page } from '@playwright/test';
 import { mockTauriIpc } from './helpers/tauri-mock';
+
+// The wizard copy below is Russian: run these flows with the Russian UI.
+test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('lexora-interface-locale', 'ru'));
+});
 
 // Настройки «новой установки»: setupProfile и все AI-поля намеренно
 // отсутствуют — дефолты через `??` делают isSettingsAiPristine() == true,
@@ -76,9 +82,16 @@ test.describe('Setup Wizard — first-run onboarding (App gate)', () => {
             dialog.getByText(/Один ключ OpenAI или Google Gemini с оплатой по использованию/),
         ).toBeVisible();
 
-        // Ссылка «Пропустить».
+        // Ссылка «Пропустить» — единственная кнопка подвала: шаг 1 выбирается кликом по карточке.
         await expect(
             dialog.getByRole('button', { name: 'Пропустить — настроить вручную' }),
+        ).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'Продолжить' })).toHaveCount(0);
+        await expect(dialog.getByRole('button', { name: /Назад/ })).toHaveCount(0);
+        await expect(dialog.getByText('Шаг 1 из 3')).toBeVisible();
+        await expect(dialog.locator('.setup-step')).toHaveCount(3);
+        await expect(
+            dialog.getByText('Никаких карт и обязательств. Сценарий можно сменить в любой момент в Настройках → AI-модели.'),
         ).toBeVisible();
     });
 
@@ -140,7 +153,7 @@ test.describe('Setup Wizard — first-run onboarding (App gate)', () => {
 
         const next = dialog.getByRole('button', { name: 'Продолжить к проверке' });
         await expect(next).toBeDisabled();
-        await dialog.getByLabel(/API KEY — OpenAI/).fill('sk-proj-e2e-test-key');
+        await dialog.getByLabel(/API(-ключ| key) — OpenAI/i).fill('sk-proj-e2e-test-key');
         await expect(next).toBeEnabled();
         await next.click();
 
@@ -167,7 +180,7 @@ test.describe('Setup Wizard — first-run onboarding (App gate)', () => {
         await expect(gemini).toContainText('Рекомендуем');
         await gemini.click();
 
-        await dialog.getByLabel(/API KEY — Gemini/).fill('AIzaSyD-e2e-test-key-0123456789abcd');
+        await dialog.getByLabel(/API(-ключ| key) — Gemini/i).fill('AIzaSyD-e2e-test-key-0123456789abcd');
         await dialog.getByRole('button', { name: 'Продолжить к проверке' }).click();
         await expect(dialog.getByText('AI-перевод (Gemini)')).toBeVisible();
         await expect(dialog.getByText('Нейроголос (Gemini)')).toBeVisible();
@@ -196,12 +209,15 @@ test.describe('Setup Wizard — from Settings (AI-модели → Сменит�
     });
 
     test('re-runs free scenario and shows the final «Готово!» screen', async ({ page }) => {
-        await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-        await expect(
-            page.getByRole('button', { name: /Сменить сценарий/ }),
-        ).toBeVisible();
+        await expect(page.getByRole('heading', { name: /^(Settings|Настройки)$/ })).toBeVisible();
+        const change = page.getByRole('button', { name: /Сменить сценарий|Change scenario/ });
+        await expect(change).toBeVisible();
 
-        await page.getByRole('button', { name: /Сменить сценарий/ }).click();
+        // «Сменить сценарий» раскрывает выбор пакета; мастер — кнопкой внутри.
+        await change.click();
+        await page
+            .getByRole('button', { name: /Открыть мастер настройки|Open setup wizard/ })
+            .click();
         const dialog = await setupDialog(page);
 
         await dialog
