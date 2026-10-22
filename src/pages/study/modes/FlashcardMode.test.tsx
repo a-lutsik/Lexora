@@ -106,7 +106,12 @@ describe('FlashcardMode', () => {
   it('does not advance and shows an error when saving fails, then succeeds on retry', async () => {
     const user = userEvent.setup();
     const onGrade = vi.fn();
-    invokeMock.mockRejectedValueOnce(new Error('db is locked'));
+    let saves = 0;
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd !== 'submit_review') return Promise.resolve([]);
+      saves += 1;
+      return saves === 1 ? Promise.reject(new Error('db is locked')) : Promise.resolve({ dueAt: 1700600000 });
+    });
     renderWithQueryClient(<FlashcardMode entry={makeEntry()} distractorPool={POOL} onGrade={onGrade} />);
 
     await reveal(user);
@@ -153,7 +158,7 @@ describe('FlashcardMode', () => {
     renderWithQueryClient(<FlashcardMode entry={makeEntry()} distractorPool={POOL} onGrade={vi.fn()} />);
 
     const group = screen.getByRole('group', { name: /select translation/i });
-    const texts = Array.from(group.querySelectorAll('button')).map((b) => b.textContent);
+    const texts = Array.from(group.querySelectorAll('.study-option-text')).map((b) => b.textContent);
     expect(texts).toHaveLength(4);
     expect(texts).toContain('дом');
     for (const text of texts) {
@@ -195,17 +200,104 @@ describe('FlashcardMode', () => {
     expect(screen.getByText(/no translation saved/i)).toBeInTheDocument();
   });
 
-  it('labels rating buttons plainly, without invented intervals', async () => {
+  it('shows the next interval for each rating from preview_review_intervals', async () => {
     const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'preview_review_intervals') {
+        return Promise.resolve([
+          { grade: 0, dueInSeconds: 30 },
+          { grade: 2, dueInSeconds: 6 * 60 },
+          { grade: 3, dueInSeconds: 86_400 },
+          { grade: 4, dueInSeconds: 4 * 86_400 },
+        ]);
+      }
+      return Promise.resolve({ dueAt: 1700600000 });
+    });
     renderWithQueryClient(<FlashcardMode entry={makeEntry()} distractorPool={POOL} onGrade={vi.fn()} />);
 
     await reveal(user);
 
-    for (const label of ['Again', 'Hard', 'Good', 'Easy']) {
-      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    const expected = [['Again', '1 · <1 m'], ['Hard', '2 · 6 m'], ['Good', '3 · 1 d'], ['Easy', '4 · 4 d']];
+    for (const [label, sub] of expected) {
+      // The accessible name stays the plain label; the key + interval is the visible sublabel.
+      const button = screen.getByRole('button', { name: label });
+      await waitFor(() => expect(button.querySelector('.grade-btn-sub')).toHaveTextContent(sub ?? ''));
     }
-    expect(screen.queryByText(/^\d+d$/)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/day interval/i)).not.toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith('preview_review_intervals', { reviewStateId: 5 });
+  });
+
+  it('shows no interval it did not get from the backend', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === 'preview_review_intervals' ? Promise.reject(new Error('db locked')) : Promise.resolve({ dueAt: 1 }),
+    );
+    renderWithQueryClient(<FlashcardMode entry={makeEntry()} distractorPool={POOL} onGrade={vi.fn()} />);
+
+    await reveal(user);
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('preview_review_intervals', { reviewStateId: 5 }),
+    );
+    const subs = Array.from(document.querySelectorAll('.grade-btn-sub')).map((el) => el.textContent);
+    expect(subs).toEqual(['1', '2', '3', '4']);
+  });
+
+  it('numbers the options 1–4 without changing their accessible names', () => {
+    renderWithQueryClient(<FlashcardMode entry={makeEntry()} distractorPool={POOL} onGrade={vi.fn()} />);
+
+    const group = screen.getByRole('group', { name: /select translation/i });
+    const buttons = Array.from(group.querySelectorAll('button'));
+    expect(buttons.map((b) => b.querySelector('.kbd')?.textContent)).toEqual(['1', '2', '3', '4']);
+    for (const button of buttons) {
+      const text = button.querySelector('.study-option-text')?.textContent ?? '';
+      expect(screen.getByRole('button', { name: text })).toBe(button);
+    }
+  });
+
+  it.each([1, 2, 3, 4])('key %i picks that option before answering', async (key) => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<FlashcardMode entry={makeEntry()} distractorPool={POOL} onGrade={vi.fn()} />);
+    const group = screen.getByRole('group', { name: /select translation/i });
+    const picked = group.querySelectorAll('.study-option-text')[key - 1]?.textContent;
+
+    await user.keyboard(String(key));
+
+    expect(screen.getByRole('button', { name: 'Good' })).toBeInTheDocument();
+    expect(
+      screen.getByText(picked === 'дом' ? /^correct\./i : /^not quite\./i),
+    ).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith('submit_review', expect.anything());
+  });
+
+  it.each([
+    ['1', 0],
+    ['2', 2],
+    ['3', 3],
+    ['4', 4],
+  ] as const)('key %s rates the card with grade %i after answering', async (key, grade) => {
+    const user = userEvent.setup();
+    const onGrade = vi.fn();
+    renderWithQueryClient(<FlashcardMode entry={makeEntry()} distractorPool={POOL} onGrade={onGrade} />);
+
+    await reveal(user);
+    await user.keyboard(key);
+
+    await waitFor(() => expect(onGrade).toHaveBeenCalledWith(grade));
+    expect(invokeMock).toHaveBeenCalledWith('submit_review', {
+      input: expect.objectContaining({ reviewStateId: 5, grade }),
+    });
+    expect(onGrade).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not rate with a digit key on a flip card before the answer is shown', async () => {
+    const user = userEvent.setup();
+    const onGrade = vi.fn();
+    renderWithQueryClient(<FlashcardMode entry={makeEntry()} distractorPool={[]} onGrade={onGrade} />);
+
+    await user.keyboard('3');
+
+    expect(onGrade).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Good' })).not.toBeInTheDocument();
   });
 
   it('shows no invented "AI explanation" when the word has no notes or examples', () => {
@@ -228,16 +320,18 @@ describe('FlashcardMode', () => {
       />,
     );
 
-    expect(screen.getByRole('complementary', { name: /notes and example/i })).toBeInTheDocument();
+    const aside = screen.getByRole('complementary', { name: /notes and example/i });
     expect(screen.getByText('Remember the plural')).toBeInTheDocument();
-    expect(screen.getByText('This house is old.')).toBeInTheDocument();
+    // The example is shown in full, with the studied word underlined.
+    expect(aside).toHaveTextContent('This house is old.');
+    expect(aside.querySelector('u')).toHaveTextContent('house');
   });
 
   it('shows the real frequency rank and hides the badge when it is unknown', () => {
     const { unmount } = renderWithQueryClient(
       <FlashcardMode entry={makeEntry()} distractorPool={POOL} onGrade={vi.fn()} />,
     );
-    expect(screen.getByText(/★ 400/)).toBeInTheDocument();
+    expect(screen.getByText('Top 400')).toBeInTheDocument();
     unmount();
 
     renderWithQueryClient(
@@ -247,6 +341,6 @@ describe('FlashcardMode', () => {
         onGrade={vi.fn()}
       />,
     );
-    expect(screen.queryByText(/★/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Top \d/)).not.toBeInTheDocument();
   });
 });

@@ -122,19 +122,21 @@ export function ClozeMode({ entry, onComplete, onSkip }: ClozeModeProps) {
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="typing-form">
-        <input dir="auto"
-          ref={inputRef}
-          type="text"
-          className="typing-input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={tUi("Type the missing word…")}
-          disabled={result !== null}
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          aria-label={tUi("Missing word")}
-        />
+        <div className="field study-field">
+          <input dir="auto"
+            ref={inputRef}
+            type="text"
+            className="field__input typing-input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={tUi("Type the missing word…")}
+            disabled={result !== null}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-label={tUi("Missing word")}
+          />
+        </div>
 
         {!result && (
           <div className="typing-submit">

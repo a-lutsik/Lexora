@@ -133,35 +133,39 @@ export function IrregularVerbsMode({ entry, onComplete }: IrregularVerbsModeProp
       <form onSubmit={handleSubmit} className="typing-form">
         <div className="irregular-inputs">
           <div className="irregular-field">
-            <label className="irregular-field-label" htmlFor={`past-${entry.id}`}>{tUi("Past Simple")}</label>
-            <input dir="auto"
-              ref={pastInputRef}
-              id={`past-${entry.id}`}
-              type="text"
-              className="typing-input"
-              value={pastInput}
-              onChange={(e) => setPastInput(e.target.value)}
-              placeholder={"went"}
-              disabled={result !== null}
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-            />
+            <label className="label irregular-field-label" htmlFor={`past-${entry.id}`}>{tUi("Past Simple")}</label>
+            <div className="field study-field">
+              <input dir="auto"
+                ref={pastInputRef}
+                id={`past-${entry.id}`}
+                type="text"
+                className="field__input typing-input"
+                value={pastInput}
+                onChange={(e) => setPastInput(e.target.value)}
+                placeholder={"went"}
+                disabled={result !== null}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
           </div>
           <div className="irregular-field">
-            <label className="irregular-field-label" htmlFor={`participle-${entry.id}`}>{tUi("Past Participle")}</label>
-            <input dir="auto"
-              id={`participle-${entry.id}`}
-              type="text"
-              className="typing-input"
-              value={participleInput}
-              onChange={(e) => setParticipleInput(e.target.value)}
-              placeholder={"gone"}
-              disabled={result !== null}
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-            />
+            <label className="label irregular-field-label" htmlFor={`participle-${entry.id}`}>{tUi("Past Participle")}</label>
+            <div className="field study-field">
+              <input dir="auto"
+                id={`participle-${entry.id}`}
+                type="text"
+                className="field__input typing-input"
+                value={participleInput}
+                onChange={(e) => setParticipleInput(e.target.value)}
+                placeholder={"gone"}
+                disabled={result !== null}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
           </div>
         </div>
 

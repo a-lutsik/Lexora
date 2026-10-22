@@ -9,10 +9,12 @@ import { useI18n } from "../../../hooks/useI18n";
 
 import { useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/Button';
+import { Icon } from '../../../components/ui/Icon';
 import { useStudyContinueHotkey } from '../../../hooks/useStudyContinueHotkey';
 import { useSubmitReview } from '../../../hooks/useSubmitReview';
 import { buildCollocationGap } from '../../../lib/collocations';
 import { buildFlashcardOptions, type FlashcardOption } from '../../../lib/flashcardOptions';
+import { cx } from '../../../lib/utils';
 import type { StudyGrade, VocabularyEntryDto } from '../../../lib/types';
 
 type CollocationModeProps = {
@@ -90,19 +92,25 @@ export function CollocationMode({ entry, onComplete, onSkip }: CollocationModePr
 
       <div className="study-options-grid" role="group" aria-label={tUi("Select the missing word")}>
         {options.map((option) => {
-          let className = 'study-option-card';
-          if (selected && option.isCorrect) className += ' selected-correct';
-          else if (selected?.text === option.text) className += ' selected-wrong';
+          const isCorrect = selected !== null && option.isCorrect;
+          const isWrong = !isCorrect && selected?.text === option.text;
           return (
             <button
               key={option.text}
               type="button"
               dir="auto"
-              className={className}
+              className={cx(
+                'study-option-card',
+                isCorrect && 'selected-correct',
+                isWrong && 'selected-wrong',
+                selected !== null && !isCorrect && !isWrong && 'is-dimmed',
+              )}
               onClick={() => handleChoose(option)}
               disabled={selected !== null}
             >
-              {option.text}
+              <span className="study-option-text">{option.text}</span>
+              {isCorrect && <Icon name="check_circle" size={20} className="icon--ok" />}
+              {isWrong && <Icon name="cancel" size={20} className="icon--live" />}
             </button>
           );
         })}
@@ -120,7 +128,7 @@ export function CollocationMode({ entry, onComplete, onSkip }: CollocationModePr
             <p className="typing-feedback-explanation" dir="auto">{drill.example}</p>
           )}
           {submitReview.isError && (
-            <p className="study-save-error" role="alert">{tUi("Couldn’t save your rating. Please try again.")}</p>
+            <p className="study-save-error inline-error" role="alert">{tUi("Couldn’t save your rating. Please try again.")}</p>
           )}
           <div className="typing-feedback-actions">
             <Button

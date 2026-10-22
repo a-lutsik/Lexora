@@ -4,11 +4,13 @@ import { useI18n } from '../../hooks/useI18n';
 // A word with its frequent collocations: meaning, one example
 // each, and adding one or all of them as vocabulary cards.
 // Shared by the popup translator and the word detail panel.
+// Lingora: строки через линии-разделители, словосочетание — чип .tag.
 // ============================================================
 
 import { useEffect, useRef } from 'react';
 import { useAddCollocations, useCollocations } from '../../hooks/useCollocations';
 import { formatIpcError, splitByTerm } from '../../lib/utils';
+import { Icon } from '../ui/Icon';
 import type { CollocationDto } from '../../lib/types';
 import './collocations.css';
 
@@ -137,7 +139,7 @@ export function CollocationList({ lexemeId, word, targetLanguage, onBack }: Coll
                           : tUi('Add “{text}” to vocabulary', { text: item.text })
                       }
                     >
-                      {added ? '✓' : pending ? '…' : '+'}
+                      <Icon name={added ? 'check' : pending ? 'more_horiz' : 'add'} size={17} />
                     </button>
                   </div>
                   <p className="collocation-translation" dir="auto">

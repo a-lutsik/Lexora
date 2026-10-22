@@ -95,7 +95,7 @@ export function SpeakingMode({ entry, onComplete }: SpeakingModeProps) {
         <div className="typing-prompt-label">{tUi("Say this word aloud:")}</div>
         <div className="flashcard-word">{lexeme.text}</div>
         {lexeme.phonetic && <div className="flashcard-phonetic">{lexeme.phonetic}</div>}
-        <div className="text-secondary">{mainTranslation}</div>
+        <div className="study-prompt-translation" dir="auto">{mainTranslation}</div>
         <AudioButton text={lexeme.text} ariaLabel={tUi("Play model pronunciation")} />
       </div>
 
@@ -110,7 +110,7 @@ export function SpeakingMode({ entry, onComplete }: SpeakingModeProps) {
       )}
 
       {error && (
-        <p className="record-control-error" role="alert">
+        <p className="record-control-error inline-error" role="alert">
           {error}
         </p>
       )}
@@ -123,7 +123,7 @@ export function SpeakingMode({ entry, onComplete }: SpeakingModeProps) {
               {tUi(gradeLabel(scoreToStudyGrade(attempt.overallScore)))}
             </div>
           </div>
-          {attempt.summary && <p className="text-secondary text-sm">{attempt.summary}</p>}
+          {attempt.summary && <p className="typing-feedback-explanation">{attempt.summary}</p>}
           <PhonemeFeedback phonemes={attempt.phonemes} />
           <div className="typing-feedback-actions">
             <Button variant="secondary" size="md" onClick={handleNext}>{tUi("Continue (Space)")}</Button>

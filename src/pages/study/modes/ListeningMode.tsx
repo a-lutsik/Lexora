@@ -88,19 +88,21 @@ export function ListeningMode({ entry, onComplete }: ListeningModeProps) {
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="typing-form">
-        <input dir="auto"
-          ref={inputRef}
-          type="text"
-          className="typing-input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={tUi("Type what you heard…")}
-          disabled={result !== null}
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          aria-label={tUi("Your answer")}
-        />
+        <div className="field study-field">
+          <input dir="auto"
+            ref={inputRef}
+            type="text"
+            className="field__input typing-input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={tUi("Type what you heard…")}
+            disabled={result !== null}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-label={tUi("Your answer")}
+          />
+        </div>
 
         {!result && (
           <div className="typing-submit">
