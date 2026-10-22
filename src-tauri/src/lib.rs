@@ -244,6 +244,7 @@ pub fn run() {
             commands::vocabulary::update_vocabulary_notes,
             commands::vocabulary::update_vocabulary_entry,
             commands::vocabulary::count_vocabulary,
+            commands::vocabulary::count_vocabulary_by_status,
             // Export / Import
             commands::export_import::export_vocabulary,
             commands::export_import::import_vocabulary,
@@ -297,6 +298,7 @@ pub fn run() {
             commands::study::submit_review,
             commands::study::get_review_history,
             commands::study::get_due_count,
+            commands::study::preview_review_intervals,
             // Collections
             commands::collections::list_collections,
             commands::collections::ensure_system_packs_cmd,

@@ -38,6 +38,15 @@ export function useVocabularyCount(languageId: number | null) {
   });
 }
 
+/** Words per SRS status — filter chip counts and Statistics «Words by status». */
+export function useStatusCounts(languageId: number | null) {
+  return useQuery({
+    queryKey: [QUERY_KEYS.VOCABULARY, 'status-counts', languageId],
+    queryFn:  () => ipc.vocabulary.countByStatus(languageId),
+    staleTime: STALE_TIME.SHORT,
+  });
+}
+
 export function useAddToVocabulary() {
   const client = useQueryClient();
 

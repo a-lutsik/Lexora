@@ -594,6 +594,12 @@ export type SubmitReviewResult = {
   dueAt: number;
 };
 
+/** Next interval a rating grade would schedule (preview, nothing is saved). */
+export type PreviewIntervalDto = {
+  grade: StudyGrade;
+  dueInSeconds: number;
+};
+
 export type RewriteMode =
   | 'clearer'
   | 'shorter'
@@ -944,6 +950,15 @@ export type PronunciationModelDto = {
 };
 
 // ── Filter types ──────────────────────────────────────────
+
+/** Live vocabulary entries per SRS status (`count_vocabulary_by_status`). */
+export type StatusCounts = {
+  new: number;
+  learning: number;
+  review: number;
+  mature: number;
+  suspended: number;
+};
 
 export type VocabularyFilters = {
   categoryId?: number | null;

@@ -942,6 +942,65 @@ pub async fn list_languages(db: State<'_, Arc<DbPool>>) -> Result<Vec<LanguageDt
     Ok(languages)
 }
 
+/// Words per SRS status (Vocabulary filter chips, Statistics «Words by status»).
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusCountsDto {
+    pub new: i64,
+    pub learning: i64,
+    pub review: i64,
+    pub mature: i64,
+    pub suspended: i64,
+}
+
+/// Counts live (not soft-deleted) vocabulary entries by review status.
+/// An entry without a review_state row counts as `new`.
+pub fn count_by_status(
+    conn: &rusqlite::Connection,
+    language_id: Option<i64>,
+) -> Result<StatusCountsDto, AppError> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT COALESCE(rs.status, 'new') AS status, COUNT(*)
+             FROM user_vocabulary uv
+             JOIN lexeme l ON l.id = uv.lexeme_id
+             LEFT JOIN review_state rs ON rs.user_vocabulary_id = uv.id
+             WHERE uv.deleted_at IS NULL
+               AND l.deleted_at IS NULL
+               AND (?1 IS NULL OR l.language_id = ?1)
+             GROUP BY COALESCE(rs.status, 'new')",
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+    let rows = stmt
+        .query_map(rusqlite::params![language_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+    let mut counts = StatusCountsDto::default();
+    for row in rows {
+        let (status, count) = row.map_err(|e| AppError::Database(e.to_string()))?;
+        match status.as_str() {
+            "learning" => counts.learning += count,
+            "review" => counts.review += count,
+            "mature" => counts.mature += count,
+            "suspended" => counts.suspended += count,
+            _ => counts.new += count,
+        }
+    }
+    Ok(counts)
+}
+
+#[tauri::command]
+pub async fn count_vocabulary_by_status(
+    language_id: Option<i64>,
+    db: State<'_, Arc<DbPool>>,
+) -> Result<StatusCountsDto, AppError> {
+    let pool = db.inner().clone();
+    let conn = pool.get()?;
+    count_by_status(&conn, language_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -979,6 +1038,34 @@ mod tests {
             category_id: None,
         };
         VocabularyRepo::add(&conn, &input).expect("add")
+    }
+
+    #[test]
+    fn status_counts_group_live_entries_by_review_status() {
+        let pool = create_pool_test_memory().expect("pool");
+        run_migrations(&pool).expect("migrate");
+        let apple = seeded_entry(&pool, "apple");
+        let pear = seeded_entry(&pool, "pear");
+        let plum = seeded_entry(&pool, "plum");
+        let gone = seeded_entry(&pool, "gone");
+        let conn = pool.get().expect("conn");
+        conn.execute("UPDATE review_state SET status = 'mature' WHERE user_vocabulary_id = ?1", [apple])
+            .expect("mature");
+        conn.execute("UPDATE review_state SET status = 'learning' WHERE user_vocabulary_id = ?1", [pear])
+            .expect("learning");
+        conn.execute("UPDATE user_vocabulary SET deleted_at = unixepoch() WHERE id = ?1", [gone])
+            .expect("soft delete");
+        let _ = plum;
+
+        let counts = count_by_status(&conn, None).expect("counts");
+        assert_eq!(counts.new, 1, "plum stays new; the deleted word is not counted");
+        assert_eq!(counts.learning, 1);
+        assert_eq!(counts.review, 0);
+        assert_eq!(counts.mature, 1);
+        assert_eq!(counts.suspended, 0);
+
+        let other_language = count_by_status(&conn, Some(9_999)).expect("counts");
+        assert_eq!(other_language.new + other_language.learning + other_language.mature, 0);
     }
 
     #[test]

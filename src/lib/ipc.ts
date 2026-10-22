@@ -6,6 +6,7 @@ import type { CategoryDto } from './types';
 
 import { invoke, type Channel } from '@tauri-apps/api/core';
 import type {
+  StatusCounts,
   ApplyGrammarFixInput,
   GrammarMark,
   GrammarMarkActionKind,
@@ -33,6 +34,7 @@ import type {
   StudyQueueFilters,
   SubmitReviewInput,
   SubmitReviewResult,
+  PreviewIntervalDto,
   TestConnectionResult,
   TestImageConnectionResult,
   TranslateInput,
@@ -126,6 +128,9 @@ export const ipc = {
 
     count: (languageId: number | null) =>
       invoke<number>('count_vocabulary', { languageId }),
+
+    countByStatus: (languageId: number | null) =>
+      invoke<StatusCounts>('count_vocabulary_by_status', { languageId }),
 
     exportData: (path: string) =>
       invoke<number>('export_vocabulary', { path }),
@@ -246,6 +251,9 @@ export const ipc = {
 
     getDueCount: (languageId: number) =>
       invoke<number>('get_due_count', { languageId }),
+
+    previewIntervals: (reviewStateId: number) =>
+      invoke<PreviewIntervalDto[]>('preview_review_intervals', { reviewStateId }),
   },
 
   stickers: {

@@ -10,8 +10,10 @@ use crate::error::AppError;
 use crate::providers::ai::{ExplainRequest, ProviderRegistry};
 use crate::providers::models::roles::ModelRole;
 use crate::providers::models::router::registry_for_role;
+use crate::srs::algorithm::{calculate_next_review, Grade, ReviewState};
 use crate::srs::evaluator::AnswerEvaluator;
 use crate::srs::queue::QueueBuilder;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -129,6 +131,58 @@ pub fn submit_review_inner(
         None,
     )?;
     Ok(SubmitReviewResult { due_at })
+}
+
+/// Grades the Flashcards rating row submits for Again / Hard / Good / Easy
+/// (see `GRADE_BUTTONS` in `FlashcardMode.tsx`).
+const PREVIEW_GRADES: [Grade; 4] = [0, 2, 3, 4];
+const SECONDS_PER_DAY: i64 = 86_400;
+
+/// Next-review interval a grade would schedule, without saving anything.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewIntervalDto {
+    pub grade: u8,
+    pub due_in_seconds: i64,
+}
+
+/// Business logic for [`preview_review_intervals`]: read the card's SRS state
+/// and run the pure SM-2 step for each rating grade. Read-only.
+pub fn preview_review_intervals_inner(
+    conn: &rusqlite::Connection,
+    review_state_id: i64,
+) -> Result<Vec<PreviewIntervalDto>, AppError> {
+    if review_state_id <= 0 {
+        return Err(AppError::Validation(
+            "review_state_id must be a positive id".to_string(),
+        ));
+    }
+    let state = conn
+        .query_row(
+            "SELECT ease, interval, repetitions, lapses FROM review_state WHERE id = ?1",
+            rusqlite::params![review_state_id],
+            |row| {
+                Ok(ReviewState {
+                    ease: row.get(0)?,
+                    interval: row.get(1)?,
+                    repetitions: row.get(2)?,
+                    lapses: row.get(3)?,
+                })
+            },
+        )
+        .optional()?
+        .ok_or_else(|| AppError::NotFound(format!("ReviewState {review_state_id} not found")))?;
+
+    Ok(PREVIEW_GRADES
+        .iter()
+        .map(|&grade| {
+            let (_, days_until_next) = calculate_next_review(&state, grade);
+            PreviewIntervalDto {
+                grade,
+                due_in_seconds: days_until_next * SECONDS_PER_DAY,
+            }
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -291,6 +345,17 @@ pub async fn get_review_history(
     Ok(events)
 }
 
+/// Preview of the next interval for each rating grade (Flashcards sublabels).
+#[tauri::command]
+pub async fn preview_review_intervals(
+    review_state_id: i64,
+    db: State<'_, Arc<DbPool>>,
+) -> Result<Vec<PreviewIntervalDto>, AppError> {
+    let pool = db.inner().clone();
+    let conn = pool.get()?;
+    preview_review_intervals_inner(&conn, review_state_id)
+}
+
 #[tauri::command]
 pub async fn get_due_count(language_id: i64, db: State<'_, Arc<DbPool>>) -> Result<i64, AppError> {
     let pool = db.inner().clone();
@@ -447,5 +512,101 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM review_event", [], |r| r.get(0))
             .expect("count");
         assert_eq!(events, 0);
+    }
+
+    // ── preview_review_intervals ────────────────────────────
+
+    fn set_state(conn: &Connection, rs_id: i64, state: &ReviewState) {
+        conn.execute(
+            "UPDATE review_state SET ease = ?1, interval = ?2, repetitions = ?3, lapses = ?4
+             WHERE id = ?5",
+            params![state.ease, state.interval, state.repetitions, state.lapses, rs_id],
+        )
+        .expect("seed state");
+    }
+
+    fn snapshot(conn: &Connection, rs_id: i64) -> (String, f64, i64, i64, i64, i64, i64) {
+        conn.query_row(
+            "SELECT status, ease, interval, repetitions, lapses, due_at,
+                    (SELECT COUNT(*) FROM review_event WHERE review_state_id = ?1)
+             FROM review_state WHERE id = ?1",
+            params![rs_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+        )
+        .expect("snapshot")
+    }
+
+    fn assert_preview_matches_algorithm(conn: &Connection, rs_id: i64, state: &ReviewState) {
+        let preview = preview_review_intervals_inner(conn, rs_id).expect("preview");
+
+        let grades: Vec<u8> = preview.iter().map(|p| p.grade).collect();
+        assert_eq!(grades, vec![0, 2, 3, 4], "one entry per rating button, in order");
+        for p in &preview {
+            let (_, days) = calculate_next_review(state, p.grade);
+            assert_eq!(p.due_in_seconds, days * 86_400, "grade {} matches SM-2", p.grade);
+        }
+        for pair in preview.windows(2) {
+            assert!(
+                pair[0].due_in_seconds <= pair[1].due_in_seconds,
+                "intervals must not decrease from Again to Easy: {preview:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn preview_for_a_fresh_card_matches_the_algorithm() {
+        let pool = create_pool_test_memory().expect("pool");
+        run_migrations(&pool).expect("migrations");
+        let conn = pool.get().expect("conn");
+        let rs_id = add_word(&conn, "zzt_preview_fresh");
+
+        assert_preview_matches_algorithm(&conn, rs_id, &ReviewState::default());
+    }
+
+    #[test]
+    fn preview_for_a_mature_card_matches_the_algorithm() {
+        let pool = create_pool_test_memory().expect("pool");
+        run_migrations(&pool).expect("migrations");
+        let conn = pool.get().expect("conn");
+        let rs_id = add_word(&conn, "zzt_preview_mature");
+        let mature = ReviewState { ease: 2.5, interval: 30, repetitions: 5, lapses: 1 };
+        set_state(&conn, rs_id, &mature);
+
+        assert_preview_matches_algorithm(&conn, rs_id, &mature);
+        let preview = preview_review_intervals_inner(&conn, rs_id).expect("preview");
+        assert!(
+            preview[0].due_in_seconds < preview[3].due_in_seconds,
+            "a mature card spreads Again and Easy apart"
+        );
+    }
+
+    #[test]
+    fn preview_writes_nothing() {
+        let pool = create_pool_test_memory().expect("pool");
+        run_migrations(&pool).expect("migrations");
+        let conn = pool.get().expect("conn");
+        let rs_id = add_word(&conn, "zzt_preview_readonly");
+        set_state(&conn, rs_id, &ReviewState { ease: 2.3, interval: 12, repetitions: 4, lapses: 0 });
+        let before = snapshot(&conn, rs_id);
+
+        preview_review_intervals_inner(&conn, rs_id).expect("preview");
+
+        assert_eq!(snapshot(&conn, rs_id), before);
+    }
+
+    #[test]
+    fn preview_rejects_bad_and_unknown_ids() {
+        let pool = create_pool_test_memory().expect("pool");
+        run_migrations(&pool).expect("migrations");
+        let conn = pool.get().expect("conn");
+
+        assert!(matches!(
+            preview_review_intervals_inner(&conn, 0),
+            Err(AppError::Validation(_))
+        ));
+        assert!(matches!(
+            preview_review_intervals_inner(&conn, 999_999),
+            Err(AppError::NotFound(_))
+        ));
     }
 }

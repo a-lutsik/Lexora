@@ -29,6 +29,39 @@ export function useDueCount(languageId: number) {
   });
 }
 
+/**
+ * Next interval for each rating grade of one card (read-only SM-2 preview).
+ * Disabled for cards without a review state: there is nothing to schedule.
+ */
+export function useReviewIntervalPreview(reviewStateId: number | null) {
+  return useQuery({
+    queryKey: ['review-interval-preview', reviewStateId],
+    queryFn: () => ipc.study.previewIntervals(reviewStateId ?? 0),
+    enabled: reviewStateId != null,
+  });
+}
+
+/**
+ * Stats summary (streak) for the study overview. Shares the Stats page cache key.
+ * `enabled: false` while a session runs, so the overview refetches when it comes back.
+ */
+export function useStudyStatsSummary(languageId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: [QUERY_KEYS.STATS, languageId],
+    queryFn: () => ipc.stats.getSummary(languageId),
+    enabled,
+  });
+}
+
+/** Daily review activity (oldest first, today last) for the study overview. */
+export function useStudyDailyActivity(days: number, languageId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: [QUERY_KEYS.STATS, 'daily-activity', days, languageId],
+    queryFn: () => ipc.stats.getDailyActivity(days, languageId),
+    enabled,
+  });
+}
+
 export function useEvaluateAnswer() {
   const client = useQueryClient();
 
