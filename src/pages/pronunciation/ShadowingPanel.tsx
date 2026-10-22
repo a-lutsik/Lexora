@@ -4,7 +4,7 @@ import { useI18n } from "../../hooks/useI18n";
 // Vocabulary queue (read-only). Say / Space → model → record → score.
 // ============================================================
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { PhonemeFeedback } from '../../components/domain/PhonemeFeedback';
 import { useLanguages, resolveLanguageId } from '../../hooks/useLanguages';
 import { useShadowDrill } from '../../hooks/useShadowDrill';
@@ -14,10 +14,13 @@ import { ipc } from '../../lib/ipc';
 import { computeSessionStats } from '../../lib/sessionScore';
 import { PRONUNCIATION_PASS_SCORE } from '../../lib/pronunciationScore';
 import type { VocabularyEntryDto } from '../../lib/types';
+import { Icon } from '../../components/ui/Icon';
 import { PronunciationDrill } from './PronunciationDrill';
 
 export type ShadowingPanelProps = {
   language: string;
+  /** Extra side-column section rendered by the page (problem sounds). */
+  asideExtra?: ReactNode;
 };
 
 const SHADOW_QUEUE_PAGE = 100;
@@ -27,7 +30,7 @@ function nextQueueIndex(current: number, length: number): number {
   return (current + 1) % length;
 }
 
-export function ShadowingPanel({ language }: ShadowingPanelProps) {
+export function ShadowingPanel({ language, asideExtra }: ShadowingPanelProps) {
   const { t: tUi } = useI18n();
   const { data: languages } = useLanguages();
   const languageId = resolveLanguageId(languages, language);
@@ -104,6 +107,8 @@ export function ShadowingPanel({ language }: ShadowingPanelProps) {
           ? tUi("Scoring your pronunciation…")
           : null;
 
+  const showResult = Boolean(drill.latest || drill.noSpeech) && drill.phase !== 'playing';
+
   const handleListen = () => {
     const phrase = targetText.trim();
     if (!phrase) return;
@@ -121,8 +126,7 @@ export function ShadowingPanel({ language }: ShadowingPanelProps) {
       phraseInputLabel={tUi("Phrase to shadow")}
       currentScore={drill.latest?.overallScore ?? null}
       sessionAverage={session.average}
-      sessionPassed={session.passed}
-      sessionTotal={session.total}
+      attempt={drill.attempt}
       analyser={drill.analyser}
       waveActive={drill.phase === 'recording'}
       onPrimary={() => {
@@ -141,58 +145,64 @@ export function ShadowingPanel({ language }: ShadowingPanelProps) {
       spaceHintText={tUi("Press Spacebar to Shadow")}
       phaseMessage={phaseMessage}
       error={drill.error}
+      asideExtra={asideExtra}
+      feedback={
+        showResult && (drill.latest || drill.playbackUrl) ? (
+          <section className="pronunciation-result" aria-live="polite">
+            {drill.latest && (
+              <>
+                <p className={`pronunciation-pass-line${drill.passed ? ' is-passed' : ''}`}>
+                  {drill.passed
+                    ? tUi("Passed")
+                    : tUi("Need {PRONUNCIATION_PASS_SCORE}% to pass", { PRONUNCIATION_PASS_SCORE: PRONUNCIATION_PASS_SCORE })}
+                </p>
+                {drill.latest.summary && <p className="pronunciation-note">{drill.latest.summary}</p>}
+                {drill.latest.recognizedText && (
+                  <p className="pronunciation-note">{tUi("Heard: ")}<span className="pronunciation-heard">{drill.latest.recognizedText}</span>
+                  </p>
+                )}
+                {drill.latest.stressFeedback && (
+                  <p className="pronunciation-note pronunciation-note--muted">{drill.latest.stressFeedback}</p>
+                )}
+                {drill.tipPending && (
+                  <p className="pronunciation-note pronunciation-note--muted">{tUi("Getting a tip…")}</p>
+                )}
+                {drill.tip && (
+                  <p className="pronunciation-note pronunciation-auto-tip">
+                    {drill.tip.tip}
+                    {drill.tip.tonguePosition ? tUi(" Tongue: {value1}", { value1: drill.tip.tonguePosition }) : ''}
+                    {drill.tip.lipPosition ? tUi(" Lips: {value1}", { value1: drill.tip.lipPosition }) : ''}
+                  </p>
+                )}
+              </>
+            )}
+            {drill.playbackUrl && (
+              <details className="pronunciation-playback-wrap">
+                <summary>
+                  <Icon name="play_circle" size={17} />
+                  {tUi("Your recording")}
+                </summary>
+                <audio
+                  className="pronunciation-playback"
+                  controls
+                  src={drill.playbackUrl}
+                  aria-label={tUi("Your recording")}
+                >
+                  <track kind="captions" />
+                </audio>
+              </details>
+            )}
+          </section>
+        ) : null
+      }
     >
-      {(drill.latest || drill.noSpeech) && drill.phase !== 'playing' && (
-        <section className="pronunciation-result pronunciation-result--inline" aria-live="polite">
+      {showResult && (
+        <div className="pronunciation-stage-result" aria-live="polite">
           {drill.noSpeech && (
-            <p className="text-secondary">{tUi("No speech detected. Please speak clearly into the microphone and try again.")}</p>
+            <p className="pronunciation-note">{tUi("No speech detected. Please speak clearly into the microphone and try again.")}</p>
           )}
-          {drill.latest && (
-            <>
-              <p className="pronunciation-pass-line">
-                {drill.passed
-                  ? tUi("Passed")
-                  : tUi("Need {PRONUNCIATION_PASS_SCORE}% to pass", { PRONUNCIATION_PASS_SCORE: PRONUNCIATION_PASS_SCORE })}
-              </p>
-              {drill.attempt > 0 && (
-                <div className="pronunciation-shadow-meta" aria-live="polite">{tUi("Attempt ")}{drill.attempt}
-                </div>
-              )}
-              {drill.latest.summary && <p className="text-secondary">{drill.latest.summary}</p>}
-              {drill.latest.recognizedText && (
-                <p className="text-sm">{tUi("Heard: ")}<span className="pronunciation-heard">{drill.latest.recognizedText}</span>
-                </p>
-              )}
-              {drill.latest.stressFeedback && (
-                <p className="text-sm text-muted">{drill.latest.stressFeedback}</p>
-              )}
-              <PhonemeFeedback phonemes={drill.latest.phonemes} />
-              {drill.tipPending && (
-                <p className="text-muted text-sm">{tUi("Getting a tip…")}</p>
-              )}
-              {drill.tip && (
-                <p className="text-sm pronunciation-auto-tip">
-                  {drill.tip.tip}
-                  {drill.tip.tonguePosition ? tUi(" Tongue: {value1}", { value1: drill.tip.tonguePosition }) : ''}
-                  {drill.tip.lipPosition ? tUi(" Lips: {value1}", { value1: drill.tip.lipPosition }) : ''}
-                </p>
-              )}
-            </>
-          )}
-          {drill.playbackUrl && (
-            <details className="pronunciation-playback-wrap">
-              <summary>{tUi("Your recording")}</summary>
-              <audio
-                className="pronunciation-playback"
-                controls
-                src={drill.playbackUrl}
-                aria-label={tUi("Your recording")}
-              >
-                <track kind="captions" />
-              </audio>
-            </details>
-          )}
-        </section>
+          {drill.latest && <PhonemeFeedback phonemes={drill.latest.phonemes} />}
+        </div>
       )}
     </PronunciationDrill>
   );

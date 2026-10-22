@@ -4,9 +4,12 @@ import { useI18n } from "../../hooks/useI18n";
 // LEXORA — Live conversation console (AI Dialogue)
 // Real-time voice with the tutor via Gemini Live: speak freely,
 // the tutor answers by voice; with headphones you can interrupt.
+// Status sits in a sunken well with mono text above the bars.
 // ============================================================
 
 import { useState } from 'react';
+import { Button } from '../../components/ui/Button';
+import { Icon } from '../../components/ui/Icon';
 import type { RealtimeStatus } from '../../hooks/useRealtimeSession';
 import { DialogueBarEqualizer } from './DialogueBarEqualizer';
 
@@ -61,44 +64,48 @@ export function LiveConversationConsole({
 
   return (
     <div className="dialogue-live">
-      <DialogueBarEqualizer
-        isRecording={live && !modelSpeaking}
-        isProcessing={connecting}
-        analyser={analyser}
-      />
+      <div className="well dialogue-live-well">
+        <p className={`dialogue-live-status${live ? ' is-live' : ''}`} aria-live="polite">
+          {live && <span className="dialogue-live-dot" aria-hidden="true" />}
+          {statusLine(status, modelSpeaking, headphones)}
+        </p>
+        <DialogueBarEqualizer
+          isRecording={live && !modelSpeaking}
+          isProcessing={connecting}
+          analyser={analyser}
+        />
+      </div>
 
-      <p className="dialogue-live-status text-sm" aria-live="polite">
-        {live && <span className="dialogue-live-dot" aria-hidden="true" />}
-        {statusLine(status, modelSpeaking, headphones)}
-      </p>
-
-      <div className="dialogue-voice-controls">
+      <div className="dialogue-live-controls">
         {live || connecting ? (
-          <button
-            type="button"
-            className="dialogue-send-btn dialogue-live-stop"
-            onClick={onStop}
-            aria-label={tUi("End live conversation")}
-          >{tUi("End conversation")}</button>
+          <Button variant="secondary" onClick={onStop} aria-label={tUi("End live conversation")}>
+            <Icon name="stop_circle" size={17} />
+            {tUi("End conversation")}
+          </Button>
         ) : (
-          <button
-            type="button"
-            className="dialogue-send-btn"
+          <Button
+            variant="primary"
             onClick={onStart}
             disabled={!canStart}
             aria-label={tUi("Start live conversation")}
-          >{tUi("Start conversation")}</button>
+          >
+            <Icon name="graphic_eq" size={17} />
+            {tUi("Start conversation")}
+          </Button>
         )}
-        <label className="dialogue-live-headphones text-sm">
-          <input dir="auto"
+        <label className="dialogue-live-headphones">
+          <input
             type="checkbox"
+            className="dialogue-checkbox"
             checked={headphones}
             onChange={(e) => onHeadphonesChange(e.target.checked)}
-          />{tUi("I'm wearing headphones (interrupt the tutor)")}</label>
+          />
+          {tUi("I'm wearing headphones (interrupt the tutor)")}
+        </label>
       </div>
 
       {!headphones && (
-        <p className="dialogue-live-hint text-xs text-muted">{tUi("On speakers the mic pauses while the tutor talks, so the tutor does not hear itself.")}</p>
+        <p className="inline-note">{tUi("On speakers the mic pauses while the tutor talks, so the tutor does not hear itself.")}</p>
       )}
 
       {live && (
@@ -113,30 +120,32 @@ export function LiveConversationConsole({
           }}
         >
           <label className="sr-only" htmlFor="dialogue-live-text">{tUi("Typed reply")}</label>
-          <input dir="auto"
-            id="dialogue-live-text"
-            className="dialogue-text-input"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={tUi("Or type a reply…")}
-            autoComplete="off"
-          />
-          <button type="submit" className="dialogue-text-submit" disabled={!draft.trim()}>{tUi("Send")}</button>
+          <div className="field dialogue-text-field">
+            <input dir="auto"
+              id="dialogue-live-text"
+              className="field__input"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={tUi("Or type a reply…")}
+              autoComplete="off"
+            />
+          </div>
+          <Button type="submit" variant="secondary" disabled={!draft.trim()}>{tUi("Send")}</Button>
         </form>
       )}
 
       {unavailableReason && !live && (
-        <p className="dialogue-live-hint text-sm text-secondary" role="status">
+        <p className="inline-note" role="status">
           {unavailableReason}
         </p>
       )}
       {error && (
-        <p className="dialogue-error" role="alert">
+        <p className="inline-error" role="alert">
           {error}
         </p>
       )}
       {notice && (
-        <p className="dialogue-live-hint text-sm text-secondary" role="status">
+        <p className="inline-note" role="status">
           {notice}
         </p>
       )}

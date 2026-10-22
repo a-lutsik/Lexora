@@ -1,7 +1,7 @@
 import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — PhonemeFeedback
-// Color-coded IPA chips + overall score gauge.
+// Mono IPA chips tinted by result (ok / close / miss) + score gauge.
 // ============================================================
 
 import type { PhonemeScoreDto } from '../../lib/types';
@@ -17,10 +17,17 @@ type ScoreGaugeProps = {
   'aria-label'?: string;
 };
 
-const RING_SIZE = 120;
-const RING_STROKE = 8;
+const RING_SIZE = 84;
+const RING_STROKE = 6;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+/** Tint of a phoneme chip: matched → ok, mismatch → live, near miss stays neutral. */
+const CHIP_TINT: Record<'ok' | 'close' | 'miss', string> = {
+  ok: ' tag--ok',
+  close: '',
+  miss: ' tag--live',
+};
 
 export function ScoreGauge({
   score,
@@ -37,8 +44,7 @@ export function ScoreGauge({
 
   if (variant === 'ring') {
     return (
-      <div className={`score-gauge-ring score-gauge-ring--${tone}`}>
-        {label ? <p className="score-gauge-ring-label">{label}</p> : null}
+      <div className={`score-gauge-ring score-gauge-ring--${tone}`} data-tone={tone}>
         <div
           className="score-gauge-ring-meter"
           role="meter"
@@ -72,15 +78,19 @@ export function ScoreGauge({
               strokeWidth={RING_STROKE}
               strokeDasharray={RING_CIRCUMFERENCE}
               strokeDashoffset={dashOffset}
-              strokeLinecap="round"
               transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
             />
           </svg>
-          <div className="score-gauge-ring-center">
-            <span className="score-gauge-ring-value">{score === null ? '—' : `${value}%`}</span>
-            {caption ? <span className="score-gauge-ring-caption">{caption}</span> : null}
-          </div>
+          <span className="score-gauge-ring-value">
+            {score === null ? '—' : value}
+          </span>
         </div>
+        {label || caption ? (
+          <div className="score-gauge-ring-text">
+            {label ? <p className="score-gauge-ring-label">{label}</p> : null}
+            {caption ? <p className="score-gauge-ring-caption">{caption}</p> : null}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -106,7 +116,7 @@ type PhonemeFeedbackProps = {
 export function PhonemeFeedback({ phonemes }: PhonemeFeedbackProps) {
   const { t: tUi } = useI18n();
   if (phonemes.length === 0) {
-    return <p className="text-muted text-sm">{tUi("No phoneme breakdown for this attempt.")}</p>;
+    return <p className="phoneme-row-empty text-muted text-sm">{tUi("No phoneme breakdown for this attempt.")}</p>;
   }
 
   return (
@@ -116,7 +126,8 @@ export function PhonemeFeedback({ phonemes }: PhonemeFeedbackProps) {
         return (
           <li
             key={`${phone.id}-${phone.position}`}
-            className={`phoneme-chip phoneme-chip--${status}`}
+            className={`phoneme-chip phoneme-chip--${status}${CHIP_TINT[status]}`}
+            data-status={status}
           >
             <span className="phoneme-chip-ipa">/{phone.targetPhoneme}/</span>
             {phone.recognizedPhoneme && phone.recognizedPhoneme !== phone.targetPhoneme && (

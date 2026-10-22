@@ -139,9 +139,9 @@ describe('ShadowingPanel', () => {
   it('shows Say / Record and does not use a three-round counter', async () => {
     renderPanel();
     expect(await screen.findByRole('button', { name: 'Say phrase' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Listen to Model' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Listen' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Voice' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next Phrase' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next phrase' })).toBeInTheDocument();
     expect(screen.getByText('Say / Record')).toBeInTheDocument();
     expect(screen.queryByText(/Round \d of 3/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Postpone phrase' })).not.toBeInTheDocument();
@@ -160,12 +160,16 @@ describe('ShadowingPanel', () => {
     };
     renderPanel();
 
-    expect(screen.getAllByText('84%').length).toBeGreaterThan(0);
+    expect(screen.getByRole('meter', { name: 'Current pronunciation score' })).toHaveAttribute(
+      'aria-valuenow',
+      '84',
+    );
+    expect(screen.getByText('Keep practising')).toBeInTheDocument();
     expect(screen.getByText('Need 90% to pass')).toBeInTheDocument();
     expect(screen.getByText('The first vowel is too open.')).toBeInTheDocument();
     expect(screen.getByText(/Relax the jaw/)).toBeInTheDocument();
     expect(screen.getByLabelText('Phrase to shadow')).toHaveTextContent('Participant');
-    expect(screen.getByText('Attempt 2')).toBeInTheDocument();
+    expect(screen.getByText('Pass at 90 · attempt 2')).toBeInTheDocument();
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Postpone phrase' }));
@@ -179,15 +183,19 @@ describe('ShadowingPanel', () => {
     drill.passed = true;
     renderPanel();
 
-    expect(screen.getAllByText('92%').length).toBeGreaterThan(0);
+    expect(screen.getByRole('meter', { name: 'Current pronunciation score' })).toHaveAttribute(
+      'aria-valuenow',
+      '92',
+    );
+    expect(screen.getByText('Good attempt')).toBeInTheDocument();
     expect(screen.getByText('Passed')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Postpone phrase' })).not.toBeInTheDocument();
   });
 
-  it('Next Phrase advances via postpone', async () => {
+  it('Next phrase advances via postpone', async () => {
     renderPanel();
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Next Phrase' }));
+    await user.click(screen.getByRole('button', { name: 'Next phrase' }));
     expect(drill.postpone).toHaveBeenCalledTimes(1);
     await waitFor(() => {
       expect(screen.getByLabelText('Phrase to shadow')).toHaveTextContent('Banana');

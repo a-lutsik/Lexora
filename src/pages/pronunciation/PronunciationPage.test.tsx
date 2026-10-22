@@ -118,14 +118,20 @@ describe('PronunciationPage', () => {
     mockIpc();
     renderPage('/pronunciation?word=think&ipa=%2F%CE%B8%C9%AA%C5%8Bk%2F');
 
-    expect(screen.getByRole('heading', { name: 'Pronunciation Coach' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Speak', level: 1 })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByLabelText('Word or phrase')).toHaveValue('think');
     });
-    expect(screen.getByRole('button', { name: 'Record attempt' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Listen to Model' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hold to record' })).toHaveTextContent('Hold to record');
+    expect(screen.getByRole('button', { name: 'Listen' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Voice' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next Phrase' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next phrase' })).toBeInTheDocument();
+    expect(document.querySelector('.drill-space-hint')).toHaveTextContent(
+      'Hold Space to record · → next phrase',
+    );
+    expect(screen.getByRole('heading', { name: 'Speak', level: 1 }).closest('header')).toHaveAttribute(
+      'data-tauri-drag-region',
+    );
     expect(screen.getByLabelText('Target IPA (optional)')).toHaveValue('/θɪŋk/');
     expect(await screen.findByText('/θ/')).toBeInTheDocument();
   });
@@ -174,9 +180,9 @@ describe('PronunciationPage', () => {
     });
     expect(screen.queryByRole('textbox', { name: 'Phrase to shadow' })).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue('OK')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Listen to Model' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Listen' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Voice' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next Phrase' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next phrase' })).toBeInTheDocument();
     expect(screen.queryByText(/Round \d of 3/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Play model audio' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Record shadow' })).not.toBeInTheDocument();

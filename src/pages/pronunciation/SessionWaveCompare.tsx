@@ -39,7 +39,6 @@ function WaveRow({
             style={{ ['--bar-scale' as string]: String(h) }}
           />
         ))}
-        <span className="pairs-wave-compare-scrubber" />
       </div>
     </div>
   );

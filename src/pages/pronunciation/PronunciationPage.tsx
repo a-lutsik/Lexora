@@ -2,13 +2,14 @@ import { getLocale } from '../../i18n';
 import { useI18n } from "../../hooks/useI18n";
 import { t as tUi } from "../../i18n";
 // ============================================================
-// LEXORA — Pronunciation Coach page
+// LEXORA — Speak (pronunciation) page
 // Practice, Shadowing, Minimal Pairs, History.
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
+import { Icon } from '../../components/ui/Icon';
 import { PhonemeFeedback } from '../../components/domain/PhonemeFeedback';
 import {
   useArticulationTip,
@@ -25,7 +26,7 @@ import { revokeObjectUrl } from '../../lib/audioRecorder';
 import { evaluatePronunciationClip } from '../../lib/evaluatePronunciationClip';
 import { formatIpcError } from '../../lib/utils';
 import { ipc } from '../../lib/ipc';
-import { isEmptySpeechAttempt } from '../../lib/pronunciationScore';
+import { isEmptySpeechAttempt, scoreTone } from '../../lib/pronunciationScore';
 import { computeSessionStats } from '../../lib/sessionScore';
 import type { PronunciationAttemptDto } from '../../lib/types';
 import { MinimalPairsPanel } from './MinimalPairsPanel';
@@ -68,6 +69,7 @@ export default function PronunciationPage() {
   const [latest, setLatest] = useState<PronunciationAttemptDto | undefined>(undefined);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [practiceScores, setPracticeScores] = useState<number[]>([]);
+  const [phraseAttempts, setPhraseAttempts] = useState(0);
   const [practiceScoring, setPracticeScoring] = useState(false);
   const [practiceNoSpeech, setPracticeNoSpeech] = useState(false);
   const practiceInputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +89,7 @@ export default function PronunciationPage() {
     const idParam = searchParams.get('lexemeId');
     if (word && word.trim()) {
       setTargetText(word.trim());
+      setPhraseAttempts(0);
       setTab('practice');
     }
     const providedIpa = ipa?.trim() ?? '';
@@ -161,6 +164,7 @@ export default function PronunciationPage() {
         if (!practiceAttemptIds.current.has(result.id)) {
           practiceAttemptIds.current.add(result.id);
           setPracticeScores((prev) => [...prev, result.overallScore]);
+          setPhraseAttempts((count) => count + 1);
         }
       } catch {
         // errors surface via mutation state
@@ -233,6 +237,7 @@ export default function PronunciationPage() {
     ipaManualRef.current = false;
     setTargetText('');
     setTargetIpa('');
+    setPhraseAttempts(0);
     setLatest(undefined);
     setPracticeNoSpeech(false);
     setPlaybackUrl((url) => {
@@ -257,214 +262,237 @@ export default function PronunciationPage() {
     ? tUi("Stop")
     : isPracticeProcessing
       ? tUi("Scoring…")
-      : tUi("Say / Record");
+      : tUi("Hold to record");
   const practicePrimaryAria = isPracticeRecording
     ? 'Stop recording'
     : isPracticeProcessing
       ? 'Scoring pronunciation'
-      : 'Record attempt';
+      : 'Hold to record';
 
   const evalError =
     saveMutation.error ?? evaluateMutation.error
       ? mutationErrorMessage(saveMutation.error ?? evaluateMutation.error)
       : null;
 
+  const problemSounds =
+    problemPhonemes && problemPhonemes.length > 0 ? (
+      <section className="pronunciation-problems" aria-labelledby="pron-problems-title">
+        <h2 id="pron-problems-title" className="pronunciation-aside-label">{tUi("Problem sounds")}</h2>
+        <ul className="pronunciation-problems-list">
+          {problemPhonemes.map((pattern) => (
+            <li key={pattern.id} className="tag pronunciation-problem" data-status="miss">
+              <span className="pronunciation-problem-ipa">/{pattern.phoneme}/</span>
+              <span className="pronunciation-problem-count">×{pattern.occurrenceCount}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
+
   return (
-    <div className="pronunciation-page animate-fade-in">
-      <header className="pronunciation-header">
-        <div>
-          <h1 className="pronunciation-title">{tUi("Pronunciation Coach")}</h1>
-          <p className="text-secondary text-sm">{tUi("Record, get phoneme feedback, shadow a model, and drill minimal pairs.")}</p>
+    <div className="pronunciation-page page animate-fade-in">
+      <header className="page-header" data-tauri-drag-region>
+        <div className="page-header__text">
+          <h1 className="page-title">{tUi("Speak")}</h1>
+          <p className="page-subtitle">{tUi("Record, get phoneme feedback, shadow a model, and drill minimal pairs.")}</p>
+        </div>
+        <div className="page-actions">
+          <div className="seg pronunciation-tabs" role="tablist" aria-label={tUi("Pronunciation modes")}>
+            {TAB_OPTIONS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                id={`pron-tab-${item.id}`}
+                aria-selected={tab === item.id}
+                aria-controls={`pron-panel-${item.id}`}
+                className={`seg__item pronunciation-tab${tab === item.id ? ' is-active' : ''}`}
+                onClick={() => setTab(item.id)}
+              >
+                {tUi(item.label)}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
-      <div className="pronunciation-tabs" role="tablist" aria-label={tUi("Pronunciation modes")}>
-        {TAB_OPTIONS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            id={`pron-tab-${item.id}`}
-            aria-selected={tab === item.id}
-            aria-controls={`pron-panel-${item.id}`}
-            className={`pronunciation-tab${tab === item.id ? ' is-active' : ''}`}
-            onClick={() => setTab(item.id)}
+      <div className="pronunciation-body">
+        {tab === 'practice' && (
+          <section
+            className="pronunciation-panel pronunciation-panel--drill"
+            role="tabpanel"
+            id="pron-panel-practice"
+            aria-labelledby="pron-tab-practice"
           >
-            {tUi(item.label)}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'practice' && (
-        <section
-          className="pronunciation-panel pronunciation-panel--drill"
-          role="tabpanel"
-          id="pron-panel-practice"
-          aria-labelledby="pron-tab-practice"
-        >
-          <PronunciationDrill
-            sceneTitle="Practice: Pronunciation"
-            targetText={targetText}
-            onTargetTextChange={(value) => {
-              ipaManualRef.current = false;
-              setTargetText(value);
-            }}
-            targetIpa={targetIpa}
-            onTargetIpaChange={(value) => {
-              ipaManualRef.current = value.trim().length > 0;
-              setTargetIpa(value);
-            }}
-            showIpaField
-            phraseInputId="pron-target"
-            phraseInputLabel={tUi("Word or phrase")}
-            ipaInputId="pron-ipa"
-            phraseInputRef={practiceInputRef}
-            inputLocked={isPracticeRecording || practiceScoring}
-            currentScore={latest?.overallScore ?? null}
-            sessionAverage={practiceSession.average}
-            sessionPassed={practiceSession.passed}
-            sessionTotal={practiceSession.total}
-            analyser={practiceRecorder.analyser}
-            waveActive={isPracticeRecording}
-            onPrimary={() => {
-              void handlePracticePrimary();
-            }}
-            primaryLabel={practicePrimaryLabel}
-            primaryAriaLabel={practicePrimaryAria}
-            primaryDisabled={!canRecord && !isPracticeRecording}
-            primaryLoading={isPracticeProcessing && !isPracticeRecording}
-            onListen={handleListenModel}
-            listenDisabled={!targetText.trim() || isPracticeRecording}
-            showPostpone={false}
-            onNextPhrase={clearPracticePhrase}
-            spaceHint
-            spaceHintText={tUi("Hold Spacebar to record")}
-            phaseMessage={
-              isPracticeRecording
-                ? 'Recording… keep holding Space, then release'
-                : isPracticeProcessing
-                  ? 'Scoring your pronunciation…'
-                  : null
-            }
-            error={
-              practiceRecorder.error ??
-              (evalError ? evalError : null)
-            }
-          >
-            {(latest || practiceNoSpeech) && (
-              <section className="pronunciation-result pronunciation-result--inline" aria-live="polite">
-                {practiceNoSpeech && (
-                  <p className="text-secondary">{tUi("No speech detected. Please try recording again and speak clearly.")}</p>
-                )}
-                {latest && (
-                  <>
-                    {latest.summary && <p className="text-secondary">{latest.summary}</p>}
-                    {latest.recognizedText && (
-                      <p className="text-sm">{tUi("Heard: ")}<span className="pronunciation-heard">{latest.recognizedText}</span>
-                      </p>
-                    )}
-                    {latest.stressFeedback && (
-                      <p className="text-sm text-muted">{latest.stressFeedback}</p>
-                    )}
-                    <PhonemeFeedback phonemes={latest.phonemes} />
-                    {worstPhoneme && worstPhoneme.status !== 'ok' && (
-                      <div className="pronunciation-tip-block">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          isLoading={tipMutation.isPending}
-                          onClick={requestTip}
-                          aria-label={tUi("Get articulation tip for {value1}", { value1: worstPhoneme.targetPhoneme })}
-                        >{tUi("Tip for /")}{worstPhoneme.targetPhoneme}/
-                        </Button>
-                        {tipMutation.data && (
-                          <p className="text-sm">
-                            {tipMutation.data.tip}
-                            {tipMutation.data.tonguePosition
-                              ? tUi(" Tongue: {value1}", { value1: tipMutation.data.tonguePosition })
-                              : ''}
-                            {tipMutation.data.lipPosition ? tUi(" Lips: {value1}", { value1: tipMutation.data.lipPosition }) : ''}
+            <PronunciationDrill
+              sceneTitle="Practice: Pronunciation"
+              targetText={targetText}
+              onTargetTextChange={(value) => {
+                ipaManualRef.current = false;
+                setTargetText(value);
+                setPhraseAttempts(0);
+              }}
+              targetIpa={targetIpa}
+              onTargetIpaChange={(value) => {
+                ipaManualRef.current = value.trim().length > 0;
+                setTargetIpa(value);
+              }}
+              showIpaField
+              phraseInputId="pron-target"
+              phraseInputLabel={tUi("Word or phrase")}
+              ipaInputId="pron-ipa"
+              phraseInputRef={practiceInputRef}
+              inputLocked={isPracticeRecording || practiceScoring}
+              currentScore={latest?.overallScore ?? null}
+              sessionAverage={practiceSession.average}
+              attempt={phraseAttempts}
+              analyser={practiceRecorder.analyser}
+              waveActive={isPracticeRecording}
+              onPrimary={() => {
+                void handlePracticePrimary();
+              }}
+              primaryLabel={practicePrimaryLabel}
+              primaryAriaLabel={practicePrimaryAria}
+              primaryDisabled={!canRecord && !isPracticeRecording}
+              primaryLoading={isPracticeProcessing && !isPracticeRecording}
+              onListen={handleListenModel}
+              listenDisabled={!targetText.trim() || isPracticeRecording}
+              showPostpone={false}
+              onNextPhrase={clearPracticePhrase}
+              spaceHint
+              spaceHintLead={tUi("Hold")}
+              spaceHintText={tUi("to record")}
+              phaseMessage={
+                isPracticeRecording
+                  ? 'Recording… keep holding Space, then release'
+                  : isPracticeProcessing
+                    ? 'Scoring your pronunciation…'
+                    : null
+              }
+              error={
+                practiceRecorder.error ??
+                (evalError ? evalError : null)
+              }
+              asideExtra={problemSounds}
+              feedback={
+                latest || (practiceNoSpeech && playbackUrl) ? (
+                  <section className="pronunciation-result" aria-live="polite">
+                    {latest && (
+                      <>
+                        {latest.summary && <p className="pronunciation-note">{latest.summary}</p>}
+                        {latest.recognizedText && (
+                          <p className="pronunciation-note">{tUi("Heard: ")}<span className="pronunciation-heard">{latest.recognizedText}</span>
                           </p>
                         )}
-                      </div>
+                        {latest.stressFeedback && (
+                          <p className="pronunciation-note pronunciation-note--muted">{latest.stressFeedback}</p>
+                        )}
+                        {worstPhoneme && worstPhoneme.status !== 'ok' && (
+                          <div className="pronunciation-tip-block">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              isLoading={tipMutation.isPending}
+                              onClick={requestTip}
+                              aria-label={tUi("Get articulation tip for {value1}", { value1: worstPhoneme.targetPhoneme })}
+                            >
+                              <Icon name="hearing" size={17} />
+                              {tUi("Tip for /")}{worstPhoneme.targetPhoneme}/
+                            </Button>
+                            {tipMutation.data && (
+                              <p className="pronunciation-note">
+                                {tipMutation.data.tip}
+                                {tipMutation.data.tonguePosition
+                                  ? tUi(" Tongue: {value1}", { value1: tipMutation.data.tonguePosition })
+                                  : ''}
+                                {tipMutation.data.lipPosition ? tUi(" Lips: {value1}", { value1: tipMutation.data.lipPosition }) : ''}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-                {playbackUrl && (
-                  <audio
-                    className="pronunciation-playback"
-                    controls
-                    src={playbackUrl}
-                    aria-label={tUi("Your recording")}
-                  >
-                    <track kind="captions" />
-                  </audio>
-                )}
-              </section>
+                    {playbackUrl && (
+                      <audio
+                        className="pronunciation-playback"
+                        controls
+                        src={playbackUrl}
+                        aria-label={tUi("Your recording")}
+                      >
+                        <track kind="captions" />
+                      </audio>
+                    )}
+                  </section>
+                ) : null
+              }
+            >
+              {(latest || practiceNoSpeech) && (
+                <div className="pronunciation-stage-result" aria-live="polite">
+                  {practiceNoSpeech && (
+                    <p className="pronunciation-note">{tUi("No speech detected. Please try recording again and speak clearly.")}</p>
+                  )}
+                  {latest && <PhonemeFeedback phonemes={latest.phonemes} />}
+                </div>
+              )}
+            </PronunciationDrill>
+          </section>
+        )}
+
+        {tab === 'shadowing' && (
+          <section
+            className="pronunciation-panel pronunciation-panel--drill"
+            role="tabpanel"
+            id="pron-panel-shadowing"
+            aria-labelledby="pron-tab-shadowing"
+          >
+            <ShadowingPanel language={language} asideExtra={problemSounds} />
+          </section>
+        )}
+
+        {tab === 'pairs' && (
+          <section
+            className="pronunciation-panel pronunciation-panel--drill"
+            role="tabpanel"
+            id="pron-panel-pairs"
+            aria-labelledby="pron-tab-pairs"
+          >
+            <MinimalPairsPanel language={language} />
+          </section>
+        )}
+
+        {tab === 'history' && (
+          <section
+            className="pronunciation-panel pronunciation-panel--history"
+            role="tabpanel"
+            id="pron-panel-history"
+            aria-labelledby="pron-tab-history"
+          >
+            {!history || history.length === 0 ? (
+              <div className="empty">
+                <Icon name="graphic_eq" size={28} />
+                <p>{tUi("No attempts yet. Record a word to start a history.")}</p>
+              </div>
+            ) : (
+              <ul className="pronunciation-history">
+                {history.map((attempt) => (
+                  <li key={attempt.id} className="pronunciation-history-row">
+                    <span className="pronunciation-history-word">{attempt.targetText}</span>
+                    <span className="pronunciation-history-when">{formatWhen(attempt.createdAt)}</span>
+                    <span
+                      className="pronunciation-history-score"
+                      data-tone={scoreTone(attempt.overallScore)}
+                    >
+                      {attempt.overallScore}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
-          </PronunciationDrill>
-        </section>
-      )}
-
-      {tab === 'shadowing' && (
-        <section
-          className="pronunciation-panel pronunciation-panel--drill"
-          role="tabpanel"
-          id="pron-panel-shadowing"
-          aria-labelledby="pron-tab-shadowing"
-        >
-          <ShadowingPanel language={language} />
-        </section>
-      )}
-
-      {tab === 'pairs' && (
-        <section
-          className="pronunciation-panel pronunciation-panel--drill"
-          role="tabpanel"
-          id="pron-panel-pairs"
-          aria-labelledby="pron-tab-pairs"
-        >
-          <MinimalPairsPanel language={language} />
-        </section>
-      )}
-
-      {tab === 'history' && (
-        <section
-          className="pronunciation-panel"
-          role="tabpanel"
-          id="pron-panel-history"
-          aria-labelledby="pron-tab-history"
-        >
-          {!history || history.length === 0 ? (
-            <p className="text-muted">{tUi("No attempts yet. Record a word to start a history.")}</p>
-          ) : (
-            <ul className="pronunciation-history">
-              {history.map((attempt) => (
-                <li key={attempt.id} className="pronunciation-history-row">
-                  <span className="pronunciation-history-word">{attempt.targetText}</span>
-                  <span className="text-muted text-xs">{formatWhen(attempt.createdAt)}</span>
-                  <span className="pronunciation-history-score">{attempt.overallScore}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-
-      {problemPhonemes && problemPhonemes.length > 0 && tab !== 'pairs' && (
-        <aside className="pronunciation-problems">
-          <h2 className="pronunciation-subtitle">{tUi("Problem sounds")}</h2>
-          <ul className="phoneme-row">
-            {problemPhonemes.map((pattern) => (
-              <li key={pattern.id} className="phoneme-chip phoneme-chip--miss">
-                <span className="phoneme-chip-ipa">/{pattern.phoneme}/</span>
-                <span className="phoneme-chip-acc">×{pattern.occurrenceCount}</span>
-              </li>
-            ))}
-          </ul>
-        </aside>
-      )}
+            {problemSounds}
+          </section>
+        )}
+      </div>
     </div>
   );
 }

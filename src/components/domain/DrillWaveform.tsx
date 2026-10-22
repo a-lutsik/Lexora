@@ -1,24 +1,42 @@
 // ============================================================
-// LEXORA — Drill waveform (vertical neon bars for Practice/Shadowing)
+// LEXORA — Drill waveform (thin bars for Practice/Shadowing)
+// Idle: muted bars. Recording: live mic level, tinted as "recording".
+// Static mode (`heights`): a fixed envelope, e.g. the model row.
+// Colours come from CSS (data-state / data-tone), never from the SVG itself.
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react';
 import './domain.css';
 
-const BAR_COUNT = 28;
-const SVG_WIDTH = 420;
-const SVG_HEIGHT = 72;
-const BAR_GAP = 4;
-const BAR_WIDTH = (SVG_WIDTH - BAR_GAP * (BAR_COUNT - 1)) / BAR_COUNT;
+/** Bars per drill waveform row (live and static rows line up). */
+export const DRILL_WAVE_BAR_COUNT = 84;
+const BAR_COUNT = DRILL_WAVE_BAR_COUNT;
+const BAR_WIDTH = 3;
+const BAR_GAP = 2;
+const BAR_MIN_HEIGHT = 3;
+const SVG_WIDTH = BAR_COUNT * (BAR_WIDTH + BAR_GAP) - BAR_GAP;
+const SVG_HEIGHT = 34;
 
-const IDLE_HEIGHTS = [
-  0.22, 0.35, 0.48, 0.62, 0.78, 0.9, 0.72, 0.55, 0.4, 0.28, 0.38, 0.55, 0.7, 0.85, 0.95, 0.85, 0.7,
-  0.55, 0.38, 0.28, 0.4, 0.55, 0.72, 0.9, 0.78, 0.62, 0.48, 0.35,
-];
+/** Deterministic speech-like envelope used while the mic is idle. */
+function buildIdleHeights(): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < BAR_COUNT; i += 1) {
+    const syllable = Math.abs(Math.sin(i * 0.21));
+    const detail = 0.7 + 0.3 * Math.sin(i * 0.9 + 1);
+    out.push(Math.min(1, Math.max(0.22, 0.2 + syllable * detail * 0.8)));
+  }
+  return out;
+}
+
+const IDLE_HEIGHTS = buildIdleHeights();
 
 type DrillWaveformProps = {
   isActive: boolean;
   analyser?: AnalyserNode | null;
+  /** Fixed 0–1 bar heights; when set the row does not animate. */
+  heights?: readonly number[] | null;
+  /** Which row this is, for styling (model vs the learner). */
+  tone?: 'model' | 'user';
 };
 
 function prefersReducedMotion(): boolean {
@@ -26,12 +44,20 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export function DrillWaveform({ isActive, analyser = null }: DrillWaveformProps) {
-  const [heights, setHeights] = useState<number[]>(() => [...IDLE_HEIGHTS]);
-  const heightsRef = useRef(heights);
-  heightsRef.current = heights;
+export function DrillWaveform({
+  isActive,
+  analyser = null,
+  heights: staticHeights = null,
+  tone = 'user',
+}: DrillWaveformProps) {
+  const [liveHeights, setHeights] = useState<number[]>(() => [...IDLE_HEIGHTS]);
+  const heightsRef = useRef(liveHeights);
+  heightsRef.current = liveHeights;
+  const isStatic = staticHeights !== null;
+  const heights = staticHeights ?? liveHeights;
 
   useEffect(() => {
+    if (isStatic) return;
     if (prefersReducedMotion()) {
       setHeights([...IDLE_HEIGHTS]);
       return;
@@ -62,7 +88,7 @@ export function DrillWaveform({ isActive, analyser = null }: DrillWaveformProps)
         phase += 0.045;
         setHeights(
           IDLE_HEIGHTS.map((base, i) => {
-            const wobble = 0.12 * Math.sin(phase + i * 0.45);
+            const wobble = 0.08 * Math.sin(phase + i * 0.3);
             return Math.min(1, Math.max(0.12, base + wobble));
           }),
         );
@@ -72,32 +98,21 @@ export function DrillWaveform({ isActive, analyser = null }: DrillWaveformProps)
 
     raf = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(raf);
-  }, [analyser, isActive]);
+  }, [analyser, isActive, isStatic]);
 
   return (
     <svg
-      className="drill-waveform"
+      className={`drill-waveform${isActive ? ' is-active' : ''}`}
+      data-state={isActive ? 'recording' : 'idle'}
+      data-tone={tone}
       viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-      width="100%"
+      width={SVG_WIDTH}
       height={SVG_HEIGHT}
       aria-hidden="true"
       focusable="false"
     >
-      <defs>
-        <linearGradient id="drill-wave-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="var(--color-neon-cyan)" />
-          <stop offset="100%" stopColor="var(--color-neon-magenta)" />
-        </linearGradient>
-        <filter id="drill-wave-glow" x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="2.2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
       {heights.map((height, index) => {
-        const barHeight = Math.max(4, height * (SVG_HEIGHT - 4));
+        const barHeight = Math.max(BAR_MIN_HEIGHT, height * SVG_HEIGHT);
         const x = index * (BAR_WIDTH + BAR_GAP);
         const y = (SVG_HEIGHT - barHeight) / 2;
         return (
@@ -109,8 +124,6 @@ export function DrillWaveform({ isActive, analyser = null }: DrillWaveformProps)
             width={BAR_WIDTH}
             height={barHeight}
             rx={BAR_WIDTH / 2}
-            fill="url(#drill-wave-grad)"
-            filter="url(#drill-wave-glow)"
           />
         );
       })}

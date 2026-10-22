@@ -141,11 +141,18 @@ describe('DialoguePage', () => {
     invokeMock.mockImplementation(baseInvoke);
   });
 
-  it('highlights AI Dialogue tab and shows opening tutor line with play', async () => {
+  it('highlights Conversation tab and shows opening tutor line with play', async () => {
     renderPage();
-    const dialogueTab = await screen.findByRole('tab', { name: 'AI Dialogue' });
+    const dialogueTab = await screen.findByRole('tab', { name: 'Conversation' });
     expect(dialogueTab).toHaveAttribute('aria-selected', 'true');
     expect(dialogueTab).toHaveClass('is-active');
+    expect(screen.getByRole('tab', { name: 'Scenarios' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('button', { name: 'New scenario' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Dialogue', level: 1 }).closest('header')).toHaveAttribute(
+      'data-tauri-drag-region',
+    );
+    expect(screen.getByRole('button', { name: 'Record & send' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Live' })).toHaveAttribute('aria-pressed', 'false');
 
     await expect(
       screen.findByRole('heading', { name: 'Coffee Shop in London (B2 Level)' }),
@@ -158,27 +165,48 @@ describe('DialoguePage', () => {
     expect(screen.getByText('Press or hold Spacebar to reply')).toBeInTheDocument();
   });
 
-  it('shows empty score ring until a reply, then updates from chip', async () => {
+  it('shows serif Last turn / Session numbers: a dash until a reply, then the chip scores', async () => {
     const user = userEvent.setup();
     renderPage();
 
-    const ring = await screen.findByRole('meter', { name: 'Current turn score' });
-    expect(ring).toHaveAttribute('aria-valuetext', 'No score yet');
-    expect(within(ring).getByText('—')).toBeInTheDocument();
+    const turn = await screen.findByRole('meter', { name: 'Current turn score' });
+    const sessionValue = screen.getByRole('meter', { name: 'Session' });
+    expect(turn).toHaveAttribute('aria-valuetext', 'No score yet');
+    expect(turn).toHaveTextContent(/^—$/);
+    expect(sessionValue).toHaveTextContent(/^—$/);
+    expect(document.querySelector('.dialogue-metrics svg')).toBeNull();
+    expect(screen.getByText('(Fluency & Clarity)')).toBeInTheDocument();
 
     await user.click(await screen.findByRole('button', { name: 'medium roast' }));
 
     await waitFor(() => {
-      expect(ring).toHaveAttribute('aria-valuenow', '95');
+      expect(turn).toHaveAttribute('aria-valuenow', '95');
     });
-    expect(within(ring).getByText('95%')).toBeInTheDocument();
-    expect(screen.getByText('92%')).toBeInTheDocument();
+    expect(turn).toHaveTextContent(/^95$/);
+    expect(sessionValue).toHaveTextContent(/^92$/);
+    expect(sessionValue).toHaveAttribute('aria-valuenow', '92');
     expect(invokeMock).toHaveBeenCalledWith(
       'send_dialogue_turn',
       expect.objectContaining({
         input: expect.objectContaining({ text: 'medium roast' }),
       }),
     );
+  });
+
+  it('switches the Space hint to "Release Space to send" while recording', async () => {
+    installFakeAudio();
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('heading', { name: 'Coffee Shop in London (B2 Level)' });
+
+    const hint = () => document.querySelector('.dialogue-console-foot .hint');
+    expect(hint()).toHaveTextContent('Space Press or hold Spacebar to reply');
+
+    await user.click(screen.getByRole('button', { name: 'Start recording' }));
+    await waitFor(() => {
+      expect(hint()).toHaveTextContent('Release Space to send');
+    });
+    vi.unstubAllGlobals();
   });
 
   it('toggles recording on Space tap when not in a text field', async () => {
@@ -255,7 +283,7 @@ describe('DialoguePage — live conversation', () => {
     renderPage();
     await screen.findByText('What kind of roast would you like with your flat white today?');
 
-    await user.click(screen.getByRole('button', { name: 'Live conversation' }));
+    await user.click(screen.getByRole('button', { name: 'Live' }));
     expect(await screen.findByText(/Live conversation is unavailable: Gemini API key is required/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start live conversation' })).toBeDisabled();
     expect(screen.queryByText('Press or hold Spacebar to reply')).not.toBeInTheDocument();
@@ -266,7 +294,7 @@ describe('DialoguePage — live conversation', () => {
     renderPage();
     await screen.findByText('What kind of roast would you like with your flat white today?');
 
-    await user.click(screen.getByRole('button', { name: 'Live conversation' }));
+    await user.click(screen.getByRole('button', { name: 'Live' }));
     const start = await screen.findByRole('button', { name: 'Start live conversation' });
     await waitFor(() => expect(start).toBeEnabled());
     await user.click(start);
@@ -289,8 +317,8 @@ describe('DialoguePage — live conversation', () => {
       expect(document.querySelector('.dialogue-msg--live')).toBeNull();
     });
     expect(screen.getByText('Excellent choice — medium roast it is.')).toBeInTheDocument();
-    const ring = screen.getByRole('meter', { name: 'Current turn score' });
-    expect(ring).toHaveAttribute('aria-valuenow', '95');
+    const turnScore = screen.getByRole('meter', { name: 'Current turn score' });
+    expect(turnScore).toHaveAttribute('aria-valuenow', '95');
 
     await user.click(screen.getByRole('button', { name: 'End live conversation' }));
     expect(invokeMock).toHaveBeenCalledWith('realtime_stop', { sessionId: 1 });
@@ -438,7 +466,7 @@ describe('DialoguePage — scenarios per language', () => {
     useBackend(backend);
     renderPage();
 
-    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    await user.click(await screen.findByRole('tab', { name: 'Scenarios' }));
     await user.click(await screen.findByRole('button', { name: 'Generate scenarios in German' }));
 
     expect(invokeMock).toHaveBeenCalledWith('generate_dialogue_scenarios', { language: 'de' });
@@ -455,7 +483,7 @@ describe('DialoguePage — scenarios per language', () => {
     });
     renderPage();
 
-    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    await user.click(await screen.findByRole('tab', { name: 'Scenarios' }));
     await user.click(await screen.findByRole('button', { name: 'Generate scenarios in German' }));
 
     expect(await screen.findByRole('status')).toHaveTextContent(/2 scenarios, 3 left/);
@@ -472,7 +500,7 @@ describe('DialoguePage — scenarios per language', () => {
     });
     renderPage();
 
-    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    await user.click(await screen.findByRole('tab', { name: 'Scenarios' }));
     await user.click(await screen.findByRole('button', { name: 'Generate scenarios in German' }));
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
@@ -483,8 +511,8 @@ describe('DialoguePage — scenarios per language', () => {
     useBackend({ language: 'en', scenarios: [scenario({ language: 'en', origin: 'builtin' })] });
     renderPage();
 
-    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
-    expect(await screen.findByRole('button', { name: 'Add scenario' })).toBeInTheDocument();
+    await user.click(await screen.findByRole('tab', { name: 'Scenarios' }));
+    expect(await screen.findByRole('button', { name: 'New scenario' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Generate scenarios/ })).not.toBeInTheDocument();
   });
 });
@@ -497,8 +525,8 @@ describe('DialoguePage — own scenarios', () => {
   async function openAddDialog() {
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
-    await user.click(await screen.findByRole('button', { name: 'Add scenario' }));
+    await user.click(await screen.findByRole('tab', { name: 'Scenarios' }));
+    await user.click(await screen.findByRole('button', { name: 'New scenario' }));
     return { user, dialog: await screen.findByRole('dialog', { name: 'Add scenario' }) };
   }
 
@@ -559,6 +587,24 @@ describe('DialoguePage — own scenarios', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('labels every level as CEFR code · name', async () => {
+    useBackend({ language: 'de', scenarios: [scenario({})] });
+    const { user, dialog } = await openAddDialog();
+
+    const level = within(dialog).getByRole('combobox', { name: 'Level' });
+    expect(level).toHaveTextContent('B1 · Intermediate');
+    await user.click(level);
+    const labels = screen.getAllByRole('option').map((option) => option.textContent?.trim());
+    expect(labels).toEqual([
+      'A1 · Beginner',
+      'A2 · Elementary',
+      'B1 · Intermediate',
+      'B2 · Upper intermediate',
+      'C1 · Advanced',
+      'C2 · Proficient',
+    ]);
+  });
+
   it('closes the dialog with Escape', async () => {
     useBackend({ language: 'de', scenarios: [scenario({})] });
     const { user } = await openAddDialog();
@@ -573,7 +619,7 @@ describe('DialoguePage — own scenarios', () => {
     useBackend({ language: 'en', scenarios: [builtin, custom] });
     renderPage();
 
-    await user.click(await screen.findByRole('tab', { name: 'Practice Scenarios' }));
+    await user.click(await screen.findByRole('tab', { name: 'Scenarios' }));
     await screen.findByText('Mine');
     expect(screen.queryByRole('button', { name: 'Delete Coffee' })).not.toBeInTheDocument();
 

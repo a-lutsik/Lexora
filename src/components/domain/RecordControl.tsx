@@ -6,6 +6,7 @@ import { useI18n } from "../../hooks/useI18n";
 
 import { forwardRef, useImperativeHandle } from 'react';
 import { Button } from '../ui/Button';
+import { Icon } from '../ui/Icon';
 import { useMicrophoneRecorder } from '../../hooks/useMicrophoneRecorder';
 import type { RecordedClip } from '../../hooks/useMicrophoneRecorder';
 import './domain.css';
@@ -51,7 +52,7 @@ export const RecordControl = forwardRef<RecordControlHandle, RecordControlProps>
     };
 
     return (
-      <div className="record-control">
+      <div className="record-control" data-state={isRecording ? 'recording' : 'idle'}>
         <Button
           type="button"
           variant={isRecording ? 'danger' : 'primary'}
@@ -63,10 +64,14 @@ export const RecordControl = forwardRef<RecordControlHandle, RecordControlProps>
           }}
           aria-label={isRecording ? tUi("Stop recording") : (idleLabel ?? tUi("Record"))}
         >
+          <Icon name={isRecording ? 'stop' : 'mic'} size={17} />
           {isRecording ? tUi("Stop") : (idleLabel ?? tUi("Record"))}
         </Button>
         {isRecording && (
-          <span className="record-control-live" aria-live="polite">{tUi("Recording…")}</span>
+          <span className="record-control-live" aria-live="polite">
+            <span className="record-control-dot" aria-hidden="true" />
+            {tUi("Recording…")}
+          </span>
         )}
         {error && (
           <p className="record-control-error" role="alert">

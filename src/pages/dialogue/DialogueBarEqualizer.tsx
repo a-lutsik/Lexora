@@ -1,11 +1,20 @@
 // ============================================================
 // LEXORA — Bar equalizer for AI Dialogue voice console
-// Vertical neon bars (cyan → magenta), idle + live analyser.
+// Thin single-colour bars (Lingora): the colour comes from CSS
+// (`color` of .dialogue-eq) — `--live` while recording, else `--ink3`.
+// Idle wave + live analyser.
 // ============================================================
 
 import { useEffect, useRef } from 'react';
 
-const BAR_COUNT = 48;
+/** Bar geometry from the mockup: 3px bars, 2px gaps. */
+const BAR_WIDTH = 3;
+const BAR_GAP = 2;
+const BAR_RADIUS = 1.5;
+const MIN_BARS = 8;
+const MIN_BAR_HEIGHT = 3;
+const FALLBACK_WIDTH = 360;
+const FALLBACK_HEIGHT = 26;
 
 type DialogueBarEqualizerProps = {
   isRecording: boolean;
@@ -13,10 +22,11 @@ type DialogueBarEqualizerProps = {
   analyser?: AnalyserNode | null;
 };
 
-function buildIdleHeights(t: number): number[] {
+function buildIdleHeights(t: number, count: number): number[] {
   const heights: number[] = [];
-  for (let i = 0; i < BAR_COUNT; i += 1) {
-    const center = Math.abs(i - (BAR_COUNT - 1) / 2) / ((BAR_COUNT - 1) / 2);
+  const half = Math.max(1, (count - 1) / 2);
+  for (let i = 0; i < count; i += 1) {
+    const center = Math.abs(i - half) / half;
     const envelope = 1 - center * 0.55;
     const wave = 0.35 + 0.65 * Math.sin(t * 2.2 + i * 0.28) * envelope;
     heights.push(Math.max(0.12, Math.min(1, wave)));
@@ -45,10 +55,15 @@ export function DialogueBarEqualizer({
     let phase = 0;
     const freq = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
 
+    const barCount = () => {
+      const cssW = canvas.clientWidth || FALLBACK_WIDTH;
+      return Math.max(MIN_BARS, Math.floor((cssW + BAR_GAP) / (BAR_WIDTH + BAR_GAP)));
+    };
+
     const paint = (heights: number[]) => {
       const dpr = window.devicePixelRatio || 1;
-      const cssW = canvas.clientWidth || 400;
-      const cssH = canvas.clientHeight || 72;
+      const cssW = canvas.clientWidth || FALLBACK_WIDTH;
+      const cssH = canvas.clientHeight || FALLBACK_HEIGHT;
       if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)) {
         canvas.width = Math.floor(cssW * dpr);
         canvas.height = Math.floor(cssH * dpr);
@@ -56,60 +71,51 @@ export function DialogueBarEqualizer({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssW, cssH);
 
-      const gap = 3;
-      const barW = Math.max(2, (cssW - gap * (BAR_COUNT - 1)) / BAR_COUNT);
+      // Token colour resolved by CSS (state classes on the wrapper).
+      ctx.fillStyle = window.getComputedStyle(canvas).color;
       const mid = cssH / 2;
 
-      for (let i = 0; i < BAR_COUNT; i += 1) {
-        const t = i / (BAR_COUNT - 1);
-        const r = Math.round(34 + (232 - 34) * t);
-        const g = Math.round(211 + (121 - 211) * t);
-        const b = Math.round(238 + (249 - 238) * t);
-        const h = Math.max(4, (heights[i] ?? 0.2) * (cssH * 0.92));
-        const x = i * (barW + gap);
+      heights.forEach((value, i) => {
+        const h = Math.max(MIN_BAR_HEIGHT, value * cssH);
+        const x = i * (BAR_WIDTH + BAR_GAP);
         const y = mid - h / 2;
-
-        ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.65)`;
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        const radius = Math.min(barW / 2, 3);
         if (typeof ctx.roundRect === 'function') {
           ctx.beginPath();
-          ctx.roundRect(x, y, barW, h, radius);
+          ctx.roundRect(x, y, BAR_WIDTH, h, BAR_RADIUS);
           ctx.fill();
         } else {
-          ctx.fillRect(x, y, barW, h);
+          ctx.fillRect(x, y, BAR_WIDTH, h);
         }
-      }
-      ctx.shadowBlur = 0;
+      });
     };
 
     const tick = (now: number) => {
       if (cancelled) return;
       phase = now / 1000;
+      const count = barCount();
 
       if (isLive && analyser && freq) {
         analyser.getByteFrequencyData(freq);
+        const idle = buildIdleHeights(phase, count);
         const heights: number[] = [];
-        for (let i = 0; i < BAR_COUNT; i += 1) {
-          const idx = Math.floor((i / BAR_COUNT) * freq.length * 0.55);
+        for (let i = 0; i < count; i += 1) {
+          const idx = Math.floor((i / count) * freq.length * 0.55);
           const v = (freq[idx] ?? 0) / 255;
-          const idle = buildIdleHeights(phase)[i] ?? 0.2;
-          heights.push(Math.max(idle * 0.35, Math.min(1, v * 1.35)));
+          heights.push(Math.max((idle[i] ?? 0.2) * 0.35, Math.min(1, v * 1.35)));
         }
         paint(heights);
       } else if (reducedMotion) {
-        paint(buildIdleHeights(0));
+        paint(buildIdleHeights(0, count));
         return;
       } else {
         const amp = isProcessing ? 0.85 : 1;
-        paint(buildIdleHeights(phase).map((h) => h * amp));
+        paint(buildIdleHeights(phase, count).map((h) => h * amp));
       }
       raf = window.requestAnimationFrame(tick);
     };
 
     if (reducedMotion && !isLive) {
-      paint(buildIdleHeights(0));
+      paint(buildIdleHeights(0, barCount()));
       return () => {
         cancelled = true;
       };

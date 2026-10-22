@@ -1,24 +1,28 @@
 // ============================================================
-// LEXORA — Circular neon match gauge for Minimal Pairs
+// LEXORA — Circular match gauge for Minimal Pairs (serif number)
 // ============================================================
+
+import { scoreTone } from '../../lib/pronunciationScore';
 
 type MatchRingProps = {
   score: number;
   label?: string;
 };
 
-const SIZE = 140;
-const STROKE = 10;
+const SIZE = 96;
+const STROKE = 6;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export function MatchRing({ score, label = 'Pronunciation score' }: MatchRingProps) {
   const clamped = Math.max(0, Math.min(100, Math.round(score)));
   const offset = CIRCUMFERENCE * (1 - clamped / 100);
+  const tone = clamped === 0 ? 'empty' : scoreTone(clamped);
 
   return (
     <div
       className="pairs-match-ring"
+      data-tone={tone}
       role="meter"
       aria-valuemin={0}
       aria-valuemax={100}
@@ -43,11 +47,13 @@ export function MatchRing({ score, label = 'Pronunciation score' }: MatchRingPro
           strokeWidth={STROKE}
           strokeDasharray={CIRCUMFERENCE}
           strokeDashoffset={offset}
-          strokeLinecap="round"
           transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
         />
       </svg>
-      <span className="pairs-match-ring-value">{clamped}%</span>
+      <span className="pairs-match-ring-value">
+        {clamped}
+        <span className="pairs-match-ring-unit">%</span>
+      </span>
     </div>
   );
 }

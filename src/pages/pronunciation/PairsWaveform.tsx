@@ -1,9 +1,9 @@
 // ============================================================
-// LEXORA — Symmetric neon bar waveform for Minimal Pairs
+// LEXORA — Symmetric bar waveform for Minimal Pairs (mic in the middle)
 // ============================================================
 
 import { useEffect, useMemo, useState } from 'react';
-import { IconMic } from '../../components/ui/LuminousIcons';
+import { Icon } from '../../components/ui/Icon';
 
 const BAR_COUNT = 18;
 
@@ -77,7 +77,11 @@ export function PairsWaveform({ isRecording, analyser = null }: PairsWaveformPro
   }, [analyser, isRecording]);
 
   return (
-    <div className="pairs-waveform" aria-hidden="true">
+    <div
+      className={`pairs-waveform${isRecording ? ' is-recording' : ''}`}
+      data-state={isRecording ? 'recording' : 'idle'}
+      aria-hidden="true"
+    >
       <div className="pairs-waveform-bars">
         {left.map((h, i) => (
           <span
@@ -88,7 +92,7 @@ export function PairsWaveform({ isRecording, analyser = null }: PairsWaveformPro
         ))}
       </div>
       <div className="pairs-waveform-mic">
-        <IconMic size={28} />
+        <Icon name={isRecording ? 'graphic_eq' : 'mic'} size={22} />
       </div>
       <div className="pairs-waveform-bars">
         {right.map((h, i) => (
