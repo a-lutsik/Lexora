@@ -50,33 +50,32 @@ export function WordDetailEdit({ entryId, text, translation, onDone, onPendingCh
         void handleSave();
       }}
     >
-      <label className="word-detail-edit-label" htmlFor="word-detail-edit-word">{tUi("Word")}</label>
+      <label className="label" htmlFor="word-detail-edit-word">{tUi("Word")}</label>
       <input dir="auto"
         id="word-detail-edit-word"
-        className="word-detail-edit-input"
+        className="field word-detail-edit-input"
         value={wordValue}
         onChange={(e) => setWordValue(e.target.value)}
         maxLength={200}
         // Focus the field the user just asked to edit.
         autoFocus
       />
-      <label className="word-detail-edit-label" htmlFor="word-detail-edit-translation">{tUi("Translation")}</label>
+      <label className="label" htmlFor="word-detail-edit-translation">{tUi("Translation")}</label>
       <input dir="auto"
         id="word-detail-edit-translation"
-        className="word-detail-edit-input"
+        className="field word-detail-edit-input"
         value={translationValue}
         onChange={(e) => setTranslationValue(e.target.value)}
       />
       {error && (
-        <p className="word-detail-notes-error" role="alert">
+        <p className="inline-error" role="alert">
           {error}
         </p>
       )}
       <div className="word-detail-edit-actions">
-        <Button variant="ghost" size="sm" onClick={onDone} disabled={updateMutation.isPending}>{tUi("Cancel")}</Button>
+        <Button variant="ghost" onClick={onDone} disabled={updateMutation.isPending}>{tUi("Cancel")}</Button>
         <Button
           variant="primary"
-          size="sm"
           type="submit"
           isLoading={updateMutation.isPending}
           disabled={!wordValue.trim()}

@@ -69,6 +69,26 @@ describe('WordDetail', () => {
     expect(img).toHaveAttribute('src', 'asset://localhost//tmp/apple.jpg');
   });
 
+  it('shows the short language name on the translation language trigger and drags the window by its header', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_vocabulary_entry') return Promise.resolve(entry);
+      if (cmd === 'list_categories') return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+
+    renderWithQueryClient(
+      <MemoryRouter>
+        <WordDetail id={7} onClose={() => undefined} />
+      </MemoryRouter>
+    );
+
+    const trigger = await screen.findByRole('combobox', { name: 'View translation in language' });
+    // Frame 1b: the 120px trigger reads "Russian", not a clipped "Russian (Русский)".
+    expect(trigger).toHaveTextContent(/^Russian$/);
+    const head = screen.getByRole('button', { name: 'Close word details' }).closest('.word-panel__head');
+    expect(head).toHaveAttribute('data-tauri-drag-region');
+  });
+
   describe('when the word cannot be shown', () => {
     beforeEach(() => {
       invokeMock.mockReset();
@@ -158,7 +178,7 @@ describe('WordDetail', () => {
     const { rerender } = render(view(() => undefined), {
       wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
     });
-    const notes = await screen.findByLabelText('PERSONAL NOTES');
+    const notes = await screen.findByLabelText('Personal notes');
     await user.click(notes);
     expect(notes).toHaveFocus();
 
@@ -181,7 +201,7 @@ describe('WordDetail', () => {
         <WordDetail id={7} onClose={() => undefined} />
       </MemoryRouter>
     );
-    await user.click(await screen.findByRole('button', { name: 'Save Notes' }));
+    await user.click(await screen.findByRole('button', { name: 'Save notes' }));
 
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(/couldn.t save your notes/i)
@@ -245,24 +265,71 @@ describe('WordDetail', () => {
     });
   });
 
-  it('keeps keyboard focus inside the dialog while tabbing', async () => {
+  it('opens as a side panel next to the list, not a modal that traps focus', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) =>
       Promise.resolve(cmd === 'get_vocabulary_entry' ? entry : null)
     );
     renderWithQueryClient(
       <MemoryRouter>
-        <button type="button">behind the dialog</button>
         <WordDetail id={7} onClose={() => undefined} />
+        <button type="button">after the panel</button>
+      </MemoryRouter>
+    );
+    const panel = await screen.findByRole('dialog', { name: 'apple' });
+    expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    expect(panel).toHaveFocus();
+
+    const outside = screen.getByRole('button', { name: 'after the panel' });
+    for (let i = 0; i < 40 && document.activeElement !== outside; i += 1) {
+      await user.tab();
+    }
+    expect(outside).toHaveFocus();
+  });
+
+  it('steps to the previous and next word with the header arrows and the arrow keys', async () => {
+    const user = userEvent.setup();
+    const onPrevious = vi.fn();
+    const onNext = vi.fn();
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'get_vocabulary_entry' ? entry : null)
+    );
+    renderWithQueryClient(
+      <MemoryRouter>
+        <WordDetail id={7} onClose={() => undefined} position={{ index: 2, total: 3 }}
+          onPrevious={onPrevious} onNext={onNext} />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Word 2 of 3')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Previous word' }));
+    expect(onPrevious).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Next word' }));
+    expect(onNext).toHaveBeenCalledTimes(1);
+
+    screen.getByRole('dialog', { name: 'apple' }).focus();
+    await user.keyboard('{ArrowDown}');
+    expect(onNext).toHaveBeenCalledTimes(2);
+    await user.keyboard('{ArrowUp}');
+    expect(onPrevious).toHaveBeenCalledTimes(2);
+
+    // Arrow keys inside the notes field move the caret, not the word.
+    await user.click(screen.getByLabelText('Personal notes'));
+    await user.keyboard('{ArrowDown}');
+    expect(onNext).toHaveBeenCalledTimes(2);
+  });
+
+  it('disables the arrows that have no word to go to', async () => {
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'get_vocabulary_entry' ? entry : null)
+    );
+    renderWithQueryClient(
+      <MemoryRouter>
+        <WordDetail id={7} onClose={() => undefined} position={{ index: 1, total: 1 }} />
       </MemoryRouter>
     );
     await screen.findByRole('heading', { name: 'apple' });
-    const dialog = screen.getByRole('heading', { name: 'apple' }).closest('.word-detail-dialog');
-    if (!dialog) throw new Error('dialog not found');
-
-    for (let i = 0; i < 40; i += 1) {
-      await user.tab();
-      expect(dialog.contains(document.activeElement)).toBe(true);
-    }
+    expect(screen.getByRole('button', { name: 'Previous word' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next word' })).toBeDisabled();
   });
 });

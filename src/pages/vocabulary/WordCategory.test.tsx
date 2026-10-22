@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { WordCategory } from './WordCategory';
 import { invokeMock } from '../../test/mocks';
 import { renderWithQueryClient } from '../../test/render';
+import { chooseOption } from '../../test/selectOption';
 
 const categories = [
   { id: 1, languageId: 1, name: 'General', isGeneral: true, wordCount: 1 },
@@ -18,9 +19,8 @@ describe('WordCategory', () => {
   it('shows General for a stored General id and moves the single entry', async () => {
     const user = userEvent.setup();
     renderWithQueryClient(<WordCategory entryId={42} categoryId={1} languageId={1} />);
-    await screen.findByRole('option', { name: 'Travel' });
-    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Category' }), '2');
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Category' })).toHaveTextContent('General'));
+    await chooseOption(user, screen.getByRole('combobox', { name: 'Category' }), 'Travel');
     await user.click(screen.getByRole('button', { name: 'Move to category' }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('move_vocabulary_to_category', { ids: [42], categoryId: 2 }));
   });
@@ -28,8 +28,7 @@ describe('WordCategory', () => {
   it('resolves the General option to its authoritative id', async () => {
     const user = userEvent.setup();
     renderWithQueryClient(<WordCategory entryId={42} categoryId={2} languageId={1} />);
-    await screen.findByRole('option', { name: 'Travel' });
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Category' }), '');
+    await chooseOption(user, screen.getByRole('combobox', { name: 'Category' }), 'General');
     await user.click(screen.getByRole('button', { name: 'Move to category' }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('move_vocabulary_to_category', { ids: [42], categoryId: 1 }));
   });
@@ -42,11 +41,10 @@ describe('WordCategory', () => {
       return Promise.resolve(null);
     });
     renderWithQueryClient(<WordCategory entryId={42} categoryId={1} languageId={1} />);
-    await screen.findByRole('option', { name: 'Travel' });
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Category' }), '2');
+    await chooseOption(user, screen.getByRole('combobox', { name: 'Category' }), 'Travel');
     await user.click(screen.getByRole('button', { name: 'Move to category' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Database locked');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('2');
+    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveTextContent('Travel');
   });
 });

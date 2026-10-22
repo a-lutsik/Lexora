@@ -17,18 +17,19 @@ export function WordCategory({ entryId, languageId, categoryId }: WordCategoryPr
   const mutation = useCategoryMutation();
   const [targetId, setTargetId] = useState(categoryId);
   return (
-    <div className="bulk-add-field">
-      <label>{tUi('Category')}
-        <CategorySelect categories={categories.data ?? []} value={targetId} onChange={setTargetId} disabled={mutation.isPending} />
-      </label>
-      <Button size="sm" variant="secondary" disabled={mutation.isPending || !categories.data?.length}
-        onClick={() => {
-          const target = targetId ?? categories.data?.find((category) => category.isGeneral)?.id;
-          if (target != null) mutation.mutate({ kind: 'move', ids: [entryId], categoryId: target });
-        }} isLoading={mutation.isPending}>{tUi('Move to category')}</Button>
-      {categories.isError && <p className="text-secondary text-xs">{tUi('Could not load categories.')} <Button size="sm" onClick={() => void categories.refetch()}>{tUi('Retry categories')}</Button></p>}
-      {mutation.isError && <p role="alert" className="add-word-image-error">{formatIpcError(mutation.error, tUi('Could not move words.'))}</p>}
-      {mutation.isSuccess && <p role="status">{tUi('Category updated.')}</p>}
-    </div>
+    <section className="word-panel__section word-category">
+      <label htmlFor={`word-category-${entryId}`} className="section-label word-panel__section-label">{tUi('Category')}</label>
+      <div className="word-category__row">
+        <CategorySelect id={`word-category-${entryId}`} categories={categories.data ?? []} value={targetId} onChange={setTargetId} disabled={mutation.isPending} />
+        <Button variant="secondary" disabled={mutation.isPending || !categories.data?.length}
+          onClick={() => {
+            const target = targetId ?? categories.data?.find((category) => category.isGeneral)?.id;
+            if (target != null) mutation.mutate({ kind: 'move', ids: [entryId], categoryId: target });
+          }} isLoading={mutation.isPending}>{tUi('Move to category')}</Button>
+      </div>
+      {categories.isError && <p className="inline-note">{tUi('Could not load categories.')} <Button size="sm" onClick={() => void categories.refetch()}>{tUi('Retry categories')}</Button></p>}
+      {mutation.isError && <p role="alert" className="inline-error">{formatIpcError(mutation.error, tUi('Could not move words.'))}</p>}
+      {mutation.isSuccess && <p role="status" className="inline-note">{tUi('Category updated.')}</p>}
+    </section>
   );
 }

@@ -6,6 +6,7 @@ import { AddWordModal } from './AddWordModal';
 import { invokeMock, listenMock } from '../../test/mocks';
 import { renderWithQueryClient } from '../../test/render';
 import type { TranslationResult } from '../../lib/types';
+import { chooseOption } from '../../test/selectOption';
 
 const translationResult: TranslationResult = {
   text: 'apple',
@@ -93,7 +94,9 @@ describe('AddWordModal', () => {
 
     const img = await screen.findByRole('img', { name: 'Photo of apple' });
     expect(img).toHaveAttribute('src', 'asset://localhost//tmp/apple.jpg');
-    expect(screen.getByText(/She picked a red apple/)).toBeInTheDocument();
+    // The example underlines the word (frame 2b), so the sentence spans several nodes.
+    const underlined = screen.getByText('apple', { selector: 'u' });
+    expect(underlined.parentElement).toHaveTextContent('She picked a red apple.');
 
     await user.click(screen.getByRole('button', { name: 'Regenerate photo' }));
     await waitFor(() => {
@@ -104,7 +107,7 @@ describe('AddWordModal', () => {
       'asset://localhost//tmp/apple-2.jpg?v=1'
     );
 
-    await user.click(screen.getByRole('button', { name: '+ Add to Vocabulary' }));
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('add_to_vocabulary', {
         input: expect.objectContaining({
@@ -164,15 +167,15 @@ describe('AddWordModal', () => {
       'apple{Enter}'
     );
     expect(await screen.findByText('яблоко')).toBeInTheDocument();
-    await user.type(screen.getByLabelText(/personal notes/i), 'from an article');
-    expect(screen.getByLabelText(/personal notes/i)).toHaveValue('from an article');
+    await user.type(screen.getByLabelText(/^notes/i), 'from an article');
+    expect(screen.getByLabelText(/^notes/i)).toHaveValue('from an article');
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Add Word' }));
     expect(screen.getByRole('textbox', { name: 'Word or phrase to translate' })).toHaveValue('');
-    expect(screen.getByLabelText(/personal notes/i)).toHaveValue('');
+    expect(screen.getByLabelText(/^notes/i)).toHaveValue('');
     expect(screen.queryByText('яблоко')).not.toBeInTheDocument();
   });
 });
@@ -189,10 +192,9 @@ describe('AddWordModal categories', () => {
       return Promise.resolve(null);
     });
     renderWithQueryClient(<AddWordModal isOpen onClose={() => undefined} />);
-    await screen.findByRole('option', { name: 'Travel' });
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Category' }), '2');
+    await chooseOption(user, screen.getByRole('combobox', { name: 'Category' }), 'Travel');
     await user.type(screen.getByRole('textbox', { name: 'Word or phrase to translate' }), 'airport');
-    await user.click(screen.getByRole('button', { name: '+ Add to Vocabulary' }));
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('add_to_vocabulary', {
       input: expect.objectContaining({ text: 'airport', categoryId: 2 }),
     }));
@@ -208,7 +210,7 @@ describe('AddWordModal categories', () => {
     });
     renderWithQueryClient(<AddWordModal isOpen initialCategoryId={99} onClose={() => undefined} />);
     await user.type(screen.getByRole('textbox', { name: 'Word or phrase to translate' }), 'airport');
-    await user.click(screen.getByRole('button', { name: '+ Add to Vocabulary' }));
+    await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Category no longer exists');
     expect(invokeMock).toHaveBeenCalledWith('add_to_vocabulary', {
       input: expect.objectContaining({ categoryId: 99 }),
@@ -226,7 +228,7 @@ it('uses the stored General id when adding without selecting another category', 
   renderWithQueryClient(<AddWordModal isOpen onClose={() => undefined} />);
   await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('list_categories', { languageId: 1 }));
   await user.type(screen.getByRole('textbox', { name: 'Word or phrase to translate' }), 'apple');
-  await user.click(screen.getByRole('button', { name: '+ Add to Vocabulary' }));
+  await user.click(screen.getByRole('button', { name: 'Add to vocabulary' }));
   await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('add_to_vocabulary', {
     input: expect.objectContaining({ categoryId: 17 }),
   }));

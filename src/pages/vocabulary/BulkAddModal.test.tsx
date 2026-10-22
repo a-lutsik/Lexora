@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BulkAddModal } from './BulkAddModal';
 import { invokeMock } from '../../test/mocks';
 import { renderWithQueryClient } from '../../test/render';
+import { chooseOption } from '../../test/selectOption';
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn(async () => '/tmp/words.txt'),
@@ -115,8 +116,7 @@ describe('BulkAddModal categories', () => {
   it('imports the file into the selected category', async () => {
     const user = userEvent.setup();
     renderWithQueryClient(<BulkAddModal isOpen mode="file" onClose={() => undefined} />);
-    await screen.findByRole('option', { name: 'Travel' });
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Category' }), '2');
+    await chooseOption(user, screen.getByRole('combobox', { name: 'Category' }), 'Travel');
     await user.click(screen.getByRole('button', { name: 'Choose file…' }));
     await user.click(screen.getByRole('button', { name: 'Add words from file' }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('import_word_list', {
@@ -137,5 +137,5 @@ it('preserves a bulk draft and explicit category if the page filter changes behi
   await user.type(screen.getByRole('textbox', { name: 'Word list, one per line' }), 'airport');
   await user.click(screen.getByRole('button', { name: 'Change page category' }));
   expect(screen.getByRole('textbox', { name: 'Word list, one per line' })).toHaveValue('airport');
-  expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('2');
+  expect(screen.getByRole('combobox', { name: 'Category' })).toHaveTextContent('Selected category');
 });

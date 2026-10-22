@@ -1,14 +1,15 @@
 import { useI18n } from "../../hooks/useI18n";
 // ============================================================
-// LEXORA — Word Detail Modal / Drawer
-// Full inspection: phonetic, translations, examples, SRS status, notes.
+// LEXORA — Word Detail panel (Lingora frame 1b)
+// Панель справа от списка, а не модалка: список остаётся виден,
+// стрелками ↑/↓ (и кнопками в шапке) можно листать слова страницы.
+// Произношение, перевод, примеры, состояние SRS, заметки, удаление.
 // ============================================================
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
-import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useVocabularyEntry, useToggleFavorite, useRemoveFromVocabulary } from '../../hooks/useVocabulary';
 import { useSettings } from '../../hooks/useSettings';
 import { useLanguages, useLanguageOptions } from '../../hooks/useLanguages';
@@ -16,6 +17,7 @@ import { useTranslate } from '../../hooks/useTranslate';
 import { LanguageSelect } from '../../components/ui/LanguageSelect';
 import { SrsStatusBadge, PosBadge } from '../../components/ui/Badge';
 import { Button, IconButton } from '../../components/ui/Button';
+import { Icon } from '../../components/ui/Icon';
 import { AudioButton } from '../../components/domain/AudioButton';
 import { AssociatedImage } from '../../components/domain/AssociatedImage';
 import { FreqBadge } from '../../components/domain/FreqBadge';
@@ -28,41 +30,43 @@ import { ipc } from '../../lib/ipc';
 import { STALE_TIME, QUERY_KEYS } from '../../lib/constants';
 import { formatImageProviderError } from '../../lib/inlineAssistant';
 import { canHaveCollocations } from '../../lib/collocations';
+import { cx, formatRelativeDate } from '../../lib/utils';
 import type { CardEnrichEvent } from '../../lib/types';
 import './vocabulary.css';
+
+/** 1-based position of the open word in the list and the list size (null when unknown). */
+export type WordDetailPosition = { index: number; total: number | null };
 
 type WordDetailProps = {
   id: number;
   onClose: () => void;
+  position?: WordDetailPosition | null;
+  onPrevious?: () => void;
+  onNext?: () => void;
 };
 
-function StarIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? 'var(--color-warn)' : 'none'} stroke={filled ? 'var(--color-warn)' : 'currentColor'} strokeWidth={2}>
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  );
+const TITLE_ID = 'word-detail-title';
+const LOADING_ID = 'word-detail-loading';
+const UNAVAILABLE_ID = 'word-detail-unavailable-title';
+
+/** Arrow keys belong to text fields and list boxes; only elsewhere they step through words. */
+function ownsArrowKeys(target: EventTarget): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return target.closest('input, textarea, select, [role="combobox"], [role="listbox"], [role="option"]') != null;
 }
 
-function CloseIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
+/** Splits an example around the first case-insensitive occurrence of the word (to underline it). */
+function splitAroundWord(sentence: string, word: string): [string, string, string] | null {
+  const needle = word.trim().toLocaleLowerCase();
+  if (!needle) return null;
+  const at = sentence.toLocaleLowerCase().indexOf(needle);
+  if (at < 0) return null;
+  return [sentence.slice(0, at), sentence.slice(at, at + needle.length), sentence.slice(at + needle.length)];
 }
 
-function EditIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  );
-}
-
-export function WordDetail({ id, onClose }: WordDetailProps) {
-  const { t: tUi } = useI18n();
+export function WordDetail({ id, onClose, position = null, onPrevious, onNext }: WordDetailProps) {
+  const { t: tUi, locale } = useI18n();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: entry, isLoading, isError, refetch } = useVocabularyEntry(id);
@@ -80,7 +84,7 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
   const [imageNonce, setImageNonce] = useState(0);
   const [showCollocations, setShowCollocations] = useState(false);
   const [viewTarget, setViewTarget] = useState(settings?.interfaceLanguage ?? 'ru');
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const langOptions = useLanguageOptions([viewTarget, settings?.interfaceLanguage ?? 'ru']);
 
   useEffect(() => {
@@ -168,27 +172,49 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
     onCloseRef.current = onClose;
   });
 
-  // Esc закрывает окно в любом состоянии: загрузка, ошибка, содержимое.
+  // Esc закрывает панель в любом состоянии: загрузка, ошибка, содержимое.
+  // Модалка поверх панели (подтверждение, Add word) закрывается первой.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCloseRef.current();
+      if (e.key !== 'Escape') return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      onCloseRef.current();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // A11y: при открытии фокус на диалог, при закрытии возвращается к прежнему элементу.
-  // Зависим от факта наличия слова, а не от самого объекта: обновление данных
-  // (перевод, избранное) не должно красть фокус у поля заметок.
-  const hasEntry = entry != null;
+  // A11y: при открытии фокус на панель, при закрытии возвращается к прежнему
+  // элементу (строке списка). Панель не модальная — Tab свободно уходит в список.
   useEffect(() => {
-    if (!hasEntry) return;
     const previouslyFocused =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialogRef.current?.focus();
-    return () => previouslyFocused?.focus();
-  }, [hasEntry]);
-  useFocusTrap(dialogRef, hasEntry);
+    panelRef.current?.focus();
+    return () => {
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, []);
+
+  // ↑/↓ листают слова страницы, пока фокус в панели, но не в поле ввода или списке.
+  const stepRef = useRef({ onPrevious, onNext });
+  useEffect(() => {
+    stepRef.current = { onPrevious, onNext };
+  });
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const handleArrows = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.target && ownsArrowKeys(event.target)) return;
+      const step = event.key === 'ArrowUp' ? stepRef.current.onPrevious : stepRef.current.onNext;
+      if (!step) return;
+      event.preventDefault();
+      step();
+    };
+    panel.addEventListener('keydown', handleArrows);
+    return () => panel.removeEventListener('keydown', handleArrows);
+  }, []);
 
   const handleSaveNotes = async () => {
     if (!entry) return;
@@ -203,133 +229,190 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="word-detail-overlay word-detail-overlay--loading" role="status">
-        <div className="text-muted text-sm animate-pulse">{tUi("Loading word details…")}</div>
-      </div>
-    );
-  }
+  const labelledBy = isLoading ? LOADING_ID : !entry ? UNAVAILABLE_ID : isEditing ? undefined : TITLE_ID;
+  const positionLabel = position && position.total != null
+    ? tUi('Word {index} of {total}', {
+        index: position.index.toLocaleString(locale),
+        total: position.total.toLocaleString(locale),
+      })
+    : null;
 
-  if (!entry) {
-    return (
-      <WordDetailUnavailable
-        failed={isError}
-        onRetry={() => void refetch()}
-        onClose={onClose}
-      />
-    );
-  }
+  const shownTranslation = translateMutation.isPending && needsFetch
+    ? tUi("Translating…")
+    : translateMutation.data?.targetLanguage === viewTarget
+      ? translateMutation.data.mainTranslation
+      : mainTranslation;
 
-  const { lexeme, reviewState } = entry;
+  const alternatives = (() => {
+    if (!entry) return [];
+    const fromEntry = entry.translations
+      .filter((t) => t.targetLanguageId === targetLangId)
+      .map((t) => t.translatedText);
+    const fromFetch = translateMutation.data?.targetLanguage === viewTarget ? translateMutation.data.alternatives : [];
+    return Array.from(new Set([...fromEntry, ...fromFetch])).filter((text) => text !== shownTranslation);
+  })();
 
-  return (
-    // Клик по backdrop закрывает модалку (мышь); клавиатурная альтернатива — Esc
-    // (обработчик в useEffect выше), при открытии фокус переводится на диалог.
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
-    <div
-      className="word-detail-overlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="word-detail-title"
-    >
-      <div
-        ref={dialogRef}
-        className="word-detail-dialog"
-        tabIndex={-1}
-      >
-        {/* Header */}
-        <div className="word-detail-header">
-          <div className="word-detail-badges">
-            <PosBadge pos={lexeme.partOfSpeech} />
-            <FreqBadge rank={lexeme.frequencyRank} />
-            {reviewState && <SrsStatusBadge status={reviewState.status} />}
-          </div>
-
-          <div className="word-detail-actions">
-            <IconButton
-              icon={<StarIcon filled={entry.isFavorite} />}
-              aria-label={entry.isFavorite ? tUi("Remove from favorites") : tUi("Add to favorites")}
-              onClick={() => toggleFavMutation.mutate(entry.id)}
-            />
-            <IconButton
-              icon={<CloseIcon />}
-              aria-label={tUi("Close word details")}
-              onClick={onClose}
-            />
-          </div>
+  const renderBody = () => {
+    if (isLoading) {
+      return (
+        <div id={LOADING_ID} className="word-panel__state animate-pulse" role="status">
+          {tUi("Loading word details…")}
         </div>
+      );
+    }
 
-        {/* Body */}
-        <div className="word-detail-body">
-          {/* Main Word */}
-          <div>
-            {isEditing ? (
-              <WordDetailEdit
-                entryId={entry.id}
-                text={lexeme.text}
-                translation={entry.translations[0]?.translatedText ?? ''}
-                onDone={() => setIsEditing(false)}
-              />
-            ) : (
-              <div className="word-detail-word-row">
-                <h2 id="word-detail-title" className="word-detail-word">
+    if (!entry) {
+      return (
+        <WordDetailUnavailable
+          failed={isError}
+          onRetry={() => void refetch()}
+          onClose={onClose}
+          titleId={UNAVAILABLE_ID}
+        />
+      );
+    }
+
+    const { lexeme, reviewState } = entry;
+    const synonyms = entry.synonyms ?? [];
+    const metaItems = [
+      lexeme.partOfSpeech ? <PosBadge key="pos" pos={lexeme.partOfSpeech} /> : null,
+      lexeme.frequencyRank != null ? <FreqBadge key="freq" rank={lexeme.frequencyRank} top /> : null,
+      reviewState ? <SrsStatusBadge key="status" status={reviewState.status} /> : null,
+    ].filter((item) => item != null);
+
+    return (
+      <>
+        <div className="word-panel__body">
+          <div className="word-panel__hero">
+            <div className="word-panel__hero-text">
+              {isEditing ? (
+                <WordDetailEdit
+                  entryId={entry.id}
+                  text={lexeme.text}
+                  translation={entry.translations[0]?.translatedText ?? ''}
+                  onDone={() => setIsEditing(false)}
+                />
+              ) : (
+                <h2 id={TITLE_ID} className="word-panel__word" dir="auto">
                   {lexeme.text}
                 </h2>
+              )}
+              <div className="word-panel__pron">
+                {lexeme.phonetic && <span className="ipa word-panel__ipa">{lexeme.phonetic}</span>}
                 <AudioButton text={lexeme.text} ariaLabel={tUi("Pronounce word")} />
-                <IconButton
-                  icon={<EditIcon />}
-                  aria-label={tUi("Edit word and translation")}
-                  onClick={() => setIsEditing(true)}
-                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const params = new URLSearchParams({
+                      word: lexeme.text,
+                      lexemeId: String(lexeme.id),
+                    });
+                    if (lexeme.phonetic) params.set('ipa', lexeme.phonetic);
+                    onClose();
+                    navigate(`/pronunciation?${params.toString()}`);
+                  }}
+                  aria-label={tUi("Practice pronunciation of {value1}", { value1: lexeme.text })}
+                >
+                  <Icon name="mic" size={17} />
+                  {tUi("Practice")}
+                </Button>
               </div>
-            )}
-            {lexeme.phonetic && (
-              <div className="phonetic word-detail-phonetic">
-                {lexeme.phonetic}
-              </div>
-            )}
-            <div className="word-detail-practice">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  const params = new URLSearchParams({
-                    word: lexeme.text,
-                    lexemeId: String(lexeme.id),
-                  });
-                  if (lexeme.phonetic) params.set('ipa', lexeme.phonetic);
-                  onClose();
-                  navigate(`/pronunciation?${params.toString()}`);
-                }}
-                aria-label={tUi("Practice pronunciation of {value1}", { value1: lexeme.text })}
-              >{tUi("Practice pronunciation")}</Button>
+              {metaItems.length > 0 && (
+                <div className="word-panel__meta">
+                  {metaItems.map((item, index) => (
+                    <span key={item.key} className="word-panel__meta-item">
+                      {index > 0 && <span className="word-panel__meta-sep" aria-hidden="true">·</span>}
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="word-panel__image">
+              <AssociatedImage
+                path={imagePath ?? null}
+                alt={tUi("Photo of {word}", { word: lexeme.text })}
+                isLoading={isImageLoading && !imagePath}
+                isRefreshing={imageRefreshing}
+                size="thumb"
+                cacheNonce={imageNonce}
+                onRegenerate={
+                  lexemeId
+                    ? () => {
+                        setImageRefreshing(true);
+                        setImageError(null);
+                        void ipc.media
+                          .regenerateImage(lexemeId)
+                          .then((path) => {
+                            queryClient.setQueryData(['media', 'image', lexemeId], path);
+                            setImageNonce((n) => n + 1);
+                          })
+                          .catch((err: unknown) => {
+                            setImageError(formatImageProviderError(err));
+                          })
+                          .finally(() => {
+                            setImageRefreshing(false);
+                          });
+                      }
+                    : undefined
+                }
+              />
             </div>
           </div>
+          {imageError && (
+            <p className="inline-error" role="alert">
+              {imageError}
+            </p>
+          )}
 
           {/* Translation */}
-          <div>
-            <div className="word-detail-translation-header">
-              <div className="text-muted text-xs font-semibold word-detail-section-label">{tUi("TRANSLATION")}</div>
+          <section className="word-panel__section">
+            <div className="word-panel__section-head">
+              <span className="section-label word-panel__section-label">{tUi("Translation")}</span>
               <LanguageSelect
-                className="word-detail-target-select"
+                className="word-panel__lang custom-select--sm"
                 value={viewTarget}
                 options={langOptions}
                 onChange={setViewTarget}
                 ariaLabel={tUi("View translation in language")}
+                compact
               />
             </div>
-            <div className="word-detail-translation" aria-live="polite">
-              {translateMutation.isPending && needsFetch
-                ? tUi("Translating…")
-                : translateMutation.data?.targetLanguage === viewTarget
-                  ? translateMutation.data.mainTranslation
-                  : mainTranslation}
+            <div className="word-panel__translation" dir="auto" aria-live="polite">
+              {shownTranslation}
             </div>
-          </div>
+            {(alternatives.length > 0 || synonyms.length > 0) && (
+              <div className="word-panel__tags">
+                {alternatives.map((text) => (
+                  <span key={`alt-${text}`} className="tag" dir="auto">{text}</span>
+                ))}
+                {synonyms.length > 0 && (
+                  <span className="word-panel__tag-group" role="group" aria-label={tUi("Synonyms")}>
+                    {synonyms.map((text) => (
+                      <span key={`syn-${text}`} className="tag" dir="auto">{text}</span>
+                    ))}
+                  </span>
+                )}
+              </div>
+            )}
+          </section>
+
+          {entry.examples.length > 0 && (
+            <section className="word-panel__section">
+              <div className="section-label">{tUi("Examples")}</div>
+              <div className="word-panel__examples">
+                {entry.examples.map((example) => {
+                  const parts = splitAroundWord(example.sentence, lexeme.text);
+                  return (
+                    <div key={example.id} className="example" dir="auto">
+                      {parts ? <>{parts[0]}<u>{parts[1]}</u>{parts[2]}</> : example.sentence}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {canHaveCollocations(lexeme.text, lexeme.partOfSpeech) && (
             <div className="word-detail-collocations">
@@ -346,98 +429,128 @@ export function WordDetail({ id, onClose }: WordDetailProps) {
             </div>
           )}
 
-          <AssociatedImage
-            path={imagePath ?? null}
-            alt={tUi("Photo of {word}", { word: lexeme.text })}
-            isLoading={isImageLoading && !imagePath}
-            isRefreshing={imageRefreshing}
-            size="card"
-            cacheNonce={imageNonce}
-            onRegenerate={
-              lexemeId
-                ? () => {
-                    setImageRefreshing(true);
-                    setImageError(null);
-                    void ipc.media
-                      .regenerateImage(lexemeId)
-                      .then((path) => {
-                        queryClient.setQueryData(['media', 'image', lexemeId], path);
-                        setImageNonce((n) => n + 1);
-                      })
-                      .catch((err: unknown) => {
-                        setImageError(formatImageProviderError(err));
-                      })
-                      .finally(() => {
-                        setImageRefreshing(false);
-                      });
-                  }
-                : undefined
-            }
-          />
-          {imageError && (
-            <p className="add-word-image-error" role="alert">
-              {imageError}
-            </p>
-          )}
-
-          {/* SRS State stats */}
+          {/* SRS state */}
           {reviewState && (
-            <div className="word-detail-srs-grid">
-              <div>
-                <div className="text-muted text-xs">{tUi("Interval")}</div>
-                <div className="word-detail-srs-value">{reviewState.interval}{tUi("d")}</div>
+            <section className="word-panel__section">
+              <div className="section-label">{tUi("Review")}</div>
+              <div className="stat-grid stat-grid--plain word-panel__stats">
+                <div className="stat">
+                  <div className="stat__label">{tUi("Interval")}</div>
+                  <div className="stat__value stat__value--mono">{reviewState.interval} {tUi("d")}</div>
+                </div>
+                <div className="stat">
+                  <div className="stat__label">{tUi("Ease")}</div>
+                  <div className="stat__value stat__value--mono">{reviewState.ease.toFixed(2)}</div>
+                </div>
+                <div className="stat">
+                  <div className="stat__label">{tUi("Repetitions")}</div>
+                  <div className="stat__value stat__value--mono">{reviewState.repetitions}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-muted text-xs">{tUi("Ease Factor")}</div>
-                <div className="word-detail-srs-value">{reviewState.ease.toFixed(2)}</div>
-              </div>
-              <div>
-                <div className="text-muted text-xs">{tUi("Repetitions")}</div>
-                <div className="word-detail-srs-value">{reviewState.repetitions}</div>
-              </div>
-            </div>
+              <p className="inline-note word-panel__note">
+                {tUi('Next review {when} · added {date}', {
+                  when: formatRelativeDate(reviewState.dueAt).toLocaleLowerCase(locale),
+                  date: new Date(entry.addedAt * 1000).toLocaleDateString(locale, { day: 'numeric', month: 'short' }),
+                })}
+              </p>
+            </section>
           )}
 
           <WordCategory key={`${entry.id}:${entry.categoryId ?? ''}`} entryId={entry.id}
             languageId={lexeme.languageId} categoryId={entry.categoryId ?? null} />
 
-          {/* User Notes */}
-          <div>
-            <label
-              htmlFor="word-detail-notes"
-              className="text-muted text-xs font-semibold word-detail-section-label"
-            >{tUi("PERSONAL NOTES")}</label>
+          {/* User notes */}
+          <section className="word-panel__section">
+            <label htmlFor="word-detail-notes" className="section-label word-panel__section-label">
+              {tUi("Personal notes")}
+            </label>
             <textarea dir="auto"
               id="word-detail-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={tUi("Add personal notes, mnemonics, or example phrases…")}
               rows={3}
-              className="word-detail-notes"
+              className="field field--textarea word-panel__notes"
             />
-            <div className="word-detail-notes-footer">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleSaveNotes}
-                isLoading={isSavingNotes}
-              >{tUi("Save Notes")}</Button>
-            </div>
             {notesError && (
-              <p className="word-detail-notes-error" role="alert">
+              <p className="inline-error word-panel__notes-error" role="alert">
                 {notesError}
               </p>
             )}
-          </div>
+          </section>
+        </div>
 
+        <div className="word-panel__foot">
           <WordDetailRemove
             word={lexeme.text}
             isRemoving={removeMutation.isPending}
             hasError={removeMutation.isError}
             onConfirm={() => removeMutation.mutate(entry.id, { onSuccess: onClose })}
           />
+          <span className="spacer" />
+          <Button
+            variant="secondary"
+            onClick={handleSaveNotes}
+            isLoading={isSavingNotes}
+          >{tUi("Save notes")}</Button>
         </div>
+      </>
+    );
+  };
+
+  return (
+    <aside
+      ref={panelRef}
+      className="word-panel"
+      // Не модальная панель рядом со списком (aria-modal не ставим).
+      role="dialog"
+      aria-labelledby={labelledBy}
+      aria-label={labelledBy ? undefined : entry?.lexeme.text}
+      aria-busy={isLoading || undefined}
+      tabIndex={-1}
+    >
+      <div className="word-panel__head" data-tauri-drag-region>
+        {positionLabel && <span className="word-panel__position">{positionLabel}</span>}
+        <span className="spacer" />
+        <IconButton
+          size="sm"
+          icon={<Icon name="keyboard_arrow_up" size={17} />}
+          aria-label={tUi("Previous word")}
+          onClick={() => onPrevious?.()}
+          disabled={!onPrevious}
+        />
+        <IconButton
+          size="sm"
+          icon={<Icon name="keyboard_arrow_down" size={17} />}
+          aria-label={tUi("Next word")}
+          onClick={() => onNext?.()}
+          disabled={!onNext}
+        />
+        {entry && !isEditing && (
+          <IconButton
+            size="sm"
+            icon={<Icon name="edit" size={17} />}
+            aria-label={tUi("Edit word and translation")}
+            onClick={() => setIsEditing(true)}
+          />
+        )}
+        {entry && (
+          <IconButton
+            size="sm"
+            className={cx('word-panel__favorite', entry.isFavorite && 'is-on')}
+            icon={<Icon name="star" size={17} />}
+            aria-label={entry.isFavorite ? tUi("Remove from favorites") : tUi("Add to favorites")}
+            onClick={() => toggleFavMutation.mutate(entry.id)}
+          />
+        )}
+        <IconButton
+          size="sm"
+          icon={<Icon name="close" size={17} />}
+          aria-label={tUi("Close word details")}
+          onClick={onClose}
+        />
       </div>
-    </div>
+      {renderBody()}
+    </aside>
   );
 }

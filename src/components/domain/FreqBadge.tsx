@@ -1,23 +1,27 @@
 import { useI18n } from '../../hooks/useI18n';
 // ============================================================
 // LEXORA — FreqBadge Domain Component
-// Бейдж частотности слова по рангу (★ 1,500).
-// Логика перенесена из ui/Badge (FrequencyBadge); там оставлен
-// реэкспорт для обратной совместимости.
+// Частотность слова по рангу — моноширинное число (Lingora: «500»,
+// «1,800»), без звёзд и цветного фона. `top` — формулировка для
+// карточки слова («top 500»).
+// В ui/Badge оставлен реэкспорт FrequencyBadge для совместимости.
 // ============================================================
 
-import { Badge } from '../ui/Badge';
+import './domain.css';
 
 type FreqBadgeProps = {
   rank: number | null;
+  /** Phrase the rank as "top N" (word details) instead of a bare number (tables). */
+  top?: boolean;
 };
 
-export function FreqBadge({ rank }: FreqBadgeProps) {
-  const { locale } = useI18n();
+export function FreqBadge({ rank, top = false }: FreqBadgeProps) {
+  const { locale, t: tUi } = useI18n();
   if (rank === null) return null;
+  const value = rank.toLocaleString(locale);
   return (
-    <Badge variant="warn">
-      ★ {rank.toLocaleString(locale)}
-    </Badge>
+    <span className="num freq-badge">
+      {top ? tUi('top {rank}', { rank: value }) : value}
+    </span>
   );
 }

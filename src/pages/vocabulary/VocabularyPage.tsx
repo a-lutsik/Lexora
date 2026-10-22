@@ -1,14 +1,16 @@
 import { useI18n } from "../../hooks/useI18n";
 // ============================================================
-// LEXORA — Vocabulary Page
+// LEXORA — Vocabulary Page (Lingora frames 1a / 1b / 2a)
 // Main screen: word list with search, filters, and actions.
+// The word detail opens as a panel beside the list (/vocabulary/:id).
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
 import { useQueryClient } from '@tanstack/react-query';
-import { useVocabulary, useVocabularyCount } from '../../hooks/useVocabulary';
+import { useStatusCounts, useVocabulary, useVocabularyCount } from '../../hooks/useVocabulary';
+import { useDueCount } from '../../hooks/useStudyQueue';
 import { useCategories, useCategoryMutation } from '../../hooks/useCategories';
 import { CategorySelect } from '../../components/domain/CategorySelect';
 import { CategoryEditor } from './CategoryEditor';
@@ -16,6 +18,7 @@ import { formatIpcError } from '../../lib/utils';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useVocabularyStore } from '../../stores/vocabularyStore';
 import { Button, IconButton } from '../../components/ui/Button';
+import { Icon } from '../../components/ui/Icon';
 import { SrsStatusBadge, PosBadge } from '../../components/ui/Badge';
 import { FreqBadge } from '../../components/domain/FreqBadge';
 import { QUERY_KEYS } from '../../lib/constants';
@@ -26,6 +29,7 @@ import { VocabularyWordAction, type VocabularyAction } from './VocabularyWordAct
 import { VocabularyPager } from './VocabularyPager';
 import { AddWordModal } from './AddWordModal';
 import { BulkAddModal, type BulkAddMode } from './BulkAddModal';
+import { formatHotkey } from '../settings/hotkeyUtils';
 import type { BulkTranslateProgress, SrsStatus, VocabularyEntryDto } from '../../lib/types';
 import './vocabulary.css';
 
@@ -41,64 +45,39 @@ const STATUS_FILTERS: { label: string; value: StatusFilter }[] = [
 
 const BULK_TRANSLATE_PROGRESS_EVENT = 'lexora:bulk-translate-progress';
 
-function SearchIcon() {
-  return (
-    <svg className="vocabulary-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-    </svg>
-  );
+/** Page-local shortcuts of the Add menu (frame 2a): ⌘N / Ctrl+N and ⌘⇧V / Ctrl+Shift+V. */
+const ADD_ONE_HOTKEY = 'CmdOrCtrl+N';
+const PASTE_LIST_HOTKEY = 'CmdOrCtrl+Shift+V';
+
+/** Whether the event is CmdOrCtrl+[Shift+]<letter>; by physical key so non-Latin layouts work too. */
+function isCmdOrCtrlLetter(event: KeyboardEvent, letter: string, shift: boolean): boolean {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey !== shift) return false;
+  return event.code === `Key${letter.toUpperCase()}` || event.key.toLowerCase() === letter;
 }
 
-function PlayIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <polygon points="5 3 19 12 5 21 5 3" />
-    </svg>
-  );
-}
-
-function EditIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="m16 3 5 5-13 13H3v-5Z" /></svg>;
-}
-
-function RemoveIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>;
-}
-
-function OpenIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-      <polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
-      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement
+    && (target.isContentEditable || target.closest('input, textarea, select') != null);
 }
 
 type WordRowProps = {
   entry: VocabularyEntryDto;
   onClick: (id: number) => void;
   selected: boolean;
+  /** The word shown in the detail panel right now. */
+  current: boolean;
   onSelect: () => void;
   onAction: (action: VocabularyAction) => void;
 };
 
-function WordRow({ entry, onClick, selected, onSelect, onAction }: WordRowProps) {
+/** Due today or overdue: the learner should see it now. */
+function isDueByToday(dueAt: number): boolean {
+  const now = new Date();
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+  return dueAt * 1000 < endOfToday;
+}
+
+function WordRow({ entry, onClick, selected, current, onSelect, onAction }: WordRowProps) {
   const { t: tUi } = useI18n();
   const { lexeme, translations, reviewState } = entry;
   const mainTranslation = translations[0]?.translatedText ?? '—';
@@ -110,13 +89,14 @@ function WordRow({ entry, onClick, selected, onSelect, onAction }: WordRowProps)
 
   return (
     <div
-      className="vocabulary-list-row animate-fade-in"
+      className={cx('vocabulary-row is-hoverable animate-fade-in', selected && 'is-checked', current && 'is-current')}
       onClick={(event) => {
         if (event.target instanceof Element && event.target.closest('label, input')) return;
         onClick(entry.id);
       }}
       role="row"
       aria-label={`${lexeme.text}: ${mainTranslation}`}
+      aria-current={current || undefined}
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
@@ -125,64 +105,63 @@ function WordRow({ entry, onClick, selected, onSelect, onAction }: WordRowProps)
         }
       }}
     >
-      <label className="vocabulary-select">
+      <label className="vocabulary-check">
         <input type="checkbox" checked={selected} onChange={onSelect}
           aria-label={tUi('Select {word}', { word: lexeme.text })} />
       </label>
-      <div className="word-cell-main">
-        <span dir="auto" className="word-text">{lexeme.text}</span>
-        {lexeme.phonetic && (
-          <span className="word-phonetic phonetic">{lexeme.phonetic}</span>
-        )}
+      <div className="vocabulary-row__word">
+        {/* Explicit open control for keyboard and screen-reader users; the click bubbles to the row. */}
+        <button type="button" className="vocabulary-row__open"
+          aria-label={tUi("Open details for {value1}", { value1: lexeme.text })}>
+          <span dir="auto" className="word">{lexeme.text}</span>
+          {lexeme.phonetic && (
+            <span className="ipa vocabulary-row__ipa">{lexeme.phonetic}</span>
+          )}
+        </button>
       </div>
 
-      <div dir="auto" className="word-translation">{mainTranslation}</div>
+      <div dir="auto" className="vocabulary-row__translation">{mainTranslation}</div>
 
-      <div>
+      <div className="vocabulary-row__type">
         <PosBadge pos={lexeme.partOfSpeech} />
       </div>
 
-      <div>
+      <div className="vocabulary-row__freq">
         <FreqBadge rank={lexeme.frequencyRank} />
       </div>
 
-      <div>
+      <div className="vocabulary-row__status">
         {reviewState ? (
           <SrsStatusBadge status={reviewState.status} />
         ) : (
-          <span className="text-muted text-xs">—</span>
+          <span className="vocabulary-row__none">—</span>
         )}
       </div>
 
-      <div className="word-cell-due text-secondary text-xs">
+      <div className={cx('vocabulary-row__due', reviewState?.dueAt != null && isDueByToday(reviewState.dueAt) && 'is-due')}>
         {reviewState?.dueAt
           ? formatRelativeDate(reviewState.dueAt)
           : '—'}
       </div>
 
-      <div className="row-actions">
+      <div className="row-actions-hover vocabulary-row__actions">
         <IconButton
-          icon={<PlayIcon />}
+          size="sm"
+          icon={<Icon name="volume_up" size={17} />}
           aria-label={tUi("Play pronunciation of {value1}", { value1: lexeme.text })}
           onClick={handlePlayAudio}
-          size="sm"
         />
-        <IconButton
-          icon={<OpenIcon />}
-          aria-label={tUi("Open details for {value1}", { value1: lexeme.text })}
-          size="sm"
-        />
-        <IconButton icon={<EditIcon />} aria-label={tUi('Edit {word}', { word: lexeme.text })}
-          onClick={(event) => { event.stopPropagation(); onAction({ kind: 'edit', entry }); }} size="sm" />
-        <IconButton icon={<RemoveIcon />} aria-label={tUi('Remove {word}', { word: lexeme.text })}
-          onClick={(event) => { event.stopPropagation(); onAction({ kind: 'remove', ids: [entry.id], word: lexeme.text }); }} size="sm" />
+        <IconButton size="sm" icon={<Icon name="edit" size={17} />} aria-label={tUi('Edit {word}', { word: lexeme.text })}
+          onClick={(event) => { event.stopPropagation(); onAction({ kind: 'edit', entry }); }} />
+        <IconButton size="sm" icon={<Icon name="delete" size={17} />} aria-label={tUi('Remove {word}', { word: lexeme.text })}
+          onClick={(event) => { event.stopPropagation(); onAction({ kind: 'remove', ids: [entry.id], word: lexeme.text }); }} />
       </div>
     </div>
   );
 }
 
 export default function VocabularyPage() {
-  const { t: tUi } = useI18n();
+  const { t: tUi, locale } = useI18n();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const activeLanguageId = useSettingsStore((s) => s.activeLanguageId);
@@ -206,6 +185,9 @@ export default function VocabularyPage() {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<BulkTranslateProgress | null>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
+  const addToggleRef = useRef<HTMLButtonElement>(null);
+  const addMenuListRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const lastRefetchAt = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -214,6 +196,9 @@ export default function VocabularyPage() {
     languageId: activeLanguageId,
   });
   const { data: totalCount } = useVocabularyCount(activeLanguageId);
+  const { data: statusCounts } = useStatusCounts(activeLanguageId);
+  const { data: dueCount } = useDueCount(activeLanguageId);
+  const numberFormat = new Intl.NumberFormat(locale);
 
   // Scope selection to the visible page/filter/language; hidden words cannot be removed by accident.
   const selectedIds = selection.scope === selectionScope
@@ -295,6 +280,61 @@ export default function VocabularyPage() {
     };
   }, [queryClient]);
 
+  // "/" jumps to the search field (the frame shows it as a key hint in the field).
+  useEffect(() => {
+    const handleSlash = (event: KeyboardEvent) => {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable
+        || target.closest('input, textarea, select, [role="combobox"], [role="listbox"]'))) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      event.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener('keydown', handleSlash);
+    return () => window.removeEventListener('keydown', handleSlash);
+  }, []);
+
+  // Add-menu shortcuts (shown in the menu): only while no modal is open over the page.
+  const addShortcutsRef = useRef<{ addOne: () => void; pasteList: () => void } | null>(null);
+  useEffect(() => {
+    const handleAddShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || document.querySelector('[aria-modal="true"]')) return;
+      if (isCmdOrCtrlLetter(event, 'n', false)) {
+        event.preventDefault();
+        addShortcutsRef.current?.addOne();
+      } else if (isCmdOrCtrlLetter(event, 'v', true) && !isEditableTarget(event.target)) {
+        // In a text field ⌘⇧V stays "paste as plain text".
+        event.preventDefault();
+        addShortcutsRef.current?.pasteList();
+      }
+    };
+    window.addEventListener('keydown', handleAddShortcut);
+    return () => window.removeEventListener('keydown', handleAddShortcut);
+  }, []);
+
+  // Menu keyboard: focus the first item on open, ↑/↓ move, Esc closes back to the toggle.
+  useEffect(() => {
+    if (addMenuOpen) addMenuListRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [addMenuOpen]);
+
+  const handleAddMenuKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (event) => {
+    const items = Array.from(addMenuListRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    const at = items.findIndex((item) => item === document.activeElement);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      setAddMenuOpen(false);
+      addToggleRef.current?.focus();
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      items[(at + step + items.length) % items.length]?.focus();
+    } else if (event.key === 'Tab') {
+      setAddMenuOpen(false);
+    }
+  };
+
   const openAddOne = () => {
     setAddMenuOpen(false);
     setAddWordEpoch((n) => n + 1);
@@ -305,198 +345,259 @@ export default function VocabularyPage() {
     setAddMenuOpen(false);
     setBulkMode(mode);
   };
+  addShortcutsRef.current = { addOne: openAddOne, pasteList: () => openBulk('paste') };
+
+  const detailOpen = selectedId != null && !isNaN(selectedId);
+  const currentIndex = detailOpen && entries ? entries.findIndex((entry) => entry.id === selectedId) : -1;
+  const previousEntry = currentIndex > 0 ? entries?.[currentIndex - 1] : undefined;
+  const nextEntry = currentIndex >= 0 ? entries?.[currentIndex + 1] : undefined;
+  const detailPosition = currentIndex >= 0
+    ? {
+        index: (filters.page - 1) * filters.perPage + currentIndex + 1,
+        total: hasActiveFilters ? null : (totalCount ?? null),
+      }
+    : null;
 
   return (
-    <div className="vocabulary-page">
-      <header className="vocabulary-header">
-        <div className="vocabulary-header-left">
-          <h1 className="vocabulary-title">{tUi("My Vocabulary")}</h1>
-          {totalCount != null && (
-            <span className="vocabulary-count" aria-label={tUi("{value1} total", { value1: pluralize(totalCount, 'word') })}>
-              {pluralize(totalCount, 'word')}
-            </span>
-          )}
-        </div>
-
-        <div className="vocabulary-header-actions">
-          <Button
-            variant="secondary"
-            size="md"
-            onClick={() => void navigate('/study')}
-          >{tUi("Study Now")}</Button>
-
-          <div className="add-word-split" ref={addMenuRef}>
-            <Button
-              variant="primary"
-              size="md"
-              onClick={openAddOne}
-            >
-              <PlusIcon />{tUi(" Add Word")}</Button>
-            <button
-              type="button"
-              className="add-word-split-toggle"
-              aria-label={tUi("More add options")}
-              aria-haspopup="menu"
-              aria-expanded={addMenuOpen}
-              onClick={() => setAddMenuOpen((open) => !open)}
-            >
-              <ChevronDownIcon />
-            </button>
-            {addMenuOpen && (
-              <div className="add-word-split-menu" role="menu">
-                <button
-                  type="button"
-                  className="add-word-split-item"
-                  role="menuitem"
-                  onClick={openAddOne}
-                >{tUi("Add one")}</button>
-                <button
-                  type="button"
-                  className="add-word-split-item"
-                  role="menuitem"
-                  onClick={() => openBulk('paste')}
-                >{tUi("Paste list")}</button>
-                <button
-                  type="button"
-                  className="add-word-split-item"
-                  role="menuitem"
-                  onClick={() => openBulk('file')}
-                >{tUi("Upload file")}</button>
+    <div className={cx('vocabulary-page', detailOpen && 'has-detail')}>
+      <div className="vocabulary-main">
+        <header className="page-header" data-tauri-drag-region>
+          <div className="page-header__text">
+            <h1 className="page-title">{tUi("Vocabulary")}</h1>
+            {totalCount != null && (
+              <div className="page-subtitle">
+                <span aria-label={tUi("{value1} total", { value1: pluralize(totalCount, 'word') })}>
+                  {pluralize(totalCount, 'word')}
+                </span>
+                {dueCount != null && (
+                  <>
+                    <span aria-hidden="true">{' · '}</span>
+                    <span>{tUi("{value1} due today", { value1: numberFormat.format(dueCount) })}</span>
+                  </>
+                )}
               </div>
             )}
           </div>
-        </div>
-      </header>
 
-      {bulkProgress && (
-        <div className="bulk-translate-banner" role="status" aria-live="polite">{tUi("Translating ")}{bulkProgress.done}/{bulkProgress.total}
-          {bulkProgress.text ? `: ${bulkProgress.text}` : '…'}
-          {bulkProgress.error ? ` (${bulkProgress.error})` : ''}
-        </div>
-      )}
-
-      <div className="vocabulary-toolbar" role="toolbar" aria-label={tUi("Vocabulary filters")}>
-        <div className="vocabulary-search">
-          <SearchIcon />
-          <input dir="auto"
-            type="search"
-            className="vocabulary-search-input"
-            placeholder={tUi("Search words…")}
-            value={filters.search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label={tUi("Search vocabulary")}
-          />
-        </div>
-
-        <CategorySelect categories={categories.data ?? []} value={filters.categoryId ?? null}
-          allCategories ariaLabel={tUi('Filter by category')}
-          onChange={(categoryId) => setFilters({ categoryId, page: 1 })} />
-        <Button size="sm" variant="secondary" onClick={() => setCategoryEditor('create')}>{tUi('+ Category')}</Button>
-        {selectedCategory && !selectedCategory.isGeneral && <>
-          <Button size="sm" onClick={() => setCategoryEditor('rename')}>{tUi('Rename category')}</Button>
-          <Button size="sm" onClick={() => setCategoryEditor('remove')}>{tUi('Delete category')}</Button>
-        </>}
-
-        <div className="filter-chips" role="group" aria-label={tUi("Filter by status")}>
-          {STATUS_FILTERS.map(({ label, value }) => (
-            <button
-              key={value}
-              type="button"
-              className={cx('filter-chip', filters.status === value && 'active')}
-              onClick={() => setStatus(value)}
-              aria-pressed={filters.status === value}
-              aria-label={tUi("Show {label} words", { label: tUi(label) })}
+          <div className="page-actions">
+            <Button
+              variant="secondary"
+              className="vocabulary-study-btn"
+              onClick={() => void navigate('/study')}
             >
-              {tUi(label)}
-            </button>
+              <Icon name="style" size={17} />
+              {tUi("Study now")}
+            </Button>
+
+            <div className="vocabulary-add" ref={addMenuRef}>
+              <span className="btn-split">
+                <Button variant="primary" onClick={openAddOne}>
+                  <Icon name="add" size={17} />
+                  {tUi("Add word")}
+                </Button>
+                <button
+                  ref={addToggleRef}
+                  type="button"
+                  className="btn btn--primary btn--md vocabulary-add__toggle"
+                  aria-label={tUi("More add options")}
+                  aria-haspopup="menu"
+                  aria-expanded={addMenuOpen}
+                  onClick={() => setAddMenuOpen((open) => !open)}
+                >
+                  <Icon name={addMenuOpen ? 'expand_less' : 'expand_more'} size={17} />
+                </button>
+              </span>
+              {addMenuOpen && (
+                <div
+                  ref={addMenuListRef}
+                  className="popover vocabulary-add__menu"
+                  role="menu"
+                  tabIndex={-1}
+                  aria-label={tUi("More add options")}
+                  onKeyDown={handleAddMenuKeyDown}
+                >
+                  <button type="button" className="menu-item" role="menuitem" tabIndex={-1} onClick={openAddOne}
+                    aria-keyshortcuts="Meta+N Control+N">
+                    <Icon name="add" size={18} className="menu-item__icon" />
+                    <span className="menu-item__label">{tUi("Add one")}</span>
+                    <kbd className="menu-item__shortcut" aria-hidden="true">{formatHotkey(ADD_ONE_HOTKEY)}</kbd>
+                  </button>
+                  <button type="button" className="menu-item" role="menuitem" tabIndex={-1} onClick={() => openBulk('paste')}
+                    aria-keyshortcuts="Meta+Shift+V Control+Shift+V">
+                    <Icon name="content_paste" size={18} className="menu-item__icon" />
+                    <span className="menu-item__label">{tUi("Paste list")}</span>
+                    <kbd className="menu-item__shortcut" aria-hidden="true">{formatHotkey(PASTE_LIST_HOTKEY)}</kbd>
+                  </button>
+                  <button type="button" className="menu-item" role="menuitem" tabIndex={-1} onClick={() => openBulk('file')}>
+                    <Icon name="upload_file" size={18} className="menu-item__icon" />
+                    <span className="menu-item__label">{tUi("Upload file")}</span>
+                    <span className="menu-item__shortcut">{tUi(".txt .csv")}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {bulkProgress && (
+          <div className="bulk-translate-banner" role="status" aria-live="polite">
+            <Icon name="translate" size={17} className="icon--muted" />
+            <span>
+              {tUi("Translating ")}
+              <span className="num">{bulkProgress.done}/{bulkProgress.total}</span>
+              {bulkProgress.text ? `: ${bulkProgress.text}` : '…'}
+              {bulkProgress.error ? ` (${bulkProgress.error})` : ''}
+            </span>
+          </div>
+        )}
+
+        <div className="page-toolbar vocabulary-toolbar" role="toolbar" aria-label={tUi("Vocabulary filters")}>
+          <div className="field vocabulary-search">
+            <Icon name="search" size={18} className="field__icon" />
+            <input dir="auto"
+              ref={searchRef}
+              type="search"
+              className="field__input"
+              placeholder={tUi("Search words…")}
+              value={filters.search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label={tUi("Search vocabulary")}
+              aria-keyshortcuts="/"
+            />
+            <kbd className="kbd" aria-hidden="true">/</kbd>
+          </div>
+
+          <div className="vocabulary-toolbar__filters">
+            <CategorySelect categories={categories.data ?? []} value={filters.categoryId ?? null}
+              allCategories ariaLabel={tUi('Filter by category')}
+              onChange={(categoryId) => setFilters({ categoryId, page: 1 })}
+              onCreate={() => setCategoryEditor('create')} />
+            {selectedCategory && !selectedCategory.isGeneral && <>
+              <Button size="sm" variant="ghost" onClick={() => setCategoryEditor('rename')}>{tUi('Rename category')}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setCategoryEditor('remove')}>{tUi('Delete category')}</Button>
+            </>}
+
+            <span className="divider--v" aria-hidden="true" />
+
+            <div className="vocabulary-chips" role="group" aria-label={tUi("Filter by status")}>
+              {STATUS_FILTERS.map(({ label, value }) => {
+                const count = value === 'all' ? totalCount : statusCounts?.[value];
+                return (
+                <button
+                  key={value}
+                  type="button"
+                  className={cx('chip', filters.status === value && 'is-active')}
+                  onClick={() => setStatus(value)}
+                  aria-pressed={filters.status === value}
+                  aria-label={tUi("Show {label} words", { label: tUi(label) })}
+                >
+                  {tUi(label)}
+                  {count != null && <span className="chip__count">{numberFormat.format(count)}</span>}
+                </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {categories.isError && <p className="inline-note vocabulary-notice">{tUi('Could not load categories.')} <Button size="sm" onClick={() => void categories.refetch()}>{tUi('Retry categories')}</Button></p>}
+        {categoryMutation.isError && <p role="alert" className="inline-error vocabulary-notice">{formatIpcError(categoryMutation.error, tUi('Could not move words.'))}</p>}
+        {selectedIds.length > 0 && (
+          <div className="vocabulary-selection-bar">
+            <span role="status" aria-live="polite">{tUi('{count} selected on this page', { count: selectedIds.length })}</span>
+            <CategorySelect categories={categories.data ?? []} value={moveCategoryId} onChange={setMoveCategoryId}
+              ariaLabel={tUi('Move to category')} disabled={categoryMutation.isPending} />
+            <Button size="sm" variant="secondary" disabled={categoryMutation.isPending || !categories.data?.length}
+              onClick={() => {
+                const target = moveCategoryId ?? categories.data?.find((category) => category.isGeneral)?.id;
+                if (target == null) return;
+                categoryMutation.mutate({ kind: 'move', ids: selectedIds, categoryId: target }, {
+                  onSuccess: () => setSelection({ scope: selectionScope, ids: [] }),
+                });
+              }}>{tUi('Move selected')}</Button>
+            <span className="spacer" />
+            <Button size="sm" variant="ghost" onClick={() => setSelection({ scope: selectionScope, ids: [] })}>{tUi('Clear selection')}</Button>
+            <Button variant="danger" size="sm" onClick={() => setWordAction({ kind: 'remove', ids: [...selectedIds] })}>
+              <Icon name="delete" size={17} />
+              {tUi('Remove selected ({count})', { count: selectedIds.length })}
+            </Button>
+          </div>
+        )}
+        <div className="vocabulary-table-head" role="row">
+          <label className="vocabulary-check">
+            <input ref={selectAllRef} type="checkbox" checked={allSelected}
+              disabled={!entries?.length || isLoading || isError}
+              aria-label={tUi('Select all words on this page')}
+              onChange={() => setSelection({ scope: selectionScope, ids: allSelected ? [] : (entries ?? []).map((entry) => entry.id) })} />
+          </label>
+          <span>{tUi("Word")}</span>
+          <span>{tUi("Translation")}</span>
+          <span>{tUi("Type")}</span>
+          <span>{tUi("Freq.")}</span>
+          <span>{tUi("Status")}</span>
+          <span>{tUi("Due")}</span>
+          <span />
+        </div>
+
+        <div
+          ref={listRef}
+          className="vocabulary-list"
+          role="table"
+          aria-label={tUi("Vocabulary list")}
+          aria-rowcount={entries?.length ?? 0}
+        >
+          {isLoading && (
+            <div className="empty vocabulary-empty animate-pulse">{tUi("Loading vocabulary…")}</div>
+          )}
+          {isError && !isLoading && (
+            <div className="empty vocabulary-empty" role="alert">
+              <p>{tUi("Couldn’t load your vocabulary.")}</p>
+              <Button variant="secondary" size="md" onClick={() => void refetch()}>{tUi("Try again")}</Button>
+            </div>
+          )}
+          {!isLoading && !isError && entries?.length === 0 && filters.page > 1 && (
+            <div className="empty vocabulary-empty">
+              <p>{tUi("No more words on this page.")}</p>
+              <Button variant="secondary" size="md" onClick={() => handlePageChange(1)}>{tUi("Back to the first page")}</Button>
+            </div>
+          )}
+          {!isLoading && !isError && entries?.length === 0 && filters.page <= 1 && hasActiveFilters && (
+            <div className="empty vocabulary-empty">
+              <p>{tUi("No words match your search or filter.")}</p>
+              <Button variant="secondary" size="md" onClick={() => resetFilters(activeLanguageId)}>{tUi("Clear filters")}</Button>
+            </div>
+          )}
+          {!isLoading && !isError && entries?.length === 0 && filters.page <= 1 && !hasActiveFilters && (
+            <div className="empty vocabulary-empty">
+              <p>{tUi("No words yet. Add your first word to start learning.")}</p>
+              <Button variant="primary" size="md" onClick={openAddOne}>{tUi("+ Add your first word")}</Button>
+            </div>
+          )}
+          {entries?.map((entry) => (
+            <WordRow key={entry.id} entry={entry} onClick={handleWordClick}
+              selected={selectedIds.includes(entry.id)} current={entry.id === selectedId}
+              onSelect={() => toggleSelection(entry.id)} onAction={setWordAction} />
           ))}
         </div>
+
+        {!isError && (
+          <VocabularyPager
+            page={filters.page}
+            perPage={filters.perPage}
+            shown={entries?.length ?? 0}
+            total={hasActiveFilters ? null : (totalCount ?? null)}
+            onPageChange={handlePageChange}
+          />
+        )}
       </div>
 
-      {categories.isError && <p className="text-secondary text-xs">{tUi('Could not load categories.')} <Button size="sm" onClick={() => void categories.refetch()}>{tUi('Retry categories')}</Button></p>}
-      {categoryMutation.isError && <p role="alert" className="add-word-image-error">{formatIpcError(categoryMutation.error, tUi('Could not move words.'))}</p>}
-      {selectedIds.length > 0 && (
-        <div className="vocabulary-selection-bar">
-          <span role="status" aria-live="polite">{tUi('{count} selected on this page', { count: selectedIds.length })}</span>
-          <CategorySelect categories={categories.data ?? []} value={moveCategoryId} onChange={setMoveCategoryId}
-            ariaLabel={tUi('Move to category')} disabled={categoryMutation.isPending} />
-          <Button size="sm" variant="secondary" disabled={categoryMutation.isPending || !categories.data?.length}
-            onClick={() => {
-              const target = moveCategoryId ?? categories.data?.find((category) => category.isGeneral)?.id;
-              if (target == null) return;
-              categoryMutation.mutate({ kind: 'move', ids: selectedIds, categoryId: target }, {
-                onSuccess: () => setSelection({ scope: selectionScope, ids: [] }),
-              });
-            }}>{tUi('Move selected')}</Button>
-          <Button variant="danger" size="sm" onClick={() => setWordAction({ kind: 'remove', ids: [...selectedIds] })}>
-            {tUi('Remove selected ({count})', { count: selectedIds.length })}
-          </Button>
-          <Button size="sm" onClick={() => setSelection({ scope: selectionScope, ids: [] })}>{tUi('Clear selection')}</Button>
-        </div>
-      )}
-      <div className="vocabulary-list-header" role="row">
-        <label className="vocabulary-select">
-          <input ref={selectAllRef} type="checkbox" checked={allSelected}
-            disabled={!entries?.length || isLoading || isError}
-            aria-label={tUi('Select all words on this page')}
-            onChange={() => setSelection({ scope: selectionScope, ids: allSelected ? [] : (entries ?? []).map((entry) => entry.id) })} />
-        </label>
-        <span>{tUi("Word")}</span>
-        <span>{tUi("Translation")}</span>
-        <span>{tUi("Type")}</span>
-        <span>{tUi("Frequency")}</span>
-        <span>{tUi("Status")}</span>
-        <span>{tUi("Due")}</span>
-        <span />
-      </div>
-
-      <div
-        ref={listRef}
-        className="vocabulary-list"
-        role="table"
-        aria-label={tUi("Vocabulary list")}
-        aria-rowcount={entries?.length ?? 0}
-      >
-        {isLoading && (
-          <div className="vocabulary-empty text-muted text-sm animate-pulse">{tUi("Loading vocabulary…")}</div>
-        )}
-        {isError && !isLoading && (
-          <div className="vocabulary-empty" role="alert">
-            <p className="text-secondary text-sm">{tUi("Couldn’t load your vocabulary.")}</p>
-            <Button variant="secondary" size="md" onClick={() => void refetch()}>{tUi("Try again")}</Button>
-          </div>
-        )}
-        {!isLoading && !isError && entries?.length === 0 && filters.page > 1 && (
-          <div className="vocabulary-empty">
-            <p className="text-secondary text-sm">{tUi("No more words on this page.")}</p>
-            <Button variant="secondary" size="md" onClick={() => handlePageChange(1)}>{tUi("Back to the first page")}</Button>
-          </div>
-        )}
-        {!isLoading && !isError && entries?.length === 0 && filters.page <= 1 && hasActiveFilters && (
-          <div className="vocabulary-empty">
-            <p className="text-secondary text-sm">{tUi("No words match your search or filter.")}</p>
-            <Button variant="secondary" size="md" onClick={() => resetFilters(activeLanguageId)}>{tUi("Clear filters")}</Button>
-          </div>
-        )}
-        {!isLoading && !isError && entries?.length === 0 && filters.page <= 1 && !hasActiveFilters && (
-          <div className="vocabulary-empty">
-            <p className="text-secondary text-sm">{tUi("No words yet. Add your first word to start learning.")}</p>
-            <Button variant="secondary" size="md" onClick={openAddOne}>{tUi("+ Add your first word")}</Button>
-          </div>
-        )}
-        {entries?.map((entry) => (
-          <WordRow key={entry.id} entry={entry} onClick={handleWordClick}
-            selected={selectedIds.includes(entry.id)} onSelect={() => toggleSelection(entry.id)} onAction={setWordAction} />
-        ))}
-      </div>
-
-      {!isError && (
-        <VocabularyPager
-          page={filters.page}
-          perPage={filters.perPage}
-          shown={entries?.length ?? 0}
-          total={hasActiveFilters ? null : (totalCount ?? null)}
-          onPageChange={handlePageChange}
+      {detailOpen && (
+        <WordDetail
+          id={selectedId}
+          onClose={() => void navigate('/vocabulary')}
+          position={detailPosition}
+          {...(previousEntry ? { onPrevious: () => void navigate(`/vocabulary/${previousEntry.id}`, { replace: true }) } : {})}
+          {...(nextEntry ? { onNext: () => void navigate(`/vocabulary/${nextEntry.id}`, { replace: true }) } : {})}
         />
       )}
 
@@ -537,13 +638,6 @@ export default function VocabularyPage() {
         {...(categoryEditor !== 'create' && selectedCategory ? { category: selectedCategory } : {})}
         deleting={categoryEditor === 'remove'} onClose={() => setCategoryEditor(null)}
         onDeleted={() => setFilters({ categoryId: null, page: 1 })} />}
-
-      {selectedId != null && !isNaN(selectedId) && (
-        <WordDetail
-          id={selectedId}
-          onClose={() => void navigate('/vocabulary')}
-        />
-      )}
     </div>
   );
 }

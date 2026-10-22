@@ -6,7 +6,8 @@ import { useI18n } from "../../hooks/useI18n";
 // что за первой страницей, было недоступно.
 // ============================================================
 
-import { Button } from '../../components/ui/Button';
+import { IconButton } from '../../components/ui/Button';
+import { Icon } from '../../components/ui/Icon';
 
 type VocabularyPagerProps = {
   /** 1-based номер текущей страницы. */
@@ -22,35 +23,39 @@ type VocabularyPagerProps = {
 export function VocabularyPager({ page, perPage, shown, total, onPageChange }: VocabularyPagerProps) {
   const { t: tUi } = useI18n();
   const hasPrevious = page > 1;
-  // Полная страница — значит, дальше, скорее всего, есть ещё.
-  const hasNext = shown >= perPage;
-
-  if (!hasPrevious && !hasNext) return null;
-
   const from = (page - 1) * perPage + 1;
   const to = (page - 1) * perPage + shown;
+  // Известен итог — дальше есть слова, только если он больше показанного;
+  // иначе полная страница значит, что дальше, скорее всего, есть ещё.
+  const hasNext = total != null ? to < total : shown >= perPage;
+
+  // Подвал виден всегда, когда в списке есть слова (frame 1a); пустой первой странице он не нужен.
+  if (shown === 0 && !hasPrevious) return null;
   const range = shown === 0 ? tUi("Page {page}", { page }) : `${from.toLocaleString(getLocale())}–${to.toLocaleString(getLocale())}`;
   const label = total != null && shown > 0 ? tUi("{range} of {total}", { range, total: total.toLocaleString(getLocale()) }) : range;
 
   return (
     <nav className="vocabulary-pager" aria-label={tUi("Vocabulary pages")}>
-      <Button
+      <span className="vocabulary-pager__status" aria-live="polite">
+        {tUi(label)}
+      </span>
+      <span className="spacer" />
+      <IconButton
         variant="secondary"
         size="sm"
+        icon={<Icon name="chevron_left" size={17} />}
         disabled={!hasPrevious}
         onClick={() => onPageChange(page - 1)}
         aria-label={tUi("Previous page")}
-      >{tUi("← Previous")}</Button>
-      <span className="vocabulary-pager-status text-secondary text-sm" aria-live="polite">
-        {tUi(label)}
-      </span>
-      <Button
+      />
+      <IconButton
         variant="secondary"
         size="sm"
+        icon={<Icon name="chevron_right" size={17} />}
         disabled={!hasNext}
         onClick={() => onPageChange(page + 1)}
         aria-label={tUi("Next page")}
-      >{tUi("Next →")}</Button>
+      />
     </nav>
   );
 }

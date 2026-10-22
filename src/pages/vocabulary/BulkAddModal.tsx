@@ -6,7 +6,9 @@ import { useI18n } from "../../hooks/useI18n";
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { Button } from '../../components/ui/Button';
+import { Button, IconButton } from '../../components/ui/Button';
+import { Icon } from '../../components/ui/Icon';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useAddVocabularyBatch, useImportWordList } from '../../hooks/useVocabulary';
 import { useCategories } from '../../hooks/useCategories';
 import { useLanguages, resolveLanguageId } from '../../hooks/useLanguages';
@@ -27,15 +29,6 @@ type BulkAddModalProps = {
   initialCategoryId?: number | null;
   onQueued?: (result: AddVocabularyBatchResult) => void;
 };
-
-
-function CloseIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
 
 export function BulkAddModal({ isOpen, mode, onClose, onQueued, initialCategoryId = null }: BulkAddModalProps) {
   const { t: tUi } = useI18n();
@@ -58,6 +51,8 @@ export function BulkAddModal({ isOpen, mode, onClose, onQueued, initialCategoryI
   const isPending = batchMutation.isPending || importMutation.isPending;
 
   const parsed = useMemo(() => parseWordList(rawText), [rawText]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, isOpen);
 
   const previousSession = useRef({ isOpen: false, mode });
   useEffect(() => {
@@ -88,7 +83,7 @@ export function BulkAddModal({ isOpen, mode, onClose, onQueued, initialCategoryI
 
   if (!isOpen) return null;
 
-  const title = mode === 'paste' ? tUi("Paste Word List") : tUi("Upload Word List");
+  const title = mode === 'paste' ? tUi("Paste word list") : tUi("Upload word list");
   const canSubmit =
     mode === 'paste' ? parsed.words.length > 0 : Boolean(filePath);
 
@@ -170,83 +165,108 @@ export function BulkAddModal({ isOpen, mode, onClose, onQueued, initialCategoryI
   };
 
   return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
+    // Клик по фону закрывает модалку мышью; с клавиатуры — Esc и Cancel.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
-      className="add-word-overlay"
+      className="modal-scrim"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="bulk-add-title"
     >
-      <div className="add-word-dialog animate-slide-up">
-        <div className="add-word-header">
-          <div>
-            <h2 id="bulk-add-title" className="add-word-title">{title}</h2>
-            <p className="text-secondary text-xs">{tUi("One word or phrase per line. Up to ")}{MAX_BULK_WORDS}{tUi(" entries. Translations run in the background.")}</p>
+      <div
+        ref={dialogRef}
+        className="modal modal--md"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bulk-add-title"
+      >
+        <div className="modal__head">
+          <div className="modal__head-text">
+            <h2 id="bulk-add-title" className="modal__title">{title}</h2>
+            <p className="modal__desc">{tUi("Translations run in the background. You can keep working.")}</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="add-word-close-btn"
+          <IconButton
+            className="modal__close"
+            icon={<Icon name="close" size={20} />}
             aria-label={tUi("Close dialog")}
-          >
-            <CloseIcon />
-          </button>
+            onClick={onClose}
+          />
         </div>
 
-        {mode === 'paste' ? (
-          <div className="bulk-add-field">
-            <label htmlFor="bulk-add-textarea" className="text-secondary text-xs font-medium">{tUi("WORDS / PHRASES")}</label>
-            <textarea dir="auto"
-              id="bulk-add-textarea"
-              className="bulk-add-textarea"
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              placeholder={"apple\nget along\nbe pesky"}
-              rows={10}
-              autoFocus
-              aria-label={tUi("Word list, one per line")}
-            />
-            <p className="bulk-add-preview text-secondary text-xs" aria-live="polite">
-              {parsed.words.length === 0
-                ? tUi("No words yet")
-                : parsed.words.length === 1
-                  ? tUi("{count} word ready", { count: parsed.words.length })
-                  : tUi("{count} words ready", { count: parsed.words.length })}
-              {parsed.truncated ? tUi(" (first {MAX_BULK_WORDS} only)", { MAX_BULK_WORDS: MAX_BULK_WORDS }) : ''}
-              {parsed.skippedLong > 0 ? tUi(", skipped {value1} long line(s)", { value1: parsed.skippedLong }) : ''}
-            </p>
-          </div>
-        ) : (
-          <div className="bulk-add-field">
-            <p className="text-secondary text-xs">{tUi("Choose a UTF-8 text file with one word or phrase per line (.txt or .csv).")}</p>
-            <Button variant="secondary" size="md" onClick={() => void handlePickFile()}>{tUi("Choose file…")}</Button>
-            {fileName && (
-              <p className="bulk-add-preview text-secondary text-xs" aria-live="polite">{tUi("Selected: ")}{fileName}
+        <div className="modal__body">
+          {mode === 'paste' ? (
+            <div className="vocabulary-form-field">
+              <label htmlFor="bulk-add-textarea" className="label">
+                {tUi("Words and phrases")}
+                <span className="label__optional">{tUi("one per line, up to {count}", { count: MAX_BULK_WORDS })}</span>
+              </label>
+              <textarea dir="auto"
+                id="bulk-add-textarea"
+                className="field field--textarea bulk-add-textarea"
+                value={rawText}
+                onChange={(e) => setRawText(e.target.value)}
+                placeholder={"apple\nget along\nbe pesky"}
+                rows={8}
+                autoFocus
+                aria-label={tUi("Word list, one per line")}
+              />
+              <p className="bulk-add-preview" aria-live="polite">
+                <Icon
+                  name={parsed.words.length > 0 ? 'check_circle' : 'info'}
+                  size={17}
+                  className={parsed.words.length > 0 ? 'icon--ok' : 'icon--muted'}
+                />
+                <span>
+                  {parsed.words.length === 0
+                    ? tUi("No words yet")
+                    : parsed.words.length === 1
+                      ? tUi("{count} word ready", { count: parsed.words.length })
+                      : tUi("{count} words ready", { count: parsed.words.length })}
+                  {parsed.truncated ? tUi(" (first {MAX_BULK_WORDS} only)", { MAX_BULK_WORDS: MAX_BULK_WORDS }) : ''}
+                  {parsed.skippedLong > 0 ? tUi(", skipped {value1} long line(s)", { value1: parsed.skippedLong }) : ''}
+                </span>
               </p>
-            )}
+            </div>
+          ) : (
+            <div className="vocabulary-form-field">
+              <p className="inline-note">{tUi("Choose a UTF-8 text file with one word or phrase per line (.txt or .csv).")}</p>
+              <div className="bulk-add-file-row">
+                <Button variant="secondary" size="md" onClick={() => void handlePickFile()}>
+                  <Icon name="upload_file" size={17} />
+                  {tUi("Choose file…")}
+                </Button>
+                {fileName && (
+                  <p className="bulk-add-preview" aria-live="polite">{tUi("Selected: ")}{fileName}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="vocabulary-form-field">
+            <label htmlFor="bulk-add-category" className="label">{tUi('Category')}</label>
+            <CategorySelect id="bulk-add-category" categories={categories.data ?? []} value={categoryId} onChange={setCategoryId} disabled={isPending} />
           </div>
-        )}
+          {categories.isError && <p className="inline-note">{tUi('Could not load categories.')} <Button size="sm" onClick={() => void categories.refetch()}>{tUi('Try again')}</Button></p>}
 
-        <label className="bulk-add-field">{tUi('Category')}
-          <CategorySelect categories={categories.data ?? []} value={categoryId} onChange={setCategoryId} disabled={isPending} />
-        </label>
-        {categories.isError && <p className="text-secondary text-xs">{tUi('Could not load categories.')} <Button size="sm" onClick={() => void categories.refetch()}>{tUi('Try again')}</Button></p>}
+          {error && (
+            <p className="inline-error" role="alert">
+              {error}
+            </p>
+          )}
+          {resultSummary && (
+            <p className="bulk-add-success" role="status" aria-live="polite">
+              <Icon name="check_circle" size={17} className="icon--ok" />
+              {resultSummary}
+            </p>
+          )}
+        </div>
 
-        {error && (
-          <p className="add-word-image-error" role="alert">
-            {error}
-          </p>
-        )}
-        {resultSummary && (
-          <p className="bulk-add-success text-xs" role="status" aria-live="polite">
-            {resultSummary}
-          </p>
-        )}
-
-        <div className="add-word-actions">
+        <div className="modal__foot">
+          <span className="hint">
+            <kbd className="kbd">{tUi("Esc")}</kbd>
+            {tUi("close")}
+          </span>
+          <span className="spacer" />
           <Button variant="ghost" size="md" onClick={onClose} disabled={isPending}>{tUi("Cancel")}</Button>
           <Button
             variant="primary"
