@@ -1,11 +1,13 @@
 import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Create Collection Modal
+// Shared modal anatomy (Lingora 2e): head · body · foot.
 // ============================================================
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button } from '../../components/ui/Button';
+import { Button, IconButton } from '../../components/ui/Button';
+import { Icon } from '../../components/ui/Icon';
 import { ipc } from '../../lib/ipc';
 import { formatIpcError } from '../../lib/utils';
 
@@ -61,7 +63,7 @@ export function CreateCollectionModal({
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <div
-      className="collection-modal-overlay"
+      className="modal-scrim"
       onClick={(e) => {
         if (e.target === e.currentTarget && !createMutation.isPending) onClose();
       }}
@@ -69,75 +71,92 @@ export function CreateCollectionModal({
       aria-modal="true"
       aria-labelledby="create-collection-title"
     >
-      <form
-        className="collection-modal-dialog animate-slide-up"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (canSubmit) createMutation.mutate();
-        }}
-      >
-        <div className="collection-modal-header">
-          <h2 id="create-collection-title" className="collection-modal-title">{tUi("New Collection")}</h2>
-          <button
-            type="button"
-            className="collection-modal-close"
-            onClick={onClose}
-            disabled={createMutation.isPending}
-            aria-label={tUi("Close dialog")}
-          >
-            ×
-          </button>
-        </div>
+      <div className="modal collection-modal">
+        <form
+          className="collection-modal__form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSubmit) createMutation.mutate();
+          }}
+        >
+          <div className="modal__head">
+            <div className="modal__head-text">
+              <h2 id="create-collection-title" className="modal__title">{tUi("New collection")}</h2>
+            </div>
+            <IconButton
+              className="modal__close"
+              icon={<Icon name="close" size={20} />}
+              onClick={onClose}
+              disabled={createMutation.isPending}
+              aria-label={tUi("Close dialog")}
+            />
+          </div>
 
-        <label className="collection-modal-label" htmlFor="collection-name">{tUi("Collection name")}</label>
-        <input dir="auto"
-          id="collection-name"
-          className="collection-modal-input"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={tUi("Travel, Work emails, Exam week…")}
-          maxLength={80}
-          autoFocus
-          required
-          aria-label={tUi("Collection name")}
-        />
+          <div className="modal__body">
+            <div className="collection-modal__field">
+              <label className="label" htmlFor="collection-name">{tUi("Collection name")}</label>
+              <div className="field">
+                <input dir="auto"
+                  id="collection-name"
+                  className="field__input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={tUi("Travel, Work emails, Exam week…")}
+                  maxLength={80}
+                  autoFocus
+                  required
+                  aria-label={tUi("Collection name")}
+                />
+              </div>
+            </div>
 
-        <label className="collection-modal-label" htmlFor="collection-description">{tUi("Description ")}<span className="text-muted">{tUi("(optional)")}</span>
-        </label>
-        <textarea dir="auto"
-          id="collection-description"
-          className="collection-modal-textarea"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder={tUi("What belongs in this list?")}
-          rows={3}
-          maxLength={240}
-        />
+            <div className="collection-modal__field">
+              <label className="label" htmlFor="collection-description">{tUi("Description ")}<span className="label__optional">{tUi("(optional)")}</span>
+              </label>
+              <div className="field field--textarea">
+                <textarea dir="auto"
+                  id="collection-description"
+                  className="field__input"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder={tUi("What belongs in this list?")}
+                  rows={3}
+                  maxLength={240}
+                />
+              </div>
+            </div>
 
-        {createMutation.isError && (
-          <p className="collection-modal-error" role="alert">
-            {formatIpcError(createMutation.error, tUi("Could not create the collection"))}
-          </p>
-        )}
+            {createMutation.isError && (
+              <p className="inline-error collection-modal__error" role="alert">
+                {formatIpcError(createMutation.error, tUi("Could not create the collection"))}
+              </p>
+            )}
+          </div>
 
-        <div className="collection-modal-actions">
-          <Button
-            type="button"
-            variant="ghost"
-            size="md"
-            onClick={onClose}
-            disabled={createMutation.isPending}
-          >{tUi("Cancel")}</Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="md"
-            disabled={!canSubmit}
-            isLoading={createMutation.isPending}
-            aria-label={tUi("Create collection")}
-          >{tUi("Create collection")}</Button>
-        </div>
-      </form>
+          <div className="modal__foot">
+            <span className="hint">
+              <kbd className="kbd">{tUi("Esc")}</kbd>
+              {tUi("close")}
+            </span>
+            <span className="spacer" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="md"
+              onClick={onClose}
+              disabled={createMutation.isPending}
+            >{tUi("Cancel")}</Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              disabled={!canSubmit}
+              isLoading={createMutation.isPending}
+              aria-label={tUi("Create collection")}
+            >{tUi("Create collection")}</Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

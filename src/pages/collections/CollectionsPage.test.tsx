@@ -144,4 +144,23 @@ describe('CollectionsPage', () => {
       );
     });
   });
+
+  it('uses sentence-case labels and a draggable header per the Lingora frame', async () => {
+    mockCollections([inactivePack]);
+    renderWithQueryClient(<CollectionsPage />);
+
+    const headerButton = await screen.findByRole('button', { name: 'Create new collection' });
+    expect(headerButton).toHaveTextContent('New collection');
+    expect(await screen.findByRole('button', { name: 'New collection' })).not.toBe(headerButton);
+    expect(
+      screen.getByText('Curated lists for your learning language. Load a pack when you need it, then turn it on in Study.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Collections' }).closest('header')).toHaveAttribute(
+      'data-tauri-drag-region',
+    );
+    const option = screen.getByRole('checkbox', { name: /also fetch pictures when loading a pack/i });
+    expect(option.closest('label')).toHaveTextContent(
+      'Also fetch pictures when loading a pack · slower, sends each word to your image provider',
+    );
+  });
 });

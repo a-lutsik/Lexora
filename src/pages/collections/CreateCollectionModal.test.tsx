@@ -28,6 +28,7 @@ describe('CreateCollectionModal', () => {
       <CreateCollectionModal isOpen languageId={1} onClose={onClose} />
     );
 
+    expect(screen.getByRole('dialog', { name: 'New collection' })).toBeInTheDocument();
     await user.type(screen.getByLabelText('Collection name'), 'Work emails');
     await user.click(screen.getByRole('button', { name: 'Create collection' }));
 

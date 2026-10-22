@@ -1,55 +1,78 @@
 /* ============================================================
-   LEXORA — Collections Page
+   LEXORA — Collections Page (Lingora frame 1i, modal 2e)
+   Shared anatomy comes from patterns.css (.page, .page-header,
+   .card, .section-label, .modal…); here only page specifics.
    ============================================================ */
 
 .collections-page {
-  padding: var(--space-8);
-  height: 100%;
-  overflow-y: auto;
-}
-
-.collections-load-progress {
-  margin-bottom: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.collections-load-bar {
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--color-bg-secondary);
   overflow: hidden;
 }
 
-.collections-load-bar-fill {
-  height: 100%;
-  width: var(--progress-pct, 0%);
-  background: var(--color-accent);
-  border-radius: var(--radius-full);
-  transition: width var(--transition-base);
-}
+/* ── Toolbar: "also fetch pictures" option ─────────────── */
 
-.collections-load-error {
-  color: var(--color-danger);
+.collections-toolbar {
+  font-size: 13px;
+  color: var(--ink2);
 }
 
 .collections-images-option {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 10px;
   min-height: var(--touch-target-min);
-  margin-bottom: var(--space-2);
   cursor: pointer;
 }
 
+.collections-images-option__text {
+  font-size: var(--text-ui);
+  color: var(--ink2);
+}
+
+.collections-images-option__note {
+  color: var(--ink3);
+}
+
+.collections-images-option__box {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--acc);
+  cursor: pointer;
+}
+
+.collections-images-option__box:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+/* ── Body & sections ───────────────────────────────────── */
+
+.collections-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-bottom: var(--space-8);
+}
+
+.collections-section .section-label {
+  margin-bottom: 10px;
+}
+
+.collections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.collections-load-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .collections-error {
-  margin: 0 0 var(--space-4);
-  color: var(--color-danger);
+  margin: 0;
 }
 
 .collections-error-block {
@@ -57,165 +80,254 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-3);
-  margin-bottom: var(--space-4);
 }
 
-.collection-confirm {
-  display: flex;
-  flex: 1 1 100%;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.collection-confirm-text {
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
-.collection-confirm-actions {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.collections-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-6);
-}
-
-.collections-title {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-weight-bold);
+.collections-error-block .inline-note {
   margin: 0;
 }
 
-.collections-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: var(--space-4);
-}
+/* ── Collection card ───────────────────────────────────── */
 
 .collection-card {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  transition: all var(--transition-fast);
+  gap: 6px;
+  min-height: 150px;
+  min-width: 0;
 }
 
-.collection-card-header {
+.collection-card__head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.collection-name {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: 0 0 var(--space-1);
-}
-
-.collection-card-footer {
-  display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
-  margin-top: auto;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
 }
 
-.collection-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+.collection-card__name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15.5px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-card__kind {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--ink3);
+}
+
+.collection-card__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink2);
+  line-height: var(--line-height-snug);
+}
+
+.collection-card__foot {
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 150;
-  padding: var(--space-4);
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 
-.collection-modal-dialog {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  width: 100%;
-  max-width: 480px;
-  padding: var(--space-6);
+.collection-card__count {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+
+.collection-card__load {
+  align-self: flex-start;
+}
+
+/* Loading progress inside the card */
+.collection-card__loading {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 6px;
 }
 
-.collection-modal-header {
+.collection-card__loading-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  font-size: var(--text-label);
+  color: var(--ink2);
 }
 
-.collection-modal-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-bold);
-  margin: 0;
+.collection-card__loading-row .num {
+  font-size: 11.5px;
 }
 
-.collection-modal-close {
-  background: none;
+.collection-card__bar {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.collection-card__bar-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.collection-card__bar-fill {
+  fill: var(--acc);
+}
+
+/* ── "In Study" switch (one control instead of two buttons) ── */
+
+.collection-switch {
+  position: relative;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
   border: none;
-  color: var(--color-text-secondary);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--ink2);
   cursor: pointer;
-  font-size: var(--text-xl);
-  min-width: 44px;
-  min-height: 44px;
 }
 
-.collection-modal-close:hover,
-.collection-modal-close:focus-visible {
-  color: var(--color-text-primary);
-  outline: 2px solid var(--color-accent);
+.collection-switch.is-on {
+  color: var(--ink);
+}
+
+/* 44px hit target while the switch itself stays 20px tall */
+.collection-switch::after {
+  content: '';
+  position: absolute;
+  inset: -12px -6px;
+}
+
+.collection-switch:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.collection-switch__track {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--line2);
+  transition: background var(--transition-fast);
+}
+
+.collection-switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-base);
+}
+
+.collection-switch.is-on .collection-switch__track {
+  background: var(--acc);
+}
+
+.collection-switch.is-on .collection-switch__thumb {
+  transform: translateX(14px);
+}
+
+.collection-switch:focus-visible {
+  outline: none;
+}
+
+.collection-switch:focus-visible .collection-switch__track {
+  outline: 2px solid var(--acc);
   outline-offset: 2px;
 }
 
-.collection-modal-label {
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-  font-weight: var(--font-weight-medium);
-}
+/* ── Disable confirmation (inline, inside the card) ────── */
 
-.collection-modal-input,
-.collection-modal-textarea {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
-  color: var(--color-text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-}
-
-.collection-modal-textarea {
-  resize: vertical;
-  min-height: 72px;
-}
-
-.collection-modal-error {
-  margin: 0;
-  color: var(--color-danger);
-  font-size: var(--text-sm);
-}
-
-.collection-modal-actions {
+.collection-confirm {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
   gap: var(--space-2);
-  margin-top: var(--space-2);
+}
+
+.collection-confirm__text {
+  margin: 0;
+  font-size: var(--text-label);
+  color: var(--ink2);
+  line-height: var(--line-height-snug);
+}
+
+.collection-confirm__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ── Dashed "New collection" tile ──────────────────────── */
+
+.collection-new-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 150px;
+  border: 1px dashed var(--line2);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: var(--text-ui);
+  color: var(--ink2);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.collection-new-tile:hover,
+.collection-new-tile:focus-visible {
+  background: var(--sunk);
+  color: var(--ink);
+}
+
+.collection-new-tile:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+/* ── Create collection modal (2e): 460px wide ──────────── */
+
+.collection-modal {
+  width: min(460px, 100%);
+}
+
+.collection-modal__form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.collection-modal__field {
+  display: flex;
+  flex-direction: column;
+}
+
+.collection-modal .field--textarea {
+  min-height: 76px;
+}
+
+.collection-modal__error {
+  margin: 0;
 }

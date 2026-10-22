@@ -1,4 +1,5 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import StatsPage from './StatsPage';
 import { invokeMock } from '../../test/mocks';
@@ -23,9 +24,10 @@ function zeroDays(count: number): DailyActivity[] {
   }));
 }
 
-function mockStats(stats: StatsSummary, activity: DailyActivity[]) {
+function mockStats(stats: StatsSummary, activity: DailyActivity[], statusCounts: unknown = null) {
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === 'get_stats_summary') return Promise.resolve(stats);
+    if (cmd === 'count_vocabulary_by_status') return Promise.resolve(statusCounts);
     if (cmd === 'get_daily_activity') return Promise.resolve(activity);
     if (cmd === 'get_words_added_stats') {
       return Promise.resolve({ today: 0, thisWeek: 0, thisMonth: 0, total: 0 });
@@ -44,7 +46,7 @@ describe('StatsPage', () => {
     mockStats(summary, zeroDays(30));
     renderWithQueryClient(<StatsPage />);
 
-    expect(await screen.findByText('🔥 4d')).toBeInTheDocument();
+    expect(await screen.findByText('4 days')).toBeInTheDocument();
     expect(screen.getByText('87.5%')).toBeInTheDocument();
   });
 
@@ -52,7 +54,7 @@ describe('StatsPage', () => {
     mockStats({ ...summary, streak: 0, accuracyPercent: 0, totalWords: 0 }, zeroDays(30));
     renderWithQueryClient(<StatsPage />);
 
-    expect(await screen.findByText('🔥 0d')).toBeInTheDocument();
+    expect(await screen.findByText('0 days')).toBeInTheDocument();
     expect(screen.queryByText('100%')).not.toBeInTheDocument();
     expect(screen.getByText('—')).toBeInTheDocument();
   });
@@ -84,5 +86,67 @@ describe('StatsPage', () => {
       const call = invokeMock.mock.calls.find(([cmd]) => cmd === 'get_daily_activity');
       expect(call?.[1]).toEqual({ days: 30, languageId: 1 });
     });
+  });
+
+  it('titles the page Statistics and makes the header a window drag region', async () => {
+    mockStats(summary, zeroDays(30));
+    renderWithQueryClient(<StatsPage />);
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Statistics' });
+    expect(screen.getByText('Vocabulary growth, retention and daily consistency')).toBeInTheDocument();
+    expect(heading.closest('header')).toHaveAttribute('data-tauri-drag-region');
+  });
+
+  it('switches the activity period between 30 days, 90 days and all time', async () => {
+    const user = userEvent.setup();
+    mockStats(summary, zeroDays(30));
+    renderWithQueryClient(<StatsPage />);
+
+    const thirty = await screen.findByRole('button', { name: '30 days' });
+    expect(thirty).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('button', { name: '90 days' }));
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('get_daily_activity', { days: 90, languageId: 1 });
+    });
+    expect(screen.getByRole('button', { name: '90 days' })).toHaveAttribute('aria-pressed', 'true');
+    expect(thirty).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(screen.getByRole('button', { name: 'All time' }));
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('get_daily_activity', { days: 365, languageId: 1 });
+    });
+    expect(screen.getByRole('heading', { name: 'Activity' })).toBeInTheDocument();
+  });
+
+  it('formats the KPI strip with grouped numbers and frame sub-lines', async () => {
+    mockStats({ ...summary, totalWords: 5282, accuracyPercent: 86, matureCount: 64, streak: 12, wordsAddedThisWeek: 21 }, zeroDays(30));
+    renderWithQueryClient(<StatsPage />);
+
+    expect(await screen.findByText('5,282')).toBeInTheDocument();
+    expect(screen.getByText('+21 this week')).toBeInTheDocument();
+    expect(screen.getByText('86%')).toBeInTheDocument();
+    expect(screen.getByText('recall rate')).toBeInTheDocument();
+    expect(screen.getByText('64')).toBeInTheDocument();
+    expect(screen.getByText('interval over 21 days')).toBeInTheDocument();
+    expect(screen.getByText('12 days')).toBeInTheDocument();
+    // The summary DTO has no best streak, so the frame's «best: N days» falls back.
+    expect(screen.getByText('days in a row')).toBeInTheDocument();
+  });
+
+  it('shows words by status with a count per SRS status', async () => {
+    mockStats(summary, zeroDays(30), { new: 112, learning: 48, review: 24, mature: 64, suspended: 3 });
+    renderWithQueryClient(<StatsPage />);
+
+    const section = (await screen.findByRole('heading', { name: 'Words by status' })).closest('section');
+    expect(section).not.toBeNull();
+    const legend = within(section as HTMLElement);
+    for (const [label, count] of [['New', '112'], ['Learning', '48'], ['Review', '24'], ['Mature', '64']] as const) {
+      const item = legend.getByText(label).closest('li');
+      expect(item).not.toBeNull();
+      await waitFor(() => expect(within(item as HTMLElement).getByText(count)).toBeInTheDocument());
+    }
+    expect(screen.queryByRole('heading', { name: /SRS Mastery/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Accuracy by error type' })).toBeInTheDocument();
   });
 });

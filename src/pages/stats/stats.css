@@ -1,320 +1,313 @@
 /* ============================================================
-   LEXORA — Statistics Page
+   LEXORA — Statistics Page (Lingora frame 1j)
+   Shared anatomy from patterns.css (.page, .page-header,
+   .stat-grid, .card, .status…); here only page specifics.
    ============================================================ */
 
 .stats-page {
-  padding: var(--space-8);
-  height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-.stats-header {
-  margin-bottom: var(--space-6);
+.stats-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-bottom: var(--space-8);
 }
 
-.stats-title {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-weight-bold);
-  margin: 0;
+/* ── Metrics strip ─────────────────────────────────────── */
+
+.stats-metric {
+  padding: var(--space-4) var(--space-5);
 }
 
-/* ── Metrics Row ──────────────────────────────────────────── */
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-4);
-  margin-bottom: var(--space-8);
+.stats-metric__value {
+  font-size: 36px;
+  line-height: 1.2;
+  margin-top: var(--space-1);
+  font-variant-numeric: tabular-nums;
 }
+
+.stats-metric__hint {
+  font-size: var(--text-label);
+  color: var(--ink3);
+}
+
+/* ── Cards & section titles ────────────────────────────── */
 
 .stats-card {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
+  padding: 18px var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
 }
 
-.stats-card-label {
+.stats-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
   margin-bottom: var(--space-1);
 }
 
-.stats-card-value {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-weight-bold);
-}
-
-.stats-card-hint {
-  margin-top: var(--space-1);
-}
-
-/* ── SRS Mastery Distribution ─────────────────────────────── */
-
-.stats-section {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
-  margin-bottom: var(--space-6);
+.stats-card__head .stats-section-title {
+  flex: 1;
+  min-width: 0;
 }
 
 .stats-section-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: 0 0 var(--space-4);
-}
-
-.stats-stages {
-  display: flex;
-  gap: var(--space-4);
-}
-
-.stats-stage {
-  flex: 1;
-  padding: var(--space-4);
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-md);
-}
-
-.stats-stage-name {
-  font-weight: var(--font-weight-bold);
-}
-
-.stats-stage-name--new {
-  color: var(--color-status-new);
-}
-
-.stats-stage-name--learning {
-  color: var(--color-status-learning);
-}
-
-.stats-stage-name--review {
-  color: var(--color-status-review);
-}
-
-.stats-stage-name--mature {
-  color: var(--color-status-mature);
-}
-
-/* ── Words Added ─────────────────────────────────────────── */
-
-.stats-added-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-4);
-}
-
-.stats-added-card {
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  text-align: center;
-}
-
-.stats-added-value {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-weight-bold);
-}
-
-/* ── Empty states ────────────────────────────────────────── */
-
-.stats-empty {
   margin: 0;
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  font-weight: var(--font-weight-semibold);
+  color: var(--ink);
 }
 
-.stats-pronunciation-avg {
-  margin: 0 0 var(--space-3);
-}
-
-/* ── Activity Chart ──────────────────────────────────────── */
-
-.stats-activity-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 160px;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: var(--space-1);
-}
-
-.stats-activity-day {
-  flex: 1;
-  min-width: 0;
+.stats-block {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  height: 100%;
+  gap: 10px;
 }
 
-.stats-activity-bars {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 1px;
-}
-
-.stats-activity-bar {
-  width: 45%;
-  min-width: 2px;
-  height: var(--bar-h, 0%);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-}
-
-.stats-activity-bar--reviewed {
-  background: var(--color-accent);
-}
-
-.stats-activity-bar--added {
-  background: var(--color-success);
-}
-
-.stats-activity-date {
-  height: var(--space-4);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.stats-activity-legend {
-  display: flex;
+.stats-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
-  margin-top: var(--space-3);
 }
 
-.stats-activity-legend-item {
+.stats-empty,
+.stats-pronunciation-avg {
+  margin: 0;
+  font-size: var(--text-ui);
+  color: var(--ink3);
+  line-height: var(--line-height-snug);
+}
+
+.stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Lists of rows separated by hairlines */
+.stats-rows {
+  gap: 0;
+}
+
+.stats-rows > li + li {
+  border-top: 1px solid var(--line);
+}
+
+/* ── Activity chart ────────────────────────────────────── */
+
+.stats-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.stats-legend__item {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
+  gap: 6px;
+  font-size: var(--text-label);
+  color: var(--ink2);
 }
 
-.stats-activity-legend-swatch {
+.stats-legend__swatch {
   width: 10px;
   height: 10px;
-  border-radius: var(--radius-sm);
+  border-radius: 2px;
 }
 
-.stats-activity-legend-swatch--reviewed {
-  background: var(--color-accent);
+.stats-legend__swatch--reviewed {
+  background: var(--acc);
 }
 
-.stats-activity-legend-swatch--added {
-  background: var(--color-success);
+.stats-legend__swatch--added {
+  background: var(--ok);
 }
 
-/* ── Accuracy by Error Type ──────────────────────────────── */
-
-.stats-error-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.stats-chart {
+  height: 150px;
+  border-bottom: 1px solid var(--line);
 }
 
-.stats-error-row {
-  display: grid;
-  grid-template-columns: 140px 1fr 110px;
-  align-items: center;
-  gap: var(--space-4);
-}
-
-.stats-error-type {
-  font-size: var(--text-sm);
-  color: var(--color-text-primary);
-}
-
-.stats-error-track {
-  height: 12px;
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.stats-error-bar {
+.stats-chart__svg {
+  display: block;
+  width: 100%;
   height: 100%;
-  width: var(--bar-w, 0%);
-  border-radius: var(--radius-full);
 }
 
-.stats-error-bar--danger {
-  background: var(--color-danger);
+.stats-chart__bar--reviewed {
+  fill: var(--acc);
 }
 
-.stats-error-bar--warn {
-  background: var(--color-warn);
+.stats-chart__bar--added {
+  fill: var(--ok);
 }
 
-.stats-error-bar--success {
-  background: var(--color-success);
+.stats-chart__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--ink3);
 }
 
-.stats-error-meta {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  text-align: right;
+/* ── Accuracy by error type: label · meter · value ─────── */
+
+.stats-meter-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.stats-meter-row__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ── Hardest Words ───────────────────────────────────────── */
+.stats-meter {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
 
-.stats-hardest-list {
+.stats-meter__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.stats-meter__fill {
+  fill: var(--ink2);
+}
+
+.stats-meter-row__value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink2);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Words by status: stacked bar + 4-column legend ──── */
+
+.stats-status {
+  gap: var(--space-3);
+}
+
+.stats-status__bar {
+  display: block;
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--sunk);
+}
+
+.stats-status__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.stats-status__segment--new      { fill: var(--ink3); }
+.stats-status__segment--learning { fill: var(--warn); }
+.stats-status__segment--review   { fill: var(--acc); }
+.stats-status__segment--mature   { fill: var(--ok); }
+
+/* 2px separators painted in the card surface colour */
+.stats-status__gap {
+  fill: var(--surface);
+}
+
+.stats-status__legend {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.stats-status__item {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  align-items: flex-start;
+  min-width: 0;
 }
+
+.stats-status__count {
+  margin-top: var(--space-1);
+  padding-inline-start: 14px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Hardest words ─────────────────────────────────────── */
 
 .stats-hardest-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 100px 64px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto 48px;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-md);
+  min-height: var(--row-h);
 }
 
-.stats-hardest-word {
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+.stats-hardest-row__word,
+.stats-hardest-row__translation {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.stats-hardest-translation {
-  font-size: var(--text-sm);
+.stats-hardest-row__meta {
+  font-size: var(--text-label);
+  color: var(--ink3);
+  white-space: nowrap;
 }
 
-.stats-hardest-lapses {
-  font-size: var(--text-xs);
+.stats-hardest-row__accuracy {
+  text-align: right;
 }
 
-.stats-accuracy-badge {
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-semibold);
-  text-align: center;
+/* ── Writing / pronunciation patterns ──────────────────── */
+
+.stats-pattern-row {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  font-size: 13px;
+  color: var(--ink);
 }
 
-.stats-accuracy-badge--danger {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--color-danger);
+.stats-pattern-row__sample {
+  min-width: 0;
+  font-size: var(--text-label);
+  color: var(--ink2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.stats-accuracy-badge--warn {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--color-warn);
-}
-
-.stats-accuracy-badge--success {
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--color-success);
+@media (max-width: 900px) {
+  .stats-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
