@@ -50,6 +50,22 @@ beforeEach(() => {
 });
 
 describe('SetupWizard', () => {
+  it('step 1 is chosen by a card click: no Back/Continue, only the skip link', () => {
+    renderWizard();
+    const dialog = screen.getByRole('dialog');
+    expect(screen.getByText('Шаг 1 из 3')).toBeInTheDocument();
+    expect(dialog.querySelectorAll('.setup-step')).toHaveLength(3);
+    expect(dialog.querySelectorAll('.setup-step.is-filled')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Пропустить — настроить вручную' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Продолжить' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Назад/ })).not.toBeInTheDocument();
+    expect(dialog.querySelector('.setup-badge--free')).toHaveClass('tag--accent');
+    expect(dialog.querySelector('.setup-badge--paid')).not.toHaveClass('tag--accent');
+    expect(
+      screen.getByText('Никаких карт и обязательств. Сценарий можно сменить в любой момент в Настройках → AI-модели.'),
+    ).toBeInTheDocument();
+  });
+
   it('recommends the free Gemini key first and applies the Gemini package with it', async () => {
     const user = userEvent.setup();
     const { onApplied } = renderWizard();
@@ -61,7 +77,7 @@ describe('SetupWizard', () => {
     expect(first).toHaveTextContent('Рекомендуем');
 
     await user.click(first);
-    await user.type(screen.getByLabelText(/API-КЛЮЧ — Gemini/), GEMINI_KEY);
+    await user.type(screen.getByLabelText(/API-ключ — Gemini/i), GEMINI_KEY);
     await user.click(screen.getByRole('button', { name: 'Продолжить к проверке' }));
     expect(screen.getByText('AI-перевод (Gemini)')).toBeInTheDocument();
     expect(screen.getByText('Нейроголос (Gemini)')).toBeInTheDocument();
@@ -100,7 +116,7 @@ describe('SetupWizard', () => {
     renderWizard();
     await user.click(screen.getByRole('button', { name: 'Выбрать сценарий: Платно' }));
     await user.click(screen.getByRole('button', { name: /^Google Gemini \+ AI-иллюстрации:/ }));
-    await user.type(screen.getByLabelText(/API-КЛЮЧ — Gemini/), GEMINI_KEY);
+    await user.type(screen.getByLabelText(/API-ключ — Gemini/i), GEMINI_KEY);
     await user.click(screen.getByRole('button', { name: 'Продолжить к проверке' }));
     expect(screen.getByText('AI-картинки (Gemini)')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Сохранить ключ и включить сценарий' }));
@@ -134,7 +150,7 @@ describe('SetupWizard', () => {
     const [first] = screen.getAllByRole('button', { name: /:/ });
     if (!first) throw new Error('no scenario variants rendered');
     await user.click(first);
-    await user.type(screen.getByLabelText(/API-КЛЮЧ — Gemini/), GEMINI_KEY);
+    await user.type(screen.getByLabelText(/API-ключ — Gemini/i), GEMINI_KEY);
     await user.click(screen.getByRole('button', { name: 'Продолжить к проверке' }));
     await user.click(screen.getByRole('button', { name: 'Сохранить ключ и включить сценарий' }));
 

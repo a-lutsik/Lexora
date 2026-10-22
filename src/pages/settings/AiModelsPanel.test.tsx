@@ -123,9 +123,14 @@ function routes(
 
 let currentRoutes: ModelRoutes;
 
+async function openScenario(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Сменить сценарий' }));
+}
+
 function renderPanel(keysStatus: Record<string, boolean> = {}, onSettingsChanged = vi.fn()) {
   renderWithQueryClient(
     <AiModelsPanel
+      panelId="settings-ai-models"
       settings={SETTINGS}
       keysStatus={keysStatus}
       onOpenWizard={vi.fn()}
@@ -175,9 +180,11 @@ beforeEach(() => {
 });
 
 describe('AiModelsPanel', () => {
-  it('shows the active package and readiness of every group', async () => {
+  it('shows the scenario, how many roles wait for a key and readiness of every group', async () => {
     renderPanel();
-    expect(await screen.findByText('Пакет: Google Gemini')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Сценарий: Бесплатный тариф · Google Gemini. Ключ нужен ролям: 7.'),
+    ).toBeInTheDocument();
 
     const groups = screen.getByRole('list', { name: 'Готовность возможностей' });
     const voice = within(groups).getByText('Голос').closest('li');
@@ -187,18 +194,86 @@ describe('AiModelsPanel', () => {
     expect(
       within(groups).getByText('Иллюстрации', { selector: '.ai-group-title' }).closest('li'),
     ).toHaveClass('ai-group--off');
+    // The status column already says it — no group-level label on the right.
+    expect(groups.querySelector('.ai-group-level')).toBeNull();
+  });
+
+  it('keeps the model package chooser collapsed until «Сменить сценарий» is pressed', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const change = await screen.findByRole('button', { name: 'Сменить сценарий' });
+    expect(change).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('radio', { name: /^Google Gemini/ })).not.toBeInTheDocument();
+
+    await user.click(change);
+    expect(change).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('radio', { name: /^Google Gemini/ })).toBeChecked();
+  });
+
+  it('opens the setup wizard from the expanded scenario chooser', async () => {
+    const user = userEvent.setup();
+    const onOpenWizard = vi.fn();
+    renderWithQueryClient(
+      <AiModelsPanel
+        panelId="settings-ai-models"
+        settings={SETTINGS}
+        keysStatus={{}}
+        onOpenWizard={onOpenWizard}
+        onSettingsChanged={vi.fn()}
+      />,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Сменить сценарий' }));
+    await user.click(screen.getByRole('button', { name: 'Открыть мастер настройки' }));
+    expect(onOpenWizard).toHaveBeenCalledTimes(1);
+  });
+
+  it('picks a model for a role in the table and keeps the rest of its chain', async () => {
+    currentRoutes = routes('ready');
+    const user = userEvent.setup();
+    const onSettingsChanged = renderPanel({ gemini: true });
+
+    const groups = await screen.findByRole('list', { name: 'Готовность возможностей' });
+    const select = within(groups).getByRole('combobox', { name: 'Модель: Качественный текст' });
+    expect(select).toHaveTextContent('Gemini 3.8 Flash');
+    await user.click(select);
+    await user.click(screen.getByRole('option', { name: /Anthropic · Claude Sonnet 5\.5/ }));
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('set_role_route', {
+        input: {
+          role: 'text_quality',
+          targets: [
+            { provider: 'anthropic', model: 'claude-sonnet-5-5' },
+            { provider: 'gemini', model: 'gemini-3.5-flash-lite' },
+          ],
+        },
+      }),
+    );
+    expect(onSettingsChanged).toHaveBeenCalledWith(expect.objectContaining({ modelPackage: 'custom' }));
+  });
+
+  it('lists API keys of the providers in use with their state', async () => {
+    currentRoutes = routes('ready', { image_gen: [{ provider: 'openai', model: 'gpt-image-1' }] });
+    renderPanel({ gemini: true });
+
+    const gemini = await screen.findByLabelText('Gemini');
+    const openai = screen.getByLabelText('OpenAI');
+    expect(gemini).toHaveAttribute('placeholder', '••••••••••••');
+    expect(openai).toHaveAttribute('placeholder', 'Не задан');
+    expect(screen.getByRole('button', { name: 'Сохранить ключ Gemini' })).toHaveTextContent('Заменить');
+    expect(screen.getByRole('button', { name: 'Сохранить ключ OpenAI' })).toHaveTextContent('Добавить ключ');
   });
 
   it('needs a key before the Gemini package can be saved, then sends it with the package', async () => {
     const user = userEvent.setup();
     const onSettingsChanged = renderPanel();
-    await screen.findByText('Пакет: Google Gemini');
+    await openScenario(user);
 
     const save = screen.getByRole('button', { name: 'Сохранить пакет Google Gemini' });
     expect(save).toBeDisabled();
     expect(screen.getByText('Сначала вставьте ключ')).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText(/API-КЛЮЧ GEMINI/), 'AIzaSyTestKey1234567890abcdef');
+    await user.type(screen.getByLabelText(/API-ключ Gemini/i), 'AIzaSyTestKey1234567890abcdef');
     expect(save).toBeEnabled();
     await user.click(save);
 
@@ -220,17 +295,18 @@ describe('AiModelsPanel', () => {
   it('warns when the pasted key belongs to another provider', async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.type(await screen.findByLabelText(/API-КЛЮЧ GEMINI/), 'sk-proj-abc123');
+    await openScenario(user);
+    await user.type(screen.getByLabelText(/API-ключ Gemini/i), 'sk-proj-abc123');
     expect(screen.getByRole('alert')).toHaveTextContent('Похоже на ключ OpenAI, а нужен ключ Gemini');
   });
 
   it('switches to OpenAI with paid illustrations', async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByText('Пакет: Google Gemini');
+    await openScenario(user);
 
     await user.click(screen.getByRole('radio', { name: /^OpenAI/ }));
-    await user.type(screen.getByLabelText(/API-КЛЮЧ OPENAI/), 'sk-proj-test');
+    await user.type(screen.getByLabelText(/API-ключ OpenAI/i), 'sk-proj-test');
     await user.click(screen.getByRole('checkbox', { name: /AI-иллюстрации к словам/ }));
     await user.click(screen.getByRole('button', { name: 'Включить пакет OpenAI' }));
 
@@ -260,7 +336,7 @@ describe('AiModelsPanel', () => {
     currentRoutes = routes('ready');
     const user = userEvent.setup();
     renderPanel({ gemini: true });
-    await screen.findByText('Пакет: Google Gemini');
+    await screen.findByText(/^Сценарий: .*Google Gemini/);
     expect(screen.queryByRole('group', { name: 'Качественный текст' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('switch', { name: /Продвинутый режим/ }));
@@ -306,6 +382,7 @@ describe('AiModelsPanel', () => {
     currentRoutes = routes('ready', {}, 'custom');
     renderWithQueryClient(
       <AiModelsPanel
+        panelId="settings-ai-models"
         settings={{ ...SETTINGS, modelPackage: 'custom', advancedModels: false }}
         keysStatus={{ gemini: true }}
         onOpenWizard={vi.fn()}

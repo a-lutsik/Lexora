@@ -14,9 +14,16 @@ import {
   useUpdateGrammarWatchSettings,
 } from '../../hooks/useGrammarWatch';
 import { Button } from '../../components/ui/Button';
+import { Icon } from '../../components/ui/Icon';
 import { formatIpcError } from '../../lib/utils';
+import { SettingsPanel } from './SettingsPanel';
 
-export function GrammarWatchSection() {
+type GrammarWatchSectionProps = {
+  /** Element id of the panel on the Settings page. */
+  panelId: string;
+};
+
+export function GrammarWatchSection({ panelId }: GrammarWatchSectionProps) {
   const { t: tUi } = useI18n();
   const { data: settings, isLoading } = useGrammarWatchSettings();
   const { data: status } = useGrammarWatchStatus();
@@ -26,6 +33,7 @@ export function GrammarWatchSection() {
   // Shown until the save settles, so the checkbox never flips back mid-save.
   const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
   const inputId = useId();
+  const toggleId = useId();
 
   const supported = status?.supported ?? false;
   const enabled = pendingEnabled ?? settings?.enabled ?? false;
@@ -65,28 +73,39 @@ export function GrammarWatchSection() {
   };
 
   return (
-    <div id="settings-writing-check" className="settings-section" aria-labelledby="grammar-watch-title">
-      <h3 id="grammar-watch-title" className="settings-section-title settings-section-title--spaced">{tUi("Writing check in other apps")}</h3>
-
-      <div className="settings-fields">
-        <label className="settings-checkbox-label">
-          <input dir="auto"
-            type="checkbox"
-            checked={enabled}
-            disabled={!supported || isLoading || update.isPending}
-            onChange={(event) => handleToggle(event.target.checked)}
-            className="settings-checkbox"
-          />
-          <span className="settings-checkbox-text text-sm font-medium">{tUi("Suggest fixes while I type in any app")}</span>
-        </label>
-        <p className="text-secondary text-xs">{tUi("Lexora reads the text field you are typing in and, after a short pause, sends the text to your AI provider to check it in your learning language. A badge appears in the corner of the field; click it to apply fixes right there. Password fields are never read and checks are not saved. Uses your AI provider and may incur API cost.")}</p>
-        {!supported && status && (
-          <p className="text-secondary text-xs">{tUi("Available on macOS and Windows.")}</p>
-        )}
+    <SettingsPanel id={panelId} title={tUi("Writing check in other apps")}>
+      <div className="settings-section settings-section--rows">
+        <div className="settings-row">
+          <div className="settings-row__text">
+            <label htmlFor={toggleId} className="settings-row__label">{tUi("Suggest fixes while I type in any app")}</label>
+            <p className="settings-row__desc">{tUi("Lexora reads the text field you are typing in and, after a short pause, sends the text to your AI provider to check it in your learning language. A badge appears in the corner of the field; click it to apply fixes right there. Password fields are never read and checks are not saved. Uses your AI provider and may incur API cost.")}</p>
+            {!supported && status && (
+              <p className="settings-row__desc">{tUi("Available on macOS and Windows.")}</p>
+            )}
+          </div>
+          <div className="settings-row__control">
+            <span className="settings-check">
+              <input dir="auto"
+                id={toggleId}
+                type="checkbox"
+                checked={enabled}
+                disabled={!supported || isLoading || update.isPending}
+                onChange={(event) => handleToggle(event.target.checked)}
+                className="settings-checkbox"
+              />
+            </span>
+          </div>
+          {update.isError && (
+            <p className="settings-field-error" role="alert">
+              {formatIpcError(update.error, tUi("Could not save the setting."))}
+            </p>
+          )}
+        </div>
 
         {needsAccess && (
           <div className="grammar-settings-access" role="alert">
-            <p className="text-sm">{tUi("Lexora needs Accessibility access to read and fix text in other apps: System Settings → Privacy & Security → Accessibility.")}</p>
+            <Icon name="warning" size={18} className="icon--warn" />
+            <p className="grammar-settings-access-text">{tUi("Lexora needs Accessibility access to read and fix text in other apps: System Settings → Privacy & Security → Accessibility.")}</p>
             <Button
               size="sm"
               onClick={() => requestAccess.mutate()}
@@ -95,15 +114,11 @@ export function GrammarWatchSection() {
           </div>
         )}
 
-        {update.isError && (
-          <p className="text-danger text-xs" role="alert">
-            {formatIpcError(update.error, tUi("Could not save the setting."))}
-          </p>
-        )}
-
-        <div>
-          <label htmlFor={inputId} className="settings-label text-secondary text-xs font-medium">{tUi("NEVER CHECK IN THESE APPS (BUNDLE ID OR .EXE NAME)")}</label>
-          <ul className="grammar-settings-apps" aria-label={tUi("Excluded apps")}>
+        <div className="settings-row settings-row--block">
+          <div className="settings-row__text settings-row__full">
+            <label htmlFor={inputId} className="settings-row__label">{tUi("NEVER CHECK IN THESE APPS (BUNDLE ID OR .EXE NAME)")}</label>
+          </div>
+          <ul className="grammar-settings-apps settings-row__full" aria-label={tUi("Excluded apps")}>
             {excluded.map((bundleId) => (
               <li key={bundleId} className="grammar-settings-app">
                 <span className="grammar-settings-app-id">{bundleId}</span>
@@ -114,28 +129,28 @@ export function GrammarWatchSection() {
                   disabled={update.isPending}
                   aria-label={tUi("Check again in {bundleId}", { bundleId: bundleId })}
                 >
-                  ×
+                  <Icon name="close" size={14} />
                 </button>
               </li>
             ))}
           </ul>
-          {/* Not a <form>: the section lives inside the Settings form, and a
-              nested submit would also run the page-wide save. */}
-          <div className="grammar-settings-add">
-            <input dir="auto"
-              id={inputId}
-              type="text"
-              className="settings-input settings-input--mono"
-              value={newApp}
-              onChange={(event) => setNewApp(event.target.value)}
-              onKeyDown={handleAddKey}
-              placeholder={tUi("com.example.app, notepad.exe or com.example.*")}
-              disabled={!settings}
-            />
+          <div className="grammar-settings-add settings-row__full">
+            <div className="field">
+              <input dir="auto"
+                id={inputId}
+                type="text"
+                className="field__input ai-key-input"
+                value={newApp}
+                onChange={(event) => setNewApp(event.target.value)}
+                onKeyDown={handleAddKey}
+                placeholder={tUi("com.example.app, notepad.exe or com.example.*")}
+                disabled={!settings}
+              />
+            </div>
             <Button size="sm" onClick={handleAdd} disabled={!newApp.trim() || update.isPending}>{tUi("Add")}</Button>
           </div>
         </div>
       </div>
-    </div>
+    </SettingsPanel>
   );
 }

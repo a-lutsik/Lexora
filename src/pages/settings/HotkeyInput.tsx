@@ -8,15 +8,22 @@ import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 
 import { useState, type KeyboardEvent } from 'react';
-import { formatHotkey, MODIFIER_KEY_NAMES, NAMED_KEYS } from './hotkeyUtils';
+import { formatHotkey, MODIFIER_KEY_NAMES, NAMED_KEYS, parseHotkey } from './hotkeyUtils';
 
 // Builds a shortcut string from a keyboard event, or null when the
 // pressed key is a pure modifier (keep recording) or not bindable.
 function comboFromEvent(e: KeyboardEvent): string | null {
   if (MODIFIER_KEY_NAMES.has(e.key)) return null;
 
+  // Physical key first: Alt (macOS) and non-Latin layouts change `e.key`
+  // ('√' for Alt+V, 'м' for V on a Russian layout), but the global shortcut
+  // is bound to the physical key.
+  const physical = /^Key([A-Z])$/.exec(e.code) ?? /^Digit([0-9])$/.exec(e.code);
+
   let key: string;
-  if (e.key.length === 1 && e.key !== ' ') {
+  if (physical?.[1] !== undefined) {
+    key = physical[1];
+  } else if (e.key.length === 1 && e.key !== ' ') {
     key = e.key.toUpperCase();
   } else if (NAMED_KEYS[e.key] !== undefined) {
     key = NAMED_KEYS[e.key];
@@ -68,7 +75,12 @@ export function HotkeyInput({ value, onChange, label, hasError = false }: Hotkey
     }
   };
 
+  // One .kbd chip per key: ⌘ ⇧ L.
+  const { modifiers, key } = parseHotkey(value);
+  const keyChips = (key === null ? modifiers : [...modifiers, key]).map(formatHotkey);
+
   const classNames = [
+    'field',
     'settings-hotkey-input',
     isRecording ? 'settings-hotkey-input--recording' : '',
     hasError ? 'settings-hotkey-input--error' : '',
@@ -89,9 +101,13 @@ export function HotkeyInput({ value, onChange, label, hasError = false }: Hotkey
           : tUi("{label}: {value2}, activate to change shortcut", { label: label, value2: formatHotkey(value) })
       }
     >
-      <kbd className="settings-kbd">
-        {isRecording ? tUi("Press shortcut…") : formatHotkey(value)}
-      </kbd>
+      {isRecording ? (
+        <span className="settings-hotkey-recording">{tUi("Press shortcut…")}</span>
+      ) : (
+        keyChips.map((chip, index) => (
+          <kbd key={`${chip}-${index}`} className="kbd">{chip}</kbd>
+        ))
+      )}
     </button>
   );
 }

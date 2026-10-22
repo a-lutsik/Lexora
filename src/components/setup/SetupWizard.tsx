@@ -9,7 +9,8 @@ import { useI18n } from "../../hooks/useI18n";
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
-import { LogoMark } from '../ui/Logo';
+import { Icon } from '../ui/Icon';
+import { Logo } from '../ui/Logo';
 import { useApplyModelPackage } from '../../hooks/useModelRoutes';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import { useUpdateSettings } from '../../hooks/useSettings';
@@ -39,15 +40,17 @@ type SetupWizardProps = {
 const CAPABILITY_ORDER: AiCapabilityId[] = ['translate', 'images', 'audio'];
 
 /** Бесплатные/платные карточки выбора. */
-const FREE_CARDS: Array<{ id: SetupCard; title: string; tagline: string }> = [
+const FREE_CARDS: Array<{ id: SetupCard; icon: string; title: string; tagline: string }> = [
     {
         id: 'free',
+        icon: 'savings',
         title: 'Бесплатно',
         tagline:
             'Без карты: один бесплатный ключ Google Gemini включает AI-перевод, фото, голос и живой диалог. Или совсем без ключей — словарь, свободные фото и системный голос.',
     },
     {
         id: 'paid',
+        icon: 'bolt',
         title: 'Платно',
         tagline:
             'Один ключ OpenAI или Google Gemini с оплатой по использованию: всё из бесплатного плюс AI-иллюстрации к словам.',
@@ -74,7 +77,7 @@ function CapabilityChip({ cap }: { cap: AiCapability }) {
   const { t: tUi } = useI18n();
     return (
         <div className={`setup-cap setup-cap--${cap.level}`}>
-            <span className="setup-cap-dot" aria-hidden="true" />
+            <span className="status-dot setup-cap-dot" aria-hidden="true" />
             <div className="setup-cap-body">
                 <span className="setup-cap-label">{tUi(cap.label)}</span>
                 {cap.hint && <span className="setup-cap-hint">{tUi(cap.hint)}</span>}
@@ -138,7 +141,8 @@ function checkPresetKey(meta: SetupPresetMeta, apiKey: string): KeyCheck {
 export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupWizardProps) {
   const { t: tUi } = useI18n();
     const [phase, setPhase] = useState<SetupPhase>('card');
-    const [card, setCard] = useState<SetupCard | null>(null);
+    // «Бесплатно» выделен заранее как рекомендуемый; шаг 1 выбирается кликом по карточке.
+    const [card, setCard] = useState<SetupCard>('free');
     const [meta, setMeta] = useState<SetupPresetMeta | null>(null);
     const [apiKey, setApiKey] = useState('');
     const [accountId, setAccountId] = useState('');
@@ -288,19 +292,41 @@ export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupW
             ? tUi("Настройка завершена")
             : tUi("Шаг {value1} из {value2}", { value1: progress.current, value2: progress.total });
 
+    const stepDots = Array.from({ length: progress.total }, (_, index) => index < progress.current);
+
     return (
-        <div className="setup-overlay">
+        <div className="modal-scrim setup-overlay">
             <div
                 ref={panelRef}
-                className="setup-panel"
+                className="modal modal--lg setup-panel"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="setup-title"
                 tabIndex={-1}
             >
                 <header className="setup-header">
-                    <div className="setup-logo" aria-hidden="true">
-                        <LogoMark size={28} />
+                    <div className="setup-header-top">
+                        <span className="setup-brand" aria-hidden="true">
+                            <Logo size={28} />
+                        </span>
+                        <span className="spacer" />
+                        {phase === 'done' ? (
+                            <span className="tag tag--ok setup-badge setup-badge--success">{tUi("Включено ✓")}</span>
+                        ) : (
+                            <>
+                                <span className="setup-steps" aria-hidden="true">
+                                    {stepDots.map((filled, index) => (
+                                        <span
+                                            key={index}
+                                            className={`setup-step${filled ? ' is-filled' : ''}`}
+                                        />
+                                    ))}
+                                </span>
+                                <span className="setup-step-count" aria-hidden="true">
+                                    {progress.current} / {progress.total}
+                                </span>
+                            </>
+                        )}
                     </div>
                     <div className="setup-header-text">
                         <span className="setup-progress" aria-live="polite">
@@ -310,27 +336,23 @@ export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupW
                             {phaseTitle()}
                         </h1>
                     </div>
-                    {phase === 'done' && (
-                        <span className="setup-badge setup-badge--success">{tUi("Включено ✓")}</span>
-                    )}
                 </header>
 
-                <div className="setup-body">
+                <div className="modal__body setup-body">
                     {phase === 'card' && (
                         <div className="setup-card-grid">
                             {FREE_CARDS.map((c) => (
                                 <button
                                     key={c.id}
                                     type="button"
-                                    className="setup-card"
+                                    className={`card card--selectable setup-card${card === c.id ? ' is-selected' : ''}`}
                                     onClick={() => chooseCard(c.id)}
                                     aria-label={tUi("Выбрать сценарий: {value1}", { value1: tUi(c.title) })}
                                 >
                                     <span className="setup-card-top">
-                                        <span className="setup-card-icon" aria-hidden="true">
-                                            {c.id === 'free' ? '🪙' : '⚡'}
-                                        </span>
-                                        <span className={`setup-badge setup-badge--${c.id}`}>
+                                        <Icon name={c.icon} size={22} className="setup-card-icon" />
+                                        <span className="spacer" />
+                                        <span className={`tag setup-badge setup-badge--${c.id}${c.id === 'free' ? ' tag--accent' : ''}`}>
                                             {c.id === 'free' ? tUi("Без оплаты") : tUi("Лучшее качество")}
                                         </span>
                                     </span>
@@ -338,7 +360,7 @@ export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupW
                                     <span className="setup-card-tagline">{tUi(c.tagline)}</span>
                                 </button>
                             ))}
-                            <p className="setup-card-note">{tUi("Никаких карт и обязательств. Сценарий можно сменить в любой момент в Настройках — секция «AI-модели».")}</p>
+                            <p className="setup-card-note">{tUi("Никаких карт и обязательств. Сценарий можно сменить в любой момент в Настройках → AI-модели.")}</p>
                         </div>
                     )}
 
@@ -348,14 +370,14 @@ export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupW
                                 <button
                                     key={m.id}
                                     type="button"
-                                    className="setup-variant"
+                                    className="card card--selectable setup-variant"
                                     onClick={() => chooseVariant(m)}
                                     aria-label={`${tUi(m.title)}: ${tUi(m.tagline)}`}
                                 >
                                     <span className="setup-variant-main">
                                         <span className="setup-variant-title">{tUi(m.title)}</span>
                                         {m.recommended && (
-                                            <span className="setup-variant-reco">{tUi("Рекомендуем")}</span>
+                                            <span className="tag tag--accent setup-variant-reco">{tUi("Рекомендуем")}</span>
                                         )}
                                         <span className="setup-variant-price">{tUi(m.price)}</span>
                                     </span>
@@ -407,29 +429,32 @@ export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupW
                                 <div className="setup-field">
                                     <label
                                         htmlFor="setup-cf-account"
-                                        className="setup-field-label"
+                                        className="label setup-field-label"
                                     >{tUi("ACCOUNT ID")}</label>
-                                    <input dir="auto"
-                                        id="setup-cf-account"
-                                        type="text"
-                                        value={accountId}
-                                        autoComplete="off"
-                                        placeholder={tUi("32-символьный ID из адреса Cloudflare Dashboard")}
-                                        className="setup-input setup-input--mono"
-                                        onChange={(e) => setAccountId(e.target.value)}
-                                    />
+                                    <div className="field">
+                                        <input dir="auto"
+                                            id="setup-cf-account"
+                                            type="text"
+                                            value={accountId}
+                                            autoComplete="off"
+                                            placeholder={tUi("32-символьный ID из адреса Cloudflare Dashboard")}
+                                            className="field__input setup-input--mono"
+                                            onChange={(e) => setAccountId(e.target.value)}
+                                        />
+                                    </div>
                                     <p className="setup-field-hint">{tUi("Dashboard Cloudflare → в правом нижнем углу «Account ID»")}</p>
                                 </div>
                             )}
 
                             {meta.keyKind !== 'none' && (
                                 <div className="setup-field">
-                                    <label htmlFor="setup-key" className="setup-field-label">
+                                    <label htmlFor="setup-key" className="label setup-field-label">
                                         {meta.keyKind === 'cloudflare'
                                             ? tUi("API TOKEN CLOUDFLARE")
                                             : tUi("API KEY — {value1}", { value1: AI_PROVIDER_LABELS[meta.apiKeyProvider ?? meta.keyKind] })}
                                     </label>
-                                    <div className="setup-key-row">
+                                    <div className={`field setup-key-row${apiKey.trim().length > 0 && !keyCheck?.ok ? ' is-invalid' : ''}`}>
+                                        <Icon name="key" size={18} className="field__icon" />
                                         <input dir="auto"
                                             ref={keyInputRef}
                                             id="setup-key"
@@ -441,7 +466,7 @@ export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupW
                                                     ? tUi("Вставьте API-токен")
                                                     : tUi("Вставьте ключ целиком")
                                             }
-                                            className="setup-input setup-input--mono"
+                                            className="field__input setup-input--mono"
                                             onChange={(e) => setApiKey(e.target.value)}
                                             aria-invalid={apiKey.trim().length > 0 && !keyCheck?.ok}
                                         />
@@ -496,7 +521,7 @@ export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupW
                     {phase === 'done' && (
                         <div className="setup-done">
                             <div className="setup-done-icon" aria-hidden="true">
-                                ✓
+                                <Icon name="check" size={28} />
                             </div>
                             <p className="setup-done-title">
                                 {meta?.title ?? tUi("Сценарий")}{tUi(" включён")}</p>
@@ -510,17 +535,15 @@ export function SetupWizard({ settings, keysStatus, onClose, onApplied }: SetupW
                     )}
                 </div>
 
-                <footer className="setup-footer">
-                    {phase !== 'done' && (
-                        <Button variant="ghost" size="sm" onClick={goBack} disabled={phase === 'card'}>{tUi("← Назад")}</Button>
+                <footer className="modal__foot setup-footer">
+                    {(phase === 'card' || phase === 'variant') && (
+                        <Button variant="ghost" className="setup-skip-link" onClick={() => void skipToAdvanced()}>{tUi("Пропустить — настроить вручную")}</Button>
+                    )}
+                    <span className="spacer" />
+                    {phase !== 'card' && phase !== 'done' && (
+                        <Button variant="secondary" onClick={goBack}>{tUi("← Назад")}</Button>
                     )}
 
-                    {phase === 'card' && (
-                        <button type="button" className="setup-skip-link" onClick={skipToAdvanced}>{tUi("Пропустить — настроить вручную")}</button>
-                    )}
-                    {phase === 'variant' && (
-                        <button type="button" className="setup-skip-link" onClick={skipToAdvanced}>{tUi("Пропустить — настроить вручную")}</button>
-                    )}
                     {phase === 'key' && meta && (
                         <Button
                             variant="primary"

@@ -31,7 +31,7 @@ function updates(): unknown[] {
 
 describe('GrammarWatchSection', () => {
   it('is off by default and turns on immediately', async () => {
-    renderWithQueryClient(<GrammarWatchSection />);
+    renderWithQueryClient(<GrammarWatchSection panelId="settings-writing-check" />);
     const toggle = await screen.findByRole('checkbox', { name: /suggest fixes while i type/i });
     await waitFor(() => expect(toggle).toBeEnabled());
     expect(toggle).not.toBeChecked();
@@ -44,7 +44,7 @@ describe('GrammarWatchSection', () => {
 
   it('is disabled where the platform cannot watch other apps', async () => {
     status = { supported: false, accessibilityTrusted: false };
-    renderWithQueryClient(<GrammarWatchSection />);
+    renderWithQueryClient(<GrammarWatchSection panelId="settings-writing-check" />);
     expect(await screen.findByText('Available on macOS and Windows.')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: /suggest fixes while i type/i })).toBeDisabled();
   });
@@ -52,7 +52,7 @@ describe('GrammarWatchSection', () => {
   it('asks for Accessibility access when it is missing', async () => {
     settings = { ...settings, enabled: true };
     status = { supported: true, accessibilityTrusted: false };
-    renderWithQueryClient(<GrammarWatchSection />);
+    renderWithQueryClient(<GrammarWatchSection panelId="settings-writing-check" />);
     await userEvent.click(await screen.findByRole('button', { name: 'Grant access' }));
     await waitFor(() =>
       expect(invokeMock.mock.calls.some(([name]) => name === 'request_grammar_watch_access')).toBe(
@@ -62,7 +62,7 @@ describe('GrammarWatchSection', () => {
   });
 
   it('adds and removes excluded apps', async () => {
-    renderWithQueryClient(<GrammarWatchSection />);
+    renderWithQueryClient(<GrammarWatchSection panelId="settings-writing-check" />);
     const input = await screen.findByLabelText(/never check in these apps/i);
     await waitFor(() => expect(input).toBeEnabled());
     await userEvent.type(input, ' com.tinyspeck.slackmacgap {Enter}');

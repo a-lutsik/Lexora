@@ -1,11 +1,12 @@
 import { useI18n } from "../../hooks/useI18n";
 // ============================================================
-// LEXORA — ProviderKeysEditor (Settings → AI-модели → Расширенные)
+// LEXORA — ProviderKeysEditor (Settings → AI-модели → «API-ключи»)
 // Keys of every provider the role routes use, plus connection
-// details (Cloudflare Account ID, local server URL).
+// details (Cloudflare Account ID, local server URL). The backend
+// never returns a saved key: a mask stands in for it.
 // ============================================================
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useSetApiKey, useUpdateSettings } from '../../hooks/useSettings';
 import {
@@ -30,6 +31,9 @@ type ProviderKeysEditorProps = {
 
 type Notice = { ok: boolean; text: string };
 
+/** Placeholder of a saved key (its value never leaves the keychain). */
+const SAVED_KEY_MASK = '••••••••••••';
+
 export function ProviderKeysEditor({
   providers,
   keysStatus,
@@ -45,6 +49,7 @@ export function ProviderKeysEditor({
   const [account, setAccount] = useState<string | null>(null);
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const titleId = useId();
 
   const accountValue = account ?? settings?.cloudflareAccountId ?? '';
   const baseUrlValue = baseUrl ?? settings?.customBaseUrl ?? DEFAULT_OLLAMA_URL;
@@ -84,49 +89,58 @@ export function ProviderKeysEditor({
   };
 
   return (
-    <div className="ai-keys">
-      <h4 className="ai-subtitle">{tUi("Ключи провайдеров")}</h4>
+    <section className="settings-section ai-keys" aria-labelledby={titleId}>
+      <h3 id={titleId} className="ai-keys-title">
+        {tUi("API-ключи")}{' '}
+        <span className="ai-keys-title-note">{tUi("· хранятся в системной связке ключей")}</span>
+      </h3>
       {providers.length === 0 ? (
-        <p className="settings-field-hint text-muted text-xs">{tUi("Текущие модели не требуют ключей.")}</p>
+        <p className="settings-field-hint">{tUi("Текущие модели не требуют ключей.")}</p>
       ) : (
         <ul className="ai-key-list">
           {providers.map((provider) => {
             const stored = keysStatus[provider] === true;
             const label = providerLabel(provider);
             const inputId = `ai-key-${provider}`;
+            const stateId = `${inputId}-state`;
             return (
               <li key={provider} className="ai-key-row">
                 <label htmlFor={inputId} className="ai-key-label">
                   {tUi(label)}
-                  <span className={`ai-key-state ai-key-state--${stored ? 'ok' : 'missing'}`}>
-                    {stored ? tUi("ключ сохранён") : tUi("нет ключа")}
-                  </span>
                 </label>
-                <input dir="auto"
-                  id={inputId}
-                  type="password"
-                  className="settings-input settings-input--mono"
-                  value={drafts[provider] ?? ''}
-                  autoComplete="off"
-                  placeholder={stored ? tUi("Вставьте новый ключ, чтобы заменить") : tUi("Вставьте ключ")}
-                  onChange={(e) => setDrafts((d) => ({ ...d, [provider]: e.target.value }))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      void saveKey(provider);
-                    }
-                  }}
-                />
+                {/* Hidden, so it stays out of the field name; aria-describedby still reads it. */}
+                <span id={stateId} hidden>
+                  {stored ? tUi("ключ сохранён") : tUi("нет ключа")}
+                </span>
+                <div className="field ai-key-field">
+                  <input dir="auto"
+                    id={inputId}
+                    type="password"
+                    className="field__input ai-key-input"
+                    value={drafts[provider] ?? ''}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={stored ? SAVED_KEY_MASK : tUi("Не задан")}
+                    aria-describedby={stateId}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [provider]: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void saveKey(provider);
+                      }
+                    }}
+                  />
+                </div>
                 <Button
                   size="sm"
-                  variant="secondary"
+                  variant={stored ? 'secondary' : 'primary'}
                   onClick={() => void saveKey(provider)}
                   disabled={!drafts[provider]?.trim()}
                   isLoading={setApiKey.isPending && setApiKey.variables?.provider === provider}
                   aria-label={tUi("Сохранить ключ {label}", { label: label })}
-                >{tUi("Сохранить")}</Button>
-                {KEY_HINTS[provider] && (
-                  <p className="ai-key-hint text-muted text-xs">{tUi(KEY_HINTS[provider])}</p>
+                >{stored ? tUi("Replace") : tUi("Add key")}</Button>
+                {!stored && KEY_HINTS[provider] && (
+                  <p className="ai-key-hint">{tUi(KEY_HINTS[provider])}</p>
                 )}
               </li>
             );
@@ -138,7 +152,7 @@ export function ProviderKeysEditor({
         <div className="ai-connection">
           {needsCloudflareAccount && (
             <div className="ai-field">
-              <label htmlFor="ai-cf-account" className="settings-label text-secondary text-xs font-medium">{tUi("CLOUDFLARE ACCOUNT ID")}</label>
+              <label htmlFor="ai-cf-account" className="settings-label">{tUi("CLOUDFLARE ACCOUNT ID")}</label>
               <input dir="auto"
                 id="ai-cf-account"
                 type="text"
@@ -151,7 +165,7 @@ export function ProviderKeysEditor({
                 onChange={(e) => setAccount(e.target.value)}
               />
               {isCloudflareAccountIdInvalid(accountValue) && (
-                <p className="settings-field-warning text-xs" role="alert">
+                <p className="settings-field-warning" role="alert">
                   {tUi(CLOUDFLARE_ACCOUNT_ID_WARNING)}
                 </p>
               )}
@@ -159,7 +173,7 @@ export function ProviderKeysEditor({
           )}
           {needsBaseUrl && (
             <div className="ai-field">
-              <label htmlFor="ai-base-url" className="settings-label text-secondary text-xs font-medium">{tUi("АДРЕС ЛОКАЛЬНОГО СЕРВЕРА (OPENAI-СОВМЕСТИМЫЙ)")}</label>
+              <label htmlFor="ai-base-url" className="settings-label">{tUi("АДРЕС ЛОКАЛЬНОГО СЕРВЕРА (OPENAI-СОВМЕСТИМЫЙ)")}</label>
               <input dir="auto"
                 id="ai-base-url"
                 type="url"
@@ -191,6 +205,6 @@ export function ProviderKeysEditor({
           {notice.text}
         </p>
       )}
-    </div>
+    </section>
   );
 }

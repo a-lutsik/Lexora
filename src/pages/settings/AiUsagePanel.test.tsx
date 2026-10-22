@@ -63,7 +63,7 @@ beforeEach(() => {
 
 describe('AiUsagePanel', () => {
   it('lists usage per role with an estimate for priced units', async () => {
-    renderWithQueryClient(<AiUsagePanel />);
+    renderWithQueryClient(<AiUsagePanel panelId="settings-ai-usage" />);
     const table = await screen.findByRole('table', { name: 'Запросы к AI за 30 дней' });
 
     const fast = within(table).getByRole('row', { name: /Быстрый перевод/ });
@@ -80,7 +80,7 @@ describe('AiUsagePanel', () => {
 
   it('switches the period and shows an empty state', async () => {
     const user = userEvent.setup();
-    renderWithQueryClient(<AiUsagePanel />);
+    renderWithQueryClient(<AiUsagePanel panelId="settings-ai-usage" />);
     await screen.findByRole('table');
 
     await user.click(screen.getByRole('button', { name: '7 дней' }));
