@@ -10,6 +10,9 @@ import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 import { ChannelMock, invokeMock, listenMock, emitMock, tauriWindowMock } from './mocks';
 
+// jsdom has no layout: open lists scroll their highlighted option into view.
+Element.prototype.scrollIntoView = vi.fn();
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
   convertFileSrc: (path: string) => `asset://localhost/${path}`,
