@@ -18,6 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
+use tauri::window::Color;
 use tauri::{
     AppHandle, Emitter, LogicalPosition, Manager, PhysicalPosition, State, WebviewUrl,
     WebviewWindow, WebviewWindowBuilder, WindowEvent,
@@ -645,6 +646,11 @@ pub fn apply_sticker_policy(app: &AppHandle) -> Result<(), AppError> {
             .inner_size(STICKER_WIDTH, STICKER_HEIGHT)
             .decorations(false)
             .transparent(true)
+            // На Windows тень DWM рисует вокруг прозрачного окна рамку, а
+            // WebView2 без прозрачного фона заливает область вокруг карточки
+            // белым. На macOS системная тень остаётся: она обводит карточку.
+            .shadow(!cfg!(target_os = "windows"))
+            .background_color(Color(0, 0, 0, 0))
             .resizable(false)
             .always_on_top(STICKERS_PINNED_BY_DEFAULT)
             .skip_taskbar(true)
