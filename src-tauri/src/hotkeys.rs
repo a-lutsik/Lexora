@@ -185,6 +185,23 @@ pub(crate) fn normalize_captured(text: &str) -> Option<String> {
     }
 }
 
+/// Did an AXSelectedText write really change the field? Chromium/Electron
+/// fields (Chrome, Teams, Slack) report success for a bare caret and insert
+/// nothing. Unknown values are trusted; an unchanged value counts only when
+/// the write was not a no-op (replacing a selection with the same text).
+#[cfg(any(target_os = "macos", test))]
+pub(crate) fn ax_write_took_effect(
+    before: Option<&str>,
+    after: Option<&str>,
+    selected_before: Option<&str>,
+    inserted: &str,
+) -> bool {
+    match (before, after) {
+        (Some(before), Some(after)) if before == after => selected_before == Some(inserted),
+        _ => true,
+    }
+}
+
 fn hide_popup_for_capture(app: &AppHandle) {
     let app_hide = app.clone();
     let _ = app.run_on_main_thread(move || {
@@ -472,7 +489,9 @@ mod macos {
     const ATTR_FOCUSED_UI: &str = "AXFocusedUIElement";
     const ATTR_FOCUSED_APP: &str = "AXFocusedApplication";
     const ATTR_SELECTED_TEXT: &str = "AXSelectedText";
+    const ATTR_VALUE: &str = "AXValue";
 
+    const AX_WRITE_SETTLE_TIMEOUT: Duration = Duration::from_millis(300);
     const MODIFIER_TIMEOUT: Duration = Duration::from_millis(700);
     const PASTEBOARD_TIMEOUT: Duration = Duration::from_millis(500);
 
@@ -616,19 +635,58 @@ mod macos {
         }
     }
 
-    fn set_ax_selected_text(text: &str) -> bool {
-        let Some(focused) = focused_ui_element() else {
-            return false;
-        };
-        match ax_set_string(focused.as_ptr(), ATTR_SELECTED_TEXT, text) {
-            Ok(()) => true,
+    /// AXValue as is (no trim, no length cap) — only for before/after comparison.
+    fn ax_copy_raw_string(element: AXUIElementRef, attr: &str) -> Option<String> {
+        let value = ax_copy_value(element, attr).ok()?;
+        if unsafe { CFGetTypeID(value) } != CFString::type_id() {
+            unsafe { core_foundation::base::CFRelease(value) };
+            return None;
+        }
+        let cf_str = unsafe { CFString::wrap_under_create_rule(value as CFStringRef) };
+        Some(cf_str.to_string())
+    }
+
+    /// Wait briefly for the field value to change: Chromium applies AX writes
+    /// asynchronously through the renderer.
+    fn ax_value_after_write(element: AXUIElementRef, before: Option<&str>) -> Option<String> {
+        let started = Instant::now();
+        loop {
+            let after = ax_copy_raw_string(element, ATTR_VALUE);
+            if after.as_deref() != before || started.elapsed() >= AX_WRITE_SETTLE_TIMEOUT {
+                return after;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    /// `Some(true)` — inserted; `Some(false)` — the app ignored the write
+    /// (paste instead, do not retry); `None` — the write failed, retry.
+    fn set_ax_selected_text(text: &str) -> Option<bool> {
+        let focused = focused_ui_element()?;
+        let element = focused.as_ptr();
+        let before = ax_copy_raw_string(element, ATTR_VALUE);
+        let selected_before = ax_copy_raw_string(element, ATTR_SELECTED_TEXT);
+        match ax_set_string(element, ATTR_SELECTED_TEXT, text) {
+            Ok(()) => {
+                let after = ax_value_after_write(element, before.as_deref());
+                let took = super::ax_write_took_effect(
+                    before.as_deref(),
+                    after.as_deref(),
+                    selected_before.as_deref(),
+                    text,
+                );
+                if !took {
+                    log::debug!("AXSelectedText set reported success but the field did not change");
+                }
+                Some(took)
+            }
             Err(err) => {
                 if err == AX_ERROR_API_DISABLED {
                     log::warn!("AXSelectedText set unavailable — Accessibility permission denied");
                 } else {
                     log::debug!("AXSelectedText set failed with error {err}");
                 }
-                false
+                None
             }
         }
     }
@@ -640,8 +698,8 @@ mod macos {
             return false;
         }
         for attempt in 0..4 {
-            if set_ax_selected_text(text) {
-                return true;
+            if let Some(took) = set_ax_selected_text(text) {
+                return took;
             }
             if attempt + 1 < 4 {
                 thread::sleep(Duration::from_millis(40));
@@ -786,6 +844,24 @@ mod tests {
             stickers: stickers.to_string(),
             voice: voice.to_string(),
         }
+    }
+
+    #[test]
+    fn ax_write_into_caret_that_changed_nothing_is_ignored() {
+        assert!(!ax_write_took_effect(Some("Hi "), Some("Hi "), Some(""), "Hola"));
+        assert!(!ax_write_took_effect(Some(""), Some(""), None, "Hola"));
+    }
+
+    #[test]
+    fn ax_write_that_changed_the_value_or_cannot_be_checked_is_trusted() {
+        assert!(ax_write_took_effect(Some("Hi "), Some("Hi Hola"), Some(""), "Hola"));
+        assert!(ax_write_took_effect(None, None, None, "Hola"));
+        assert!(ax_write_took_effect(Some("Hi"), None, None, "Hola"));
+    }
+
+    #[test]
+    fn ax_write_of_the_same_text_over_its_selection_is_trusted() {
+        assert!(ax_write_took_effect(Some("Hola"), Some("Hola"), Some("Hola"), "Hola"));
     }
 
     #[test]

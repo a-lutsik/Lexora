@@ -561,6 +561,7 @@ pub fn accept_and_replace(app: AppHandle, text: String) -> Result<(), AppError> 
         let replaced = crate::hotkeys::replace_selected_text(&payload);
         let pasted = replaced
             || (crate::hotkeys::accessibility_trusted() && crate::hotkeys::simulate_paste());
+        log::debug!("Accept: AX replace {replaced}, inserted {pasted}");
         if !pasted {
             notify_paste_fallback(&app_clone);
         }
