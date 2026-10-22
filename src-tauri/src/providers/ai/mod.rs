@@ -2646,6 +2646,21 @@ mod tests {
     }
 
     #[test]
+    fn render_translate_prompt_keeps_multiline_text_verbatim_once() {
+        let text = "Pinch points:\n\n• Conflicting configurations\n  ◦ SCPT template\n\nThanks,\nAndrew";
+        let req = TranslateRequest {
+            text: text.to_string(),
+            source_language: None,
+            target_language: "ru".to_string(),
+            context_sentence: None,
+            lexical_domain: None,
+        };
+        let prompt = render_translate_prompt(&req);
+        assert_eq!(prompt.matches(text).count(), 1, "text inserted once: {prompt}");
+        assert!(prompt.contains("PRESERVE FORMATTING"));
+    }
+
+    #[test]
     fn render_translate_prompt_forces_general_for_single_word_auto() {
         let req = TranslateRequest {
             text: "Bug".to_string(),
