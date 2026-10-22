@@ -1,8 +1,9 @@
 /* ============================================================
    LEXORA — Writing-check badge, panel & hover card («Grammarly mode»)
    Lingora: floating surfaces use --ov + --line2 + radius 10 +
-   --shadow-md; mistakes are --live, improvements --acc; the badge
-   is monochrome (accent). No glows. Theme comes from data-theme
+   --shadow-md; mistakes are red (--live), improvements yellow
+   (--warn) — the badge and the underlines follow the same colours,
+   like Grammarly. No glows. Theme comes from data-theme
    set by the entry point (src/grammar.tsx).
    Window sizes come from src-tauri/src/grammar_watch/mod.rs:
    badge window 44×44 (hit target), panel 400×460, hover card 340×200.
@@ -77,23 +78,23 @@ html.grammar-window {
   outline-offset: 1px;
 }
 
-/* At least one mistake: solid accent */
+/* At least one mistake: solid red */
 .grammar-badge-dot.is-issues {
-  background: var(--acc);
-  border-color: var(--acc);
-  color: var(--acc-ink);
+  background: var(--live);
+  border-color: var(--live);
+  color: var(--on-ink);
 }
 
-.grammar-badge:hover .grammar-badge-dot.is-issues {
-  background: var(--acc-hover);
-  border-color: var(--acc-hover);
+.grammar-badge:hover .grammar-badge-dot.is-issues,
+.grammar-badge:hover .grammar-badge-dot.is-improvements {
+  filter: brightness(1.1);
 }
 
-/* Only improvements: accent tint */
+/* Only improvements (clearer, more natural wording): solid yellow */
 .grammar-badge-dot.is-improvements {
-  background: var(--acc-soft);
-  border-color: var(--acc);
-  color: var(--acc-text);
+  background: var(--warn);
+  border-color: var(--warn);
+  color: var(--on-ink);
 }
 
 /* Clean text: Lexora «L» */
@@ -400,7 +401,7 @@ html.grammar-window {
 }
 
 .grammar-mark-line.is-improvement {
-  fill: var(--acc);
+  fill: var(--warn);
 }
 
 /* ── Hover card (shown under an underline) ─────────────────── */
@@ -445,7 +446,7 @@ html.grammar-window {
 }
 
 .grammar-hover-dot.is-improvement {
-  background: var(--acc);
+  background: var(--warn);
 }
 
 .grammar-hover-change {

@@ -3,8 +3,8 @@
 // A small circle in the corner of the text field the user is
 // typing in: spinner while checking, number of suggestions,
 // the Lexora «L» when the text is clean, «!» when the check failed.
-// Monochrome: accent fill for mistakes, accent tint for
-// improvements only; red is kept for the failed check.
+// Red when there is at least one mistake, yellow when there are
+// only improvements (clearer or more natural wording).
 // ============================================================
 
 import type { ReactNode } from 'react';
@@ -15,7 +15,7 @@ export type BadgeState =
   | { kind: 'checking' }
   | { kind: 'error' }
   | { kind: 'clean' }
-  /** `hasErrors`: at least one mistake (accent fill); otherwise only improvements (accent tint). */
+  /** `hasErrors`: at least one mistake (red); otherwise only improvements (yellow). */
   | { kind: 'issues'; count: number; hasErrors: boolean };
 
 type GrammarBadgeProps = {

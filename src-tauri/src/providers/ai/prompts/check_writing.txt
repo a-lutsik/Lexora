@@ -15,7 +15,7 @@ For EACH issue found, return a JSON object with these fields:
 
 Two kinds of issues:
 - Mistakes (spelling, grammar, punctuation, a wrong word or preposition): severity "error" or "warning". Keep original_fragment as short as possible — the wrong word or the few words around it.
-- Improvements to a text that is already correct (clarity, style, tone, unnatural, a clumsy or wordy phrase): severity "suggestion". Here original_fragment may be a whole phrase or sentence, and suggested_fix is its better rewording. Keep the meaning and the author's voice, change only what really reads better, and report at most a few of the most useful improvements — never rewrite every sentence.
+- Improvements to a text that is already correct (clarity, style, tone, unnatural, a clumsy or wordy phrase, an awkward word order, a sentence that can be built more naturally): severity "suggestion". Here original_fragment may be a whole phrase or sentence, and suggested_fix is its better rewording. Keep the meaning and the author's voice, change only what really reads better, and report at most a few of the most useful improvements — never rewrite every sentence.
 
 Text language: {language}
 
