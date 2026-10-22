@@ -3,7 +3,7 @@ import { t } from '../../../i18n';
 import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Audio & Speech Translate Tab
-// Voice studio: neon waveform, live mic, file upload,
+// Voice studio: waveform, live mic, file upload,
 // dual bilingual transcript with SRS bookmark.
 // ============================================================
 
@@ -23,7 +23,7 @@ import { copyToClipboard, formatIpcError } from '../../../lib/utils';
 import { ipc } from '../../../lib/ipc';
 import { LiveSpeechWave } from '../components/LiveSpeechWave';
 import { VoiceTranscriptCard } from '../components/VoiceTranscriptCard';
-import { IconMic, IconUpload } from '../../../components/ui/LuminousIcons';
+import { Icon } from '../../../components/ui/Icon';
 import type { LexicalDomain } from '../../../lib/translationDomain';
 
 type AudioTranslateTabProps = {
@@ -343,6 +343,7 @@ export function AudioTranslateTab({
         className={`voice-studio-status${live.isLive ? ' is-live' : ''}${isRecording ? ' is-recording' : ''}${isProcessing ? ' is-processing' : ''}`}
         aria-live="polite"
       >
+        <span className="voice-studio-status__dot" aria-hidden="true" />
         {tUi(statusLabel)}
       </p>
 
@@ -352,7 +353,10 @@ export function AudioTranslateTab({
         analyser={live.analyser ?? micAnalyser}
       />
 
-      <p className="voice-studio-timer" aria-live="polite">
+      <p
+        className={`voice-studio-timer${live.isLive || isRecording ? ' is-recording' : ''}`}
+        aria-live="polite"
+      >
         {formatClock(timerSeconds)}
       </p>
 
@@ -369,24 +373,22 @@ export function AudioTranslateTab({
               : tUi("Start live microphone translation without saving")
           }
         >
-          <IconMic />
+          <Icon name="mic" size={17} />
           {live.isLive ? tUi("Listening") : tUi("Microphone")}
         </button>
 
-        <span className={`voice-record-ring${isRecording ? ' is-recording' : ''}`}>
-          <button
-            type="button"
-            className="voice-record-btn"
-            onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
-            disabled={isProcessing}
-            aria-label={
-              isRecording ? tUi("Stop recording and save the translation") : tUi("Record and save translation")
-            }
-          >
-            <span className={`voice-record-dot${isRecording ? ' is-recording' : ''}`} aria-hidden="true" />
-            {isRecording ? tUi("Stop") : tUi("Record")}
-          </button>
-        </span>
+        <button
+          type="button"
+          className={`voice-record-btn${isRecording ? ' is-recording' : ''}`}
+          onClick={isRecording ? () => void stopRecording() : () => void startRecording()}
+          disabled={isProcessing}
+          aria-label={
+            isRecording ? tUi("Stop recording and save the translation") : tUi("Record and save translation")
+          }
+        >
+          <Icon name={isRecording ? 'stop' : 'radio_button_checked'} size={20} />
+          {isRecording ? tUi("Stop") : tUi("Record")}
+        </button>
 
         <button
           type="button"
@@ -395,11 +397,11 @@ export function AudioTranslateTab({
           disabled={isProcessing || live.isLive}
           aria-label={tUi("Upload an audio file")}
         >
-          <IconUpload />{tUi("File Upload")}</button>
+          <Icon name="upload_file" size={17} />{tUi("File Upload")}</button>
       </div>
 
       {studioError && (
-        <p className="voice-studio-error" role="alert">
+        <p className="inline-error voice-studio-error" role="alert">
           {studioError}
         </p>
       )}

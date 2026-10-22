@@ -11,6 +11,7 @@ import { useModelRoutes } from '../../../hooks/useModelRoutes';
 import { useRealtimeSession } from '../../../hooks/useRealtimeSession';
 import { languageLabel } from '../../../lib/languages';
 import { LiveSpeechWave } from '../components/LiveSpeechWave';
+import { Icon } from '../../../components/ui/Icon';
 
 type LiveInterpreterTabProps = {
   sourceLang: string;
@@ -95,6 +96,7 @@ export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTa
         className={`voice-studio-status${status === 'live' ? ' is-live' : ''}${status === 'connecting' ? ' is-processing' : ''}`}
         aria-live="polite"
       >
+        <span className="voice-studio-status__dot" aria-hidden="true" />
         {tUi(statusLabel)}
       </p>
 
@@ -104,23 +106,21 @@ export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTa
         analyser={live.analyser}
       />
 
-      <p className="voice-studio-timer" aria-live="off">
+      <p className={`voice-studio-timer${status === 'live' ? ' is-recording' : ''}`} aria-live="off">
         {formatClock(status === 'live' ? seconds : 0)}
       </p>
 
       <div className="voice-studio-controls" role="group" aria-label={tUi("Live interpreter controls")}>
-        <span className={`voice-record-ring${running ? ' is-recording' : ''}`}>
-          <button
-            type="button"
-            className="voice-record-btn"
-            onClick={running ? handleStop : handleStart}
-            disabled={!running && unavailable !== null}
-            aria-label={running ? tUi("Stop live interpretation") : tUi("Start live interpretation into {targetName}", { targetName: targetName })}
-          >
-            <span className={`voice-record-dot${running ? ' is-recording' : ''}`} aria-hidden="true" />
-            {running ? tUi("Stop") : tUi("Start interpreting")}
-          </button>
-        </span>
+        <button
+          type="button"
+          className={`voice-record-btn${running ? ' is-recording' : ''}`}
+          onClick={running ? handleStop : handleStart}
+          disabled={!running && unavailable !== null}
+          aria-label={running ? tUi("Stop live interpretation") : tUi("Start live interpretation into {targetName}", { targetName: targetName })}
+        >
+          <Icon name={running ? 'stop' : 'interpreter_mode'} size={20} />
+          {running ? tUi("Stop") : tUi("Start interpreting")}
+        </button>
       </div>
 
       <div className="interpreter-options">
@@ -136,33 +136,36 @@ export function LiveInterpreterTab({ sourceLang, targetLang }: LiveInterpreterTa
         </label>
       </div>
 
-      <p className="interpreter-hint text-xs text-muted">{tUi("Use headphones — on speakers the microphone hears the translation. A session lasts up to 15 minutes; the transcript is saved to History when you stop.")}</p>
+      <p className="hint interpreter-hint">
+        <Icon name="headphones" size={16} />
+        <span>{tUi("Use headphones — on speakers the microphone hears the translation. A session lasts up to 15 minutes; the transcript is saved to History when you stop.")}</span>
+      </p>
 
       {unavailable && !running && (
-        <p className="interpreter-hint text-sm text-secondary" role="status">
+        <p className="inline-note interpreter-notice" role="status">
           {unavailable}
         </p>
       )}
       {live.error && (
-        <p className="voice-studio-error" role="alert">
+        <p className="inline-error voice-studio-error" role="alert">
           {live.error}
         </p>
       )}
       {(languageNotice ?? live.notice) && (
-        <p className="interpreter-hint text-sm text-secondary" role="status">
+        <p className="inline-note interpreter-notice" role="status">
           {languageNotice ?? live.notice}
         </p>
       )}
 
-      <ol className="interpreter-transcript" ref={transcriptRef} aria-label={tUi("Live transcript")}>
+      <ol className="card interpreter-transcript" ref={transcriptRef} aria-label={tUi("Live transcript")}>
         {live.turns.length === 0 ? (
-          <li className="interpreter-empty text-sm text-muted">{tUi("Speak in any language — the original and the ")}{targetName}{tUi(" translation appear here.")}</li>
+          <li className="interpreter-empty">{tUi("Speak in any language — the original and the ")}{targetName}{tUi(" translation appear here.")}</li>
         ) : (
           live.turns.map((turn) => (
             <li key={turn.id} className={`interpreter-turn${turn.final ? '' : ' is-open'}`}>
-              {turn.heard && <p className="interpreter-original">{turn.heard}</p>}
+              {turn.heard && <p className="interpreter-original" dir="auto">{turn.heard}</p>}
               {turn.spoken && (
-                <p className="interpreter-translation" lang={targetLang}>
+                <p className="interpreter-translation" lang={targetLang} dir="auto">
                   {turn.spoken}
                 </p>
               )}

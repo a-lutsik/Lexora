@@ -6,6 +6,7 @@ import { useI18n } from "../../../hooks/useI18n";
 
 import { useState } from 'react';
 import { Button } from '../../../components/ui/Button';
+import { Icon } from '../../../components/ui/Icon';
 import type { GlossaryTerm } from '../../../lib/documentGlossary';
 import { createGlossaryTerm } from '../../../lib/documentGlossary';
 
@@ -39,58 +40,60 @@ export function DocumentGlossaryPanel({ terms, onChange }: DocumentGlossaryPanel
   };
 
   return (
-    <section className="doc-glossary" aria-labelledby="doc-glossary-title">
-      <div className="doc-glossary-head">
-        <h3 id="doc-glossary-title" className="doc-glossary-title">{tUi("Glossary")}</h3>
-        <p className="text-muted text-xs">{tUi("Locked term translations applied to every segment (DeepL / Smartcat termbase).")}</p>
+    <section className="card doc-glossary" aria-labelledby="doc-glossary-title">
+      <div className="doc-glossary__head">
+        <h3 id="doc-glossary-title" className="doc-glossary__title">{tUi("Glossary")}</h3>
+        <p className="doc-glossary__desc">{tUi("Locked term translations applied to every segment (DeepL / Smartcat termbase).")}</p>
       </div>
 
       <form
-        className="doc-glossary-form"
+        className="doc-glossary__form"
         onSubmit={(e) => {
           e.preventDefault();
           handleAdd();
         }}
       >
         <label className="sr-only" htmlFor="doc-glossary-source">{tUi("Source term")}</label>
-        <input dir="auto"
-          id="doc-glossary-source"
-          className="doc-glossary-input"
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          placeholder={tUi("Source term")}
-        />
-        <span className="doc-glossary-arrow" aria-hidden="true">
-          →
-        </span>
+        <div className="field doc-glossary__field">
+          <input dir="auto"
+            id="doc-glossary-source"
+            className="field__input"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            placeholder={tUi("Source term")}
+          />
+        </div>
+        <Icon name="arrow_forward" size={17} className="doc-glossary__arrow" />
         <label className="sr-only" htmlFor="doc-glossary-target">{tUi("Target term")}</label>
-        <input dir="auto"
-          id="doc-glossary-target"
-          className="doc-glossary-input"
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-          placeholder={tUi("Required translation")}
-        />
-        <Button type="submit" variant="secondary" size="sm" disabled={!source.trim() || !target.trim()}>{tUi("Add term")}</Button>
+        <div className="field doc-glossary__field">
+          <input dir="auto"
+            id="doc-glossary-target"
+            className="field__input"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            placeholder={tUi("Required translation")}
+          />
+        </div>
+        <Button type="submit" variant="secondary" size="md" disabled={!source.trim() || !target.trim()}>{tUi("Add term")}</Button>
       </form>
 
       {terms.length === 0 ? (
-        <p className="text-muted text-xs">{tUi("No terms yet. Product names and jargon go here.")}</p>
+        <p className="inline-note">{tUi("No terms yet. Product names and jargon go here.")}</p>
       ) : (
-        <ul className="doc-glossary-list">
+        <ul className="doc-glossary__list">
           {terms.map((term) => (
-            <li key={term.id} className="doc-glossary-item">
-              <span className="doc-glossary-pair">
-                <strong>{term.source}</strong>
-                <span aria-hidden="true"> → </span>
-                {term.target}
-              </span>
-              <button
+            <li key={term.id} className="doc-glossary__item is-hoverable">
+              <span className="doc-glossary__source" dir="auto">{term.source}</span>
+              <Icon name="arrow_forward" size={16} className="doc-glossary__arrow" />
+              <span className="doc-glossary__target" dir="auto">{term.target}</span>
+              <span className="spacer" />
+              <Button
                 type="button"
-                className="doc-glossary-remove"
+                variant="ghost"
+                size="sm"
                 aria-label={tUi("Remove glossary term {value1}", { value1: term.source })}
                 onClick={() => onChange(terms.filter((t) => t.id !== term.id))}
-              >{tUi("Remove")}</button>
+              >{tUi("Remove")}</Button>
             </li>
           ))}
         </ul>

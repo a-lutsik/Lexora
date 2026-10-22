@@ -7,7 +7,8 @@ import { useI18n } from "../../../hooks/useI18n";
 
 import { useState } from 'react';
 import type { ImageTranslationResult, ImageTextBlock } from '../../../lib/types';
-import { Button } from '../../../components/ui/Button';
+import { Button, IconButton } from '../../../components/ui/Button';
+import { Icon } from '../../../components/ui/Icon';
 import { copyToClipboard } from '../../../lib/utils';
 
 type ViewMode = 'overlay' | 'side-by-side' | 'text-only';
@@ -39,48 +40,50 @@ export function ImageOverlayViewer({
     }
   };
 
+  const modes: ReadonlyArray<{ value: ViewMode; label: string }> = [
+    { value: 'overlay', label: tUi("In-Place Overlay") },
+    { value: 'side-by-side', label: tUi("Side-by-Side") },
+    { value: 'text-only', label: tUi("Extracted Text") },
+  ];
+
   return (
     <div className="image-overlay-viewer animate-fade-in">
       {/* Top Toolbar */}
       <div className="image-overlay-toolbar">
-        <div className="image-overlay-modes" role="group" aria-label={tUi("Image view mode")}>
-          <button
-            type="button"
-            className={`btn-toggle ${mode === 'overlay' ? 'is-active' : ''}`}
-            onClick={() => setMode('overlay')}
-          >{tUi("In-Place Overlay")}</button>
-          <button
-            type="button"
-            className={`btn-toggle ${mode === 'side-by-side' ? 'is-active' : ''}`}
-            onClick={() => setMode('side-by-side')}
-          >{tUi("Side-by-Side")}</button>
-          <button
-            type="button"
-            className={`btn-toggle ${mode === 'text-only' ? 'is-active' : ''}`}
-            onClick={() => setMode('text-only')}
-          >{tUi("Extracted Text")}</button>
+        <div className="seg" role="group" aria-label={tUi("Image view mode")}>
+          {modes.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              className={`seg__item${mode === m.value ? ' is-active' : ''}`}
+              aria-pressed={mode === m.value}
+              onClick={() => setMode(m.value)}
+            >
+              {m.label}
+            </button>
+          ))}
         </div>
 
-        <div className="image-overlay-actions">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleCopyAll}
-            aria-label={tUi("Copy full translated text")}
-          >
-            {copied ? tUi("✓ Copied") : tUi("Copy Translation")}
-          </Button>
-        </div>
+        <span className="spacer" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={handleCopyAll}
+          aria-label={tUi("Copy full translated text")}
+        >
+          <Icon name={copied ? 'check' : 'content_copy'} size={17} />
+          <span>{copied ? tUi("Copied") : tUi("Copy Translation")}</span>
+        </Button>
       </div>
 
       {/* Main View Area */}
-      <div className={`image-overlay-canvas-wrapper is-${mode}`}>
+      <div className={`image-overlay-canvas is-${mode}`}>
         {mode !== 'text-only' && (
           <div className="image-overlay-image-container">
             <img src={imageUrl} alt={tUi("Uploaded document")} className="image-overlay-base-img" />
 
-            {/* Bounding box overlays */}
+            {/* Bounding box overlays (positions come from OCR data) */}
             {mode === 'overlay' &&
               result.blocks.map((block, idx) => {
                 if (!block.boundingBox) return null;
@@ -91,7 +94,7 @@ export function ImageOverlayViewer({
                   <button
                     type="button"
                     key={idx}
-                    className={`image-bbox-chip ${isSelected ? 'is-selected' : ''}`}
+                    className={`image-bbox-chip${isSelected ? ' is-selected' : ''}`}
                     aria-pressed={isSelected}
                     style={{
                       left: `${x}%`,
@@ -114,19 +117,19 @@ export function ImageOverlayViewer({
 
         {(mode === 'side-by-side' || mode === 'text-only') && (
           <div className="image-overlay-text-panel">
-            <div className="image-overlay-full-translation">
-              <h4 className="text-secondary text-xs uppercase tracking-wide">{tUi("Full Translation")}</h4>
-              <p className="image-overlay-full-text">{result.fullTranslatedText}</p>
-            </div>
+            <section className="image-overlay-full">
+              <h4 className="section-label">{tUi("Full Translation")}</h4>
+              <p className="image-overlay-full__text" dir="auto">{result.fullTranslatedText}</p>
+            </section>
 
-            <div className="image-overlay-blocks-list">
-              <h4 className="text-secondary text-xs uppercase tracking-wide">{tUi("Detected Text Blocks (")}{result.blocks.length})
+            <section className="image-overlay-blocks">
+              <h4 className="section-label">{tUi("Detected Text Blocks (")}{result.blocks.length})
               </h4>
-              <div className="image-blocks-grid">
+              <div className="image-blocks-list">
                 {result.blocks.map((block, idx) => (
                   <div
                     key={idx}
-                    className={`image-block-card ${selectedBlock === block ? 'is-selected' : ''}`}
+                    className={`image-block-card is-hoverable${selectedBlock === block ? ' is-selected' : ''}`}
                   >
                     <button
                       type="button"
@@ -134,53 +137,56 @@ export function ImageOverlayViewer({
                       aria-pressed={selectedBlock === block}
                       onClick={() => setSelectedBlock(block)}
                     >
-                      <span className="image-block-orig text-secondary text-sm">
-                        {block.originalText}
-                      </span>
-                      <span className="image-block-trans text-primary text-sm font-medium">
-                        {block.translatedText}
-                      </span>
+                      <span className="image-block-orig" dir="auto">{block.originalText}</span>
+                      <span className="image-block-trans" dir="auto">{block.translatedText}</span>
                     </button>
                     {onAddToVocabulary && (
-                      <button
-                        type="button"
-                        className="btn-card-add text-xs"
+                      <IconButton
+                        icon={<Icon name="bookmark_add" size={17} />}
+                        size="sm"
                         onClick={() => onAddToVocabulary(block.originalText, block.translatedText)}
                         aria-label={tUi("Save {value1} to vocabulary", { value1: block.originalText })}
-                      >{tUi("+ Add to Vocab")}</button>
+                      />
                     )}
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           </div>
         )}
       </div>
 
       {/* Selected Block Quick Action Bar */}
       {selectedBlock && mode === 'overlay' && (
-        <div className="image-overlay-detail-bar animate-slide-up">
-          <div className="image-detail-content">
-            <span className="text-secondary text-xs">{tUi("Original:")}</span>
-            <strong className="text-sm">{selectedBlock.originalText}</strong>
-            <span className="text-secondary text-xs">{tUi("Translated:")}</span>
-            <strong className="text-sm text-accent">{selectedBlock.translatedText}</strong>
+        <div className="image-overlay-detail animate-slide-up">
+          <div className="image-overlay-detail__pair">
+            <span className="section-label">{tUi("Original:")}</span>
+            <span className="image-overlay-detail__orig" dir="auto">{selectedBlock.originalText}</span>
           </div>
-          <div className="image-detail-actions">
-            {onAddToVocabulary && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  onAddToVocabulary(selectedBlock.originalText, selectedBlock.translatedText)
-                }
-              >{tUi("+ Save as Card")}</Button>
-            )}
-            <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedBlock(null)}>
-              ✕
+          <div className="image-overlay-detail__pair">
+            <span className="section-label">{tUi("Translated:")}</span>
+            <span className="image-overlay-detail__trans" dir="auto">{selectedBlock.translatedText}</span>
+          </div>
+          <span className="spacer" />
+          {onAddToVocabulary && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                onAddToVocabulary(selectedBlock.originalText, selectedBlock.translatedText)
+              }
+            >
+              <Icon name="bookmark_add" size={17} />
+              <span>{tUi("Add to Vocabulary")}</span>
             </Button>
-          </div>
+          )}
+          <IconButton
+            icon={<Icon name="close" size={17} />}
+            size="sm"
+            onClick={() => setSelectedBlock(null)}
+            aria-label={tUi("Close")}
+          />
         </div>
       )}
     </div>

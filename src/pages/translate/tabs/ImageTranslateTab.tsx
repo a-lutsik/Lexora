@@ -17,7 +17,7 @@ import {
 import { formatIpcError } from '../../../lib/utils';
 import { ImageOverlayViewer } from '../components/ImageOverlayViewer';
 import { Button } from '../../../components/ui/Button';
-import { IconClipboard, IconPhoto } from '../../../components/ui/LuminousIcons';
+import { Icon } from '../../../components/ui/Icon';
 import type { LexicalDomain } from '../../../lib/translationDomain';
 
 type ImageTranslateTabProps = {
@@ -166,7 +166,7 @@ export function ImageTranslateTab({
       {/* If no image selected, show drag-and-drop dropzone with clipboard paste hint */}
       {!imagePreviewUrl && (
         <div
-          className={`image-dropzone ${isDragOver ? 'is-drag-over' : ''}`}
+          className={`translate-drop${isDragOver ? ' is-drag-over' : ''}`}
           onDragOver={(e) => {
             e.preventDefault();
             setIsDragOver(true);
@@ -183,18 +183,16 @@ export function ImageTranslateTab({
           }}
           aria-label={tUi("Upload or paste image")}
         >
-          <div className="image-dropzone-icon" aria-hidden="true">
-            <IconPhoto size={40} />
-          </div>
-          <h3 className="image-dropzone-title">{tUi("Upload Image or Paste Screenshot")}</h3>
-          <p className="image-dropzone-desc text-secondary text-sm">{tUi("Drag & drop an image here, click to browse (PNG, JPG, WebP),")}</p>
-          <div className="image-dropzone-paste-badge">
-            <IconClipboard size={14} />{tUi("Press ")}<strong>{tUi("Cmd+V")}</strong>{tUi(" or ")}<strong>{tUi("Ctrl+V")}</strong>{tUi(" to paste from clipboard")}</div>
+          <Icon name="image" size={28} className="translate-drop__icon" />
+          <h3 className="translate-drop__title">{tUi("Upload Image or Paste Screenshot")}</h3>
+          <p className="translate-drop__desc">{tUi("Drag & drop an image here, click to browse (PNG, JPG, WebP),")}</p>
+          <p className="hint translate-drop__hint">
+            <Icon name="content_paste" size={16} />{tUi("Press ")}<kbd className="kbd">{tUi("Cmd+V")}</kbd>{tUi(" or ")}<kbd className="kbd">{tUi("Ctrl+V")}</kbd>{tUi(" to paste from clipboard")}</p>
         </div>
       )}
 
       {uploadError && (
-        <p className="voice-studio-error" role="alert">
+        <p className="inline-error translate-error" role="alert">
           {uploadError}
         </p>
       )}
@@ -203,55 +201,58 @@ export function ImageTranslateTab({
       {imagePreviewUrl && (
         <div className="image-translate-content">
           {/* Action bar to clear or replace */}
-          <div className="image-translate-top-bar">
-            <div className="image-file-info text-secondary text-xs">
-              <span>{imageFile?.name ?? tUi("Pasted Screenshot")}</span>
-              {imageFile && <span>• {(imageFile.size / 1024).toFixed(1)}{tUi(" KB")}</span>}
-            </div>
-
-            <div className="image-top-actions">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-              >{tUi("Choose Another Image")}</Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setImageFile(null);
-                  setImagePreviewUrl(null);
-                  translateMutation.reset();
-                }}
-              >{tUi("✕ Clear")}</Button>
-            </div>
+          <div className="translate-file-bar">
+            <Icon name="image" size={18} className="translate-file-bar__icon" />
+            <span className="translate-file-bar__name">{imageFile?.name ?? tUi("Pasted Screenshot")}</span>
+            {imageFile && (
+              <span className="translate-file-bar__meta">{(imageFile.size / 1024).toFixed(1)}{tUi(" KB")}</span>
+            )}
+            <span className="spacer" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Icon name="upload_file" size={17} />
+              <span>{tUi("Choose Another Image")}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setImageFile(null);
+                setImagePreviewUrl(null);
+                translateMutation.reset();
+              }}
+            >{tUi("✕ Clear")}</Button>
           </div>
 
           {/* Loading spinner */}
           {translateMutation.isPending && (
-            <div className="image-loading-banner animate-pulse">
-              <span className="loading-spinner mr-2" />
+            <div className="translate-status" role="status">
+              <span className="translate-spinner" aria-hidden="true" />
               <span>{tUi("Scanning image and translating text with AI Vision...")}</span>
             </div>
           )}
 
           {/* Error notice */}
           {translateMutation.isError && (
-            <div className="image-error-banner text-danger text-sm" role="alert">
+            <p className="inline-error translate-error" role="alert">
               {formatIpcError(
                 translateMutation.error,
                 tUi("Could not translate this image. Check the AI provider in Settings."),
               )}
-            </div>
+            </p>
           )}
 
-          {/* Vocab addition toast notice */}
+          {/* Vocab addition notice */}
           {vocabNotice && (
-            <div className="vocab-toast animate-slide-up" role="status">
-              ✓ {vocabNotice}
-            </div>
+            <p className="translate-notice animate-slide-up" role="status">
+              <Icon name="bookmark_added" size={17} />
+              <span>{vocabNotice}</span>
+            </p>
           )}
 
           {/* Result Viewer */}

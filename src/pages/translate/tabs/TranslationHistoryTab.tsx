@@ -14,20 +14,26 @@ import {
   useClearTranslationHistory,
 } from '../../../hooks/useTranslationHub';
 import type { TranslationHubMode, TranslationHistoryDto } from '../../../lib/types';
-import { Button } from '../../../components/ui/Button';
+import { Button, IconButton } from '../../../components/ui/Button';
+import { Icon } from '../../../components/ui/Icon';
 import { copyToClipboard } from '../../../lib/utils';
-import { IconCheck, IconCopy, IconStar } from '../../../components/ui/LuminousIcons';
-import {
-  IconTabAudio,
-  IconTabDocument,
-  IconTabHistory,
-  IconTabImage,
-  IconTabText,
-} from '../components/TranslateIcons';
+
+type HistoryFilter = TranslationHubMode | 'all';
+
+const MODE_ICONS: Record<string, string> = {
+  text: 'notes',
+  image: 'image',
+  document: 'description',
+  audio: 'graphic_eq',
+};
+
+function modeIcon(mode: string): string {
+  return MODE_ICONS[mode] ?? 'history';
+}
 
 export function TranslationHistoryTab() {
   const { t: tUi } = useI18n();
-  const [filterMode, setFilterMode] = useState<TranslationHubMode | 'all'>('all');
+  const [filterMode, setFilterMode] = useState<HistoryFilter>('all');
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
   const historyQuery = useTranslationHistory(filterMode === 'all' ? null : filterMode);
@@ -49,56 +55,33 @@ export function TranslationHistoryTab() {
     }
   };
 
-  const getModeIcon = (mode: string) => {
-    switch (mode) {
-      case 'text':
-        return <IconTabText size={16} />;
-      case 'image':
-        return <IconTabImage size={16} />;
-      case 'document':
-        return <IconTabDocument size={16} />;
-      case 'audio':
-        return <IconTabAudio size={16} />;
-      default:
-        return <IconTabHistory size={16} />;
-    }
-  };
+  const filters: ReadonlyArray<{ value: HistoryFilter; label: string; icon: string | null }> = [
+    { value: 'all', label: tUi("All"), icon: null },
+    { value: 'text', label: tUi(" Text"), icon: 'notes' },
+    { value: 'image', label: tUi(" Image"), icon: 'image' },
+    { value: 'document', label: tUi(" Document"), icon: 'description' },
+    { value: 'audio', label: tUi(" Audio"), icon: 'graphic_eq' },
+  ];
 
   return (
-    <div className="translation-history-tab animate-fade-in">
+    <div className="translation-history animate-fade-in">
       <div className="history-toolbar">
-        <div className="history-filters" role="group" aria-label={tUi("Filter history by mode")}>
-          <button
-            type="button"
-            className={`btn-toggle ${filterMode === 'all' ? 'is-active' : ''}`}
-            onClick={() => setFilterMode('all')}
-          >{tUi("All")}</button>
-          <button
-            type="button"
-            className={`btn-toggle ${filterMode === 'text' ? 'is-active' : ''}`}
-            onClick={() => setFilterMode('text')}
-          >
-            <IconTabText size={14} />{tUi(" Text")}</button>
-          <button
-            type="button"
-            className={`btn-toggle ${filterMode === 'image' ? 'is-active' : ''}`}
-            onClick={() => setFilterMode('image')}
-          >
-            <IconTabImage size={14} />{tUi(" Image")}</button>
-          <button
-            type="button"
-            className={`btn-toggle ${filterMode === 'document' ? 'is-active' : ''}`}
-            onClick={() => setFilterMode('document')}
-          >
-            <IconTabDocument size={14} />{tUi(" Document")}</button>
-          <button
-            type="button"
-            className={`btn-toggle ${filterMode === 'audio' ? 'is-active' : ''}`}
-            onClick={() => setFilterMode('audio')}
-          >
-            <IconTabAudio size={14} />{tUi(" Audio")}</button>
+        <div className="seg" role="group" aria-label={tUi("Filter history by mode")}>
+          {filters.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              className={`seg__item${filterMode === f.value ? ' is-active' : ''}`}
+              aria-pressed={filterMode === f.value}
+              onClick={() => setFilterMode(f.value)}
+            >
+              {f.icon && <Icon name={f.icon} size={16} />}
+              <span>{f.label.trim()}</span>
+            </button>
+          ))}
         </div>
 
+        <span className="spacer" />
         {historyQuery.data && historyQuery.data.length > 0 && (
           <Button
             type="button"
@@ -106,74 +89,68 @@ export function TranslationHistoryTab() {
             size="sm"
             onClick={() => clearMutation.mutate(filterMode === 'all' ? undefined : filterMode)}
             isLoading={clearMutation.isPending}
-          >{tUi("Clear History")}</Button>
+          >
+            <Icon name="delete_sweep" size={17} />
+            <span>{tUi("Clear History")}</span>
+          </Button>
         )}
       </div>
 
       {historyQuery.isLoading && (
-        <div className="text-secondary text-sm p-6">{tUi("Loading translation history...")}</div>
+        <p className="inline-note history-loading">{tUi("Loading translation history...")}</p>
       )}
 
       {historyQuery.data && historyQuery.data.length === 0 && (
-        <div className="empty-history text-center text-muted p-12">
-          <IconTabHistory size={32} />
+        <div className="empty">
+          <Icon name="history" size={28} />
           <p>{tUi("No translation history yet.")}</p>
         </div>
       )}
 
       {historyQuery.data && historyQuery.data.length > 0 && (
-        <div className="history-list">
+        <ul className="history-list">
           {historyQuery.data.map((item: TranslationHistoryDto) => (
-            <div key={item.id} className="history-item-card">
-              <div className="history-item-header">
-                <div className="history-item-meta">
-                  <span className="history-item-icon">{getModeIcon(item.mode)}</span>
-                  <span className="text-xs uppercase text-secondary font-semibold">
-                    {item.sourceLanguage} → {item.targetLanguage}
-                  </span>
-                  <span className="text-xs text-muted">
-                    {new Date(item.createdAt * 1000).toLocaleString(getLocale())}
-                  </span>
-                </div>
-
-                <div className="history-item-actions">
-                  <button
-                    type="button"
-                    className={`btn-star ${item.isFavorite ? 'is-fav' : ''}`}
-                    onClick={() => toggleFavMutation.mutate(item.id)}
-                    aria-label={item.isFavorite ? tUi("Remove from favorites") : tUi("Add to favorites")}
-                  >
-                    <IconStar filled={item.isFavorite} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-copy text-xs"
-                    onClick={() => handleCopy(item.id, item.translatedText)}
+            <li key={item.id} className="history-row is-hoverable">
+              <Icon name={modeIcon(item.mode)} size={18} className="history-row__icon" />
+              <p className="history-row__orig" dir="auto" title={item.originalText}>{item.originalText}</p>
+              <p className="history-row__trans" dir="auto" title={item.translatedText}>
+                {item.translatedText}
+              </p>
+              <span className="history-row__langs">
+                {item.sourceLanguage.toUpperCase()} → {item.targetLanguage.toUpperCase()}
+              </span>
+              <time className="history-row__time" dateTime={new Date(item.createdAt * 1000).toISOString()}>
+                {new Date(item.createdAt * 1000).toLocaleString(getLocale())}
+              </time>
+              <div className="history-row__actions">
+                <button
+                  type="button"
+                  className={`btn btn--icon btn--ghost btn--sm btn-star${item.isFavorite ? ' is-fav' : ''}`}
+                  onClick={() => toggleFavMutation.mutate(item.id)}
+                  aria-pressed={item.isFavorite}
+                  aria-label={item.isFavorite ? tUi("Remove from favorites") : tUi("Add to favorites")}
+                >
+                  <Icon name="star" size={17} />
+                </button>
+                <div className="row-actions-hover">
+                  <IconButton
+                    icon={<Icon name={copiedId === item.id ? 'check' : 'content_copy'} size={17} />}
+                    size="sm"
+                    onClick={() => void handleCopy(item.id, item.translatedText)}
                     aria-label={tUi("Copy translation")}
-                  >
-                    {copiedId === item.id ? <IconCheck size={14} /> : <IconCopy size={14} />}
-                    {copiedId === item.id ? tUi("Copied") : tUi("Copy")}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-delete text-xs text-muted hover:text-danger"
+                  />
+                  <IconButton
+                    icon={<Icon name="delete" size={17} />}
+                    size="sm"
+                    variant="danger-ghost"
                     onClick={() => deleteMutation.mutate(item.id)}
                     aria-label={tUi("Delete history entry")}
-                  >
-                    ✕
-                  </button>
+                  />
                 </div>
               </div>
-
-              <div className="history-item-body">
-                <p className="history-orig text-secondary text-sm">{item.originalText}</p>
-                <p className="history-trans text-primary text-sm font-medium">
-                  {item.translatedText}
-                </p>
-              </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

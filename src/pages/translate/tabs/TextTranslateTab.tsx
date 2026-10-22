@@ -1,16 +1,16 @@
 import { toneLabel } from '../../../lib/interfaceText';
 import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
-// LEXORA — Text Translate Tab (DeepL Pro Style)
-// Dual-pane text translation with language reverse, clipboard
-// copy, tone switcher, and vocabulary SRS card creation.
+// LEXORA — Text Translate Tab
+// Two-pane editor: source on --surface, result in Literata,
+// tone segment, copy / listen / save-to-vocabulary actions.
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslateTextHub } from '../../../hooks/useTranslationHub';
 import { useAddToVocabulary } from '../../../hooks/useVocabulary';
-import { Button } from '../../../components/ui/Button';
-import { IconCheck, IconCopy, IconSpeaker, IconSwap } from '../../../components/ui/LuminousIcons';
+import { Button, IconButton } from '../../../components/ui/Button';
+import { Icon } from '../../../components/ui/Icon';
 import { ipc } from '../../../lib/ipc';
 import { copyToClipboard } from '../../../lib/utils';
 import type { LexicalDomain } from '../../../lib/translationDomain';
@@ -24,6 +24,8 @@ type TextTranslateTabProps = {
 };
 
 type ToneOption = 'default' | 'formal' | 'casual' | 'academic';
+
+const TONES: readonly ToneOption[] = ['default', 'formal', 'casual', 'academic'];
 
 function applyTone(text: string, targetTone: ToneOption): string {
   if (targetTone === 'formal') return `[Tone: Formal & Professional]\n${text}`;
@@ -174,30 +176,18 @@ export function TextTranslateTab({
   };
 
   const words = outputText ? outputText.split(/(\s+)/) : [];
+  const alternatives = result?.alternatives ?? [];
+  const synonyms = result?.sourceSynonyms ?? [];
+  const example = result?.exampleSentence ?? null;
+  const hasExtras = alternatives.length > 0 || synonyms.length > 0 || Boolean(example);
 
   return (
-    <div className="text-translate-tab animate-fade-in">
-      <div className="translate-panels-grid">
-        <div className="translate-panel-card translate-panel--source">
-          <div className="translate-panel-header">
-            <div className="translate-source-meta">
-              <span className="lang-indicator-pill">
-                {sourceLang === 'auto' ? tUi("Auto-detect language") : sourceLang.toUpperCase()}
-              </span>
-            </div>
-            {inputText && (
-              <button
-                type="button"
-                className="btn-clear"
-                onClick={() => setInputText('')}
-                aria-label={tUi("Clear input text")}
-              >{tUi("✕ Clear")}</button>
-            )}
-          </div>
-
+    <div className="text-translate animate-fade-in">
+      <div className="tt-editor">
+        <div className="tt-pane tt-pane--source">
           <textarea dir="auto"
             id="text-translate-input"
-            className="translate-textarea"
+            className="tt-source"
             placeholder={tUi("Type or paste text to translate... (Cmd+Enter to translate)")}
             value={inputText}
             onChange={(e) => {
@@ -209,87 +199,48 @@ export function TextTranslateTab({
             aria-label={tUi("Source text to translate")}
           />
 
-          <div className="translate-panel-footer">
-            <span className="text-xs text-muted font-mono">{inputText.length}{tUi(" characters")}</span>
-            <div className="translate-footer-actions">
-              {inputText.trim() && (
-                <button
-                  type="button"
-                  className="btn-icon"
-                  onClick={() => void handlePlayTts('source')}
-                  disabled={playingTts === 'source'}
-                  aria-label={tUi("Listen to source text")}
-                  title={tUi("Listen to source text")}
-                >
-                  <IconSpeaker />
-                </button>
-              )}
-              <Button
-                type="button"
-                variant="primary"
+          <div className="tt-pane__foot tt-pane__foot--source">
+            <span className="tt-count">{inputText.length}{tUi(" characters")}</span>
+            {inputText.trim() && (
+              <IconButton
+                icon={<Icon name="volume_up" size={17} />}
                 size="sm"
-                onClick={() => handleTranslate()}
-                isLoading={translateMutation.isPending}
-                disabled={!inputText.trim()}
-                aria-label={tUi("Translate text")}
-              >{tUi("Translate")}</Button>
-            </div>
+                onClick={() => void handlePlayTts('source')}
+                disabled={playingTts === 'source'}
+                aria-label={tUi("Listen to source text")}
+              />
+            )}
+            {inputText && (
+              <IconButton
+                icon={<Icon name="close" size={17} />}
+                size="sm"
+                onClick={() => setInputText('')}
+                aria-label={tUi("Clear input text")}
+              />
+            )}
+            <span className="hint tt-hint" aria-hidden="true">
+              <kbd className="kbd">⌘</kbd>
+              <kbd className="kbd">↵</kbd>
+            </span>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => handleTranslate()}
+              isLoading={translateMutation.isPending}
+              disabled={!inputText.trim()}
+              aria-label={tUi("Translate text")}
+            >{tUi("Translate")}</Button>
           </div>
         </div>
 
-        <button
-          type="button"
-          className="btn-swap-panels"
-          onClick={handleReverse}
-          aria-label={tUi("Reverse translation direction")}
-          title={tUi("Reverse translation")}
-        >
-          <IconSwap />
-        </button>
-
-        <div className="translate-panel-card translate-panel--target">
-          <div className="translate-panel-header">
-            <div className="translate-target-meta">
-              <span className="lang-indicator-pill is-target">
-                {targetLang.toUpperCase()}
-              </span>
-              {sourceLang === 'auto' && result?.sourceLanguage && (
-                <span className="text-xs text-muted">{tUi("Detected: ")}{result.sourceLanguage.toUpperCase()}
-                </span>
-              )}
-            </div>
-            <div className="translate-target-header-actions">
-              {outputText && (
-                <button
-                  type="button"
-                  className="btn-icon"
-                  onClick={() => void handlePlayTts('target')}
-                  disabled={playingTts === 'target'}
-                  aria-label={tUi("Listen to translation")}
-                  title={tUi("Listen to translation")}
-                >
-                  <IconSpeaker />
-                </button>
-              )}
-              <button
-                type="button"
-                className={`btn-copy-icon${copied ? ' is-copied' : ''}`}
-                onClick={() => void handleCopy()}
-                disabled={!canCopy}
-                aria-label={copied ? tUi("Translation copied") : tUi("Copy translation to clipboard")}
-                title={copied ? tUi("Copied") : tUi("Copy translation")}
-              >
-                {copied ? <IconCheck /> : <IconCopy />}
-              </button>
-            </div>
-          </div>
-
-          <div className="translate-output-container" aria-live="polite">
+        <div className="tt-pane tt-pane--result">
+          <div className="tt-result" aria-live="polite">
             {translateMutation.isPending ? (
-              <div className="translate-output-loading text-secondary text-sm">{tUi("Translating…")}</div>
+              <p className="tt-result__placeholder">{tUi("Translating…")}</p>
             ) : outputText ? (
-              <div className="translate-output-result">
-                <div className="translate-interactive-output">
+              <>
+                <p className="tt-result__text" dir="auto">
                   {words.map((chunk, i) => {
                     const isWord = /\S+/.test(chunk);
                     if (!isWord) return <span key={i}>{chunk}</span>;
@@ -298,7 +249,7 @@ export function TextTranslateTab({
                     return (
                       <span
                         key={i}
-                        className={`interactive-word${isSelected ? ' is-selected' : ''}`}
+                        className={`tt-word${isSelected ? ' is-selected' : ''}`}
                         onClick={() => setSelectedWord(isSelected ? null : cleanWord)}
                         title={tUi("Click to inspect word details")}
                         role="button"
@@ -314,60 +265,105 @@ export function TextTranslateTab({
                       </span>
                     );
                   })}
-                </div>
-
-                <div className="tone-switcher-container">
-                  <span className="text-xs text-secondary">{tUi("Tone:")}</span>
-                  <div className="tone-chips" role="group" aria-label={tUi("Tone Switcher")}>
-                    {(['default', 'formal', 'casual', 'academic'] as const).map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        className={`btn-tone${tone === t ? ' is-active' : ''}`}
-                        onClick={() => handleToneChange(t)}
-                      >
-                        {toneLabel(t)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="translate-vocab-action">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    onClick={() => handleSaveToVocab(inputText.trim() || result?.text || '', outputText)}
-                    isLoading={addToVocabMutation.isPending}
-                    disabled={cardSaved || !inputText.trim()}
-                  >
-                    {cardSaved ? tUi("✓ Saved to Vocabulary") : tUi("+ Save to Vocabulary")}
-                  </Button>
-                </div>
-              </div>
+                </p>
+                {sourceLang === 'auto' && result?.sourceLanguage && (
+                  <p className="inline-note tt-result__detected">
+                    {tUi("Detected: ")}<span className="tt-lang-code">{result.sourceLanguage.toUpperCase()}</span>
+                  </p>
+                )}
+              </>
             ) : (
-              <div className="translate-output-placeholder text-muted text-sm">{tUi("Translation will appear here. Use the arrows to reverse direction, or copy when ready.")}</div>
+              <p className="tt-result__placeholder">{tUi("Translation will appear here. Use the arrows to reverse direction, or copy when ready.")}</p>
             )}
           </div>
 
-          {result && (result.alternatives.length > 0 || result.sourceSynonyms.length > 0) && (
-            <div className="translate-enrichment-box animate-slide-up">
-              {result.alternatives.length > 0 && (
-                <div className="translate-alternatives">
-                  <span className="text-xs text-secondary font-medium">{tUi("Alternative Phrasings:")}</span>
-                  <div className="translate-chips">
-                    {result.alternatives.map((alt) => (
-                      <span key={alt} className="translate-chip">
-                        {alt}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+          <div className="tt-pane__foot tt-pane__foot--result">
+            <div className="seg" role="group" aria-label={tUi("Tone Switcher")}>
+              {TONES.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`seg__item${tone === t ? ' is-active' : ''}`}
+                  aria-pressed={tone === t}
+                  onClick={() => handleToneChange(t)}
+                >
+                  {toneLabel(t)}
+                </button>
+              ))}
             </div>
-          )}
+            <span className="spacer" />
+            <IconButton
+              icon={<Icon name="sync_alt" size={17} />}
+              size="sm"
+              onClick={handleReverse}
+              aria-label={tUi("Reverse translation direction")}
+            />
+            <IconButton
+              icon={<Icon name="volume_up" size={17} />}
+              size="sm"
+              onClick={() => void handlePlayTts('target')}
+              disabled={!outputText || playingTts === 'target'}
+              aria-label={tUi("Listen to translation")}
+            />
+            <IconButton
+              icon={<Icon name={copied ? 'check' : 'content_copy'} size={17} />}
+              size="sm"
+              className={copied ? 'is-copied' : undefined}
+              onClick={() => void handleCopy()}
+              disabled={!canCopy}
+              aria-label={copied ? tUi("Translation copied") : tUi("Copy translation to clipboard")}
+            />
+            {outputText && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => handleSaveToVocab(inputText.trim() || result?.text || '', outputText)}
+                isLoading={addToVocabMutation.isPending}
+                disabled={cardSaved || !inputText.trim()}
+              >
+                <Icon name={cardSaved ? 'bookmark_added' : 'bookmark_add'} size={17} />
+                <span>{cardSaved ? tUi("Saved to Vocabulary") : tUi("Save to Vocabulary")}</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
+
+      {result && hasExtras && (
+        <div className="tt-extras animate-fade-in">
+          {alternatives.length > 0 && (
+            <section className="tt-extras__group">
+              <h2 className="section-label">{tUi("Alternative phrasings")}</h2>
+              <ul className="tt-alternatives">
+                {alternatives.map((alt) => (
+                  <li key={alt} dir="auto">{alt}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {(synonyms.length > 0 || example) && (
+            <section className="tt-extras__group">
+              {synonyms.length > 0 && (
+                <>
+                  <h2 className="section-label">{tUi("Synonyms")}</h2>
+                  <div className="tt-tags">
+                    {synonyms.map((syn) => (
+                      <span key={syn} className="tag">{syn}</span>
+                    ))}
+                  </div>
+                </>
+              )}
+              {example && (
+                <>
+                  <h2 className="section-label">{tUi("Example")}</h2>
+                  <p className="example" dir="auto">{example}</p>
+                </>
+              )}
+            </section>
+          )}
+        </div>
+      )}
     </div>
   );
 }

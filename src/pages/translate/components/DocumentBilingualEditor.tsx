@@ -74,14 +74,13 @@ export function DocumentBilingualEditor({
 
   return (
     <div className={cx('doc-bilingual', Boolean(selectedWord) && 'doc-bilingual--has-inspector')}>
-      <div className="doc-bilingual-panes">
+      <div className="card doc-bilingual-panes">
         <section className="doc-pane" aria-label={tUi("Source document")}>
           <header className="doc-pane-header">
-            <div className="doc-pane-header-left">
-              <span className="doc-pane-kicker">{tUi("SOURCE")}</span>
-              <span className="doc-pane-lang-pill">{sourceLang === 'auto' ? tUi("Auto") : sourceLang.toUpperCase()}</span>
-            </div>
-            <span className="text-muted text-xs font-mono">{doc.chunks.length}{tUi(" segments")}</span>
+            <span className="doc-pane-title">{tUi("Source document")}</span>
+            <span className="doc-pane-lang">{sourceLang === 'auto' ? tUi("Auto") : sourceLang.toUpperCase()}</span>
+            <span className="spacer" />
+            <span className="doc-pane-count">{doc.chunks.length}{tUi(" segments")}</span>
           </header>
           <div
             ref={leftRef}
@@ -106,11 +105,10 @@ export function DocumentBilingualEditor({
 
         <section className="doc-pane doc-pane--target" aria-label={tUi("Translated document")}>
           <header className="doc-pane-header">
-            <div className="doc-pane-header-left">
-              <span className="doc-pane-kicker">{tUi("TARGET")}</span>
-              <span className="doc-pane-lang-pill doc-pane-lang-pill--target">{targetLang.toUpperCase()}</span>
-            </div>
-            <span className="text-muted text-xs font-mono">
+            <span className="doc-pane-title">{tUi("Translated document")}</span>
+            <span className="doc-pane-lang">{targetLang.toUpperCase()}</span>
+            <span className="spacer" />
+            <span className="doc-pane-count">
               {translatedCount} / {doc.chunks.length}{tUi(" translated")}</span>
           </header>
           <div
@@ -239,7 +237,7 @@ function TargetSegment({
         </span>
         <div className="doc-seg-body">
           <div className="doc-seg-placeholder-wrap">
-            <span className={cx('doc-seg-placeholder', isTranslating && isActive && 'is-shimmer')}>
+            <span className={cx('doc-seg-placeholder', isTranslating && isActive && 'is-working')}>
               {chunk.skipTranslate
                 ? tUi("Kept as original (code/meta)")
                 : isTranslating && isActive

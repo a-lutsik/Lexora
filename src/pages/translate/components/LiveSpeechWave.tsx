@@ -1,6 +1,6 @@
 // ============================================================
 // LEXORA — Live Speech Wave Visualizer
-// Dual neon sines whose amplitude follows the shared mic analyser.
+// Two calm sines whose amplitude follows the shared mic analyser.
 // ============================================================
 
 import { useEffect, useRef } from 'react';
@@ -136,36 +136,18 @@ export function LiveSpeechWave({
         viewBox={`0 0 ${WAVE_WIDTH} ${WAVE_HEIGHT}`}
         preserveAspectRatio="none"
       >
-        <defs>
-          <filter id="voice-neon-cyan" x="-20%" y="-80%" width="140%" height="260%">
-            <feGaussianBlur stdDeviation="3.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="voice-neon-magenta" x="-20%" y="-80%" width="140%" height="260%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
         <g className="voice-wave-track">
           <path
             ref={magentaRef}
-            className="voice-wave-line voice-wave-line--magenta"
+            className="voice-wave-line voice-wave-line--secondary"
             d={IDLE_MAGENTA}
             fill="none"
-            filter="url(#voice-neon-magenta)"
           />
           <path
             ref={cyanRef}
-            className="voice-wave-line voice-wave-line--cyan"
+            className="voice-wave-line voice-wave-line--primary"
             d={IDLE_CYAN}
             fill="none"
-            filter="url(#voice-neon-cyan)"
           />
         </g>
       </svg>

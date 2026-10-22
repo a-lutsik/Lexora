@@ -1,7 +1,8 @@
 import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Multimodal Translation Hub Page
-// Stage 4: Text, Image/OCR, Document, and Speech Translation.
+// Text, Image/OCR, Document, Speech and Live interpreting.
+// Lingora anatomy: page header · underlined tabs · language bar.
 // ============================================================
 
 import { TextTranslateTab } from './tabs/TextTranslateTab';
@@ -10,15 +11,8 @@ import { DocumentTranslateTab } from './tabs/DocumentTranslateTab';
 import { AudioTranslateTab } from './tabs/AudioTranslateTab';
 import { LiveInterpreterTab } from './tabs/LiveInterpreterTab';
 import { TranslationHistoryTab } from './tabs/TranslationHistoryTab';
-import {
-  IconTabText,
-  IconTabImage,
-  IconTabDocument,
-  IconTabAudio,
-  IconTabInterpreter,
-  IconTabHistory,
-} from './components/TranslateIcons';
-import { IconSwap } from '../../components/ui/LuminousIcons';
+import { Icon } from '../../components/ui/Icon';
+import { IconButton } from '../../components/ui/Button';
 import { LanguageSelect } from '../../components/ui/LanguageSelect';
 import { TranslationDomainSelect } from '../../components/domain/TranslationDomainSelect';
 import { useSessionLanguagePair } from '../../hooks/useSessionLanguagePair';
@@ -28,6 +22,15 @@ import { useState } from 'react';
 import './translate.css';
 
 type TabMode = 'text' | 'image' | 'document' | 'audio' | 'interpreter' | 'history';
+
+const TABS: ReadonlyArray<{ mode: TabMode; icon: string; label: string }> = [
+  { mode: 'text', icon: 'notes', label: 'Text' },
+  { mode: 'image', icon: 'image', label: 'Image & Photo' },
+  { mode: 'document', icon: 'description', label: 'Document' },
+  { mode: 'audio', icon: 'graphic_eq', label: 'Speech & Audio' },
+  { mode: 'interpreter', icon: 'interpreter_mode', label: 'Live Interpreter' },
+  { mode: 'history', icon: 'history', label: 'History' },
+];
 
 export function TranslatePage() {
   const { t: tUi } = useI18n();
@@ -54,161 +57,115 @@ export function TranslatePage() {
   };
 
   return (
-    <div className="translate-page animate-fade-in">
-      <header className="translate-header">
-        <div>
-          <h1 className="translate-title">{tUi("Translation Hub")}</h1>
-          <p className="text-secondary text-sm">{tUi("Translate text, extract image OCR, process documents, translate speech, or interpret live.")}</p>
+    <div className="page translate-page animate-fade-in">
+      <header className="page-header">
+        <div className="page-header__text">
+          <h1 className="page-title">{tUi("Translate")}</h1>
+          <p className="page-subtitle">{tUi("Text, photos, documents, speech and live interpreting")}</p>
         </div>
+      </header>
 
+      <div className="translate-tabs" role="tablist" aria-label={tUi("Translation Modes")}>
+        {TABS.map((tab) => (
+          <button
+            key={tab.mode}
+            type="button"
+            role="tab"
+            id={`tab-${tab.mode}`}
+            aria-selected={activeTab === tab.mode}
+            aria-controls="translate-tabpanel"
+            className={`translate-tab${activeTab === tab.mode ? ' is-active' : ''}`}
+            onClick={() => handleTabChange(tab.mode)}
+          >
+            <Icon name={tab.icon} size={17} />
+            <span>{tUi(tab.label)}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="translate-body">
         {activeTab !== 'history' && (
           <div className="translate-lang-bar" role="group" aria-label={tUi("Language selection")}>
             <LanguageSelect
-              className="lang-select-wrap"
+              className="translate-lang-bar__source"
               value={sourceLang}
               options={langOptions}
-              leadingOptions={[{ value: 'auto', label: tUi("✨ Auto-Detect") }]}
+              leadingOptions={[{ value: 'auto', label: tUi("Auto-detect") }]}
               onChange={setSourceLang}
               ariaLabel={tUi("Source language")}
             />
 
-            <button
-              type="button"
-              className="btn-swap-lang"
+            <IconButton
+              icon={<Icon name="swap_horiz" size={17} />}
               onClick={() => handleSwap()}
               aria-label={tUi("Swap source and target languages")}
-              title={tUi("Swap languages")}
-            >
-              <IconSwap size={16} />
-            </button>
+            />
 
             <LanguageSelect
-              className="lang-select-wrap"
+              className="translate-lang-bar__target"
               value={targetLang}
               options={langOptions}
               onChange={setTargetLang}
               ariaLabel={tUi("Target language")}
             />
 
+            <span className="spacer" />
+            <span className="translate-lang-bar__label" aria-hidden="true">{tUi("Domain")}</span>
             <TranslationDomainSelect
               value={lexicalDomain}
               onChange={handleDomainChange}
               detectedDomain={detectedDomain}
               id="hub-lexical-domain"
-              className="translate-domain-select"
+              className="translate-lang-bar__domain"
             />
           </div>
         )}
-      </header>
 
-      <div className="translate-mode-tabs" role="tablist" aria-label={tUi("Translation Modes")}>
-        <button
-          type="button"
-          role="tab"
-          id="tab-text"
-          aria-selected={activeTab === 'text'}
-          className={`translate-mode-tab ${activeTab === 'text' ? 'is-active' : ''}`}
-          onClick={() => handleTabChange('text')}
+        <div
+          className="translate-panel"
+          role="tabpanel"
+          id="translate-tabpanel"
+          aria-labelledby={`tab-${activeTab}`}
         >
-          <IconTabText />
-          <span>{tUi("Text")}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-image"
-          aria-selected={activeTab === 'image'}
-          className={`translate-mode-tab ${activeTab === 'image' ? 'is-active' : ''}`}
-          onClick={() => handleTabChange('image')}
-        >
-          <IconTabImage />
-          <span>{tUi("Image & Photo")}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-document"
-          aria-selected={activeTab === 'document'}
-          className={`translate-mode-tab ${activeTab === 'document' ? 'is-active' : ''}`}
-          onClick={() => handleTabChange('document')}
-        >
-          <IconTabDocument />
-          <span>{tUi("Document")}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-audio"
-          aria-selected={activeTab === 'audio'}
-          className={`translate-mode-tab ${activeTab === 'audio' ? 'is-active' : ''}`}
-          onClick={() => handleTabChange('audio')}
-        >
-          <IconTabAudio />
-          <span>{tUi("Speech & Audio")}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-interpreter"
-          aria-selected={activeTab === 'interpreter'}
-          className={`translate-mode-tab ${activeTab === 'interpreter' ? 'is-active' : ''}`}
-          onClick={() => handleTabChange('interpreter')}
-        >
-          <IconTabInterpreter />
-          <span>{tUi("Live Interpreter")}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="tab-history"
-          aria-selected={activeTab === 'history'}
-          className={`translate-mode-tab ${activeTab === 'history' ? 'is-active' : ''}`}
-          onClick={() => handleTabChange('history')}
-        >
-          <IconTabHistory />
-          <span>{tUi("History")}</span>
-        </button>
+          {activeTab === 'text' && (
+            <TextTranslateTab
+              sourceLang={sourceLang}
+              targetLang={targetLang}
+              lexicalDomain={lexicalDomain}
+              onDetectedDomain={setDetectedDomain}
+              onSwapLanguages={handleSwap}
+            />
+          )}
+          {activeTab === 'image' && (
+            <ImageTranslateTab
+              sourceLang={sourceLang}
+              targetLang={targetLang}
+              lexicalDomain={lexicalDomain}
+              onDetectedDomain={setDetectedDomain}
+            />
+          )}
+          {activeTab === 'document' && (
+            <DocumentTranslateTab
+              sourceLang={sourceLang}
+              targetLang={targetLang}
+              lexicalDomain={lexicalDomain}
+              onDetectedDomain={setDetectedDomain}
+            />
+          )}
+          {activeTab === 'audio' && (
+            <AudioTranslateTab
+              sourceLang={sourceLang}
+              targetLang={targetLang}
+              lexicalDomain={lexicalDomain}
+              onDetectedDomain={setDetectedDomain}
+            />
+          )}
+          {activeTab === 'interpreter' && (
+            <LiveInterpreterTab sourceLang={sourceLang} targetLang={targetLang} />
+          )}
+          {activeTab === 'history' && <TranslationHistoryTab />}
+        </div>
       </div>
-
-      <main className="translate-main-content">
-        {activeTab === 'text' && (
-          <TextTranslateTab
-            sourceLang={sourceLang}
-            targetLang={targetLang}
-            lexicalDomain={lexicalDomain}
-            onDetectedDomain={setDetectedDomain}
-            onSwapLanguages={handleSwap}
-          />
-        )}
-        {activeTab === 'image' && (
-          <ImageTranslateTab
-            sourceLang={sourceLang}
-            targetLang={targetLang}
-            lexicalDomain={lexicalDomain}
-            onDetectedDomain={setDetectedDomain}
-          />
-        )}
-        {activeTab === 'document' && (
-          <DocumentTranslateTab
-            sourceLang={sourceLang}
-            targetLang={targetLang}
-            lexicalDomain={lexicalDomain}
-            onDetectedDomain={setDetectedDomain}
-          />
-        )}
-        {activeTab === 'audio' && (
-          <AudioTranslateTab
-            sourceLang={sourceLang}
-            targetLang={targetLang}
-            lexicalDomain={lexicalDomain}
-            onDetectedDomain={setDetectedDomain}
-          />
-        )}
-        {activeTab === 'interpreter' && (
-          <LiveInterpreterTab sourceLang={sourceLang} targetLang={targetLang} />
-        )}
-        {activeTab === 'history' && <TranslationHistoryTab />}
-      </main>
     </div>
   );
 }

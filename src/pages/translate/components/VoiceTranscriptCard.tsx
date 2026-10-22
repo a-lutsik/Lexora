@@ -1,18 +1,12 @@
 import { useI18n } from "../../../hooks/useI18n";
 // ============================================================
 // LEXORA — Voice transcript / translation card
-// Speaker avatar, overflow scroll, play, copy menu, SRS bookmark.
+// Speaker badge, play, copy menu, SRS bookmark. Translation in Literata.
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react';
-import {
-  IconBookmark,
-  IconCheck,
-  IconCopy,
-  IconMore,
-  IconPlay,
-  IconUser,
-} from '../../../components/ui/LuminousIcons';
+import { IconButton } from '../../../components/ui/Button';
+import { Icon } from '../../../components/ui/Icon';
 
 type VoiceTranscriptCardProps = {
   variant: 'original' | 'translation';
@@ -70,37 +64,32 @@ export function VoiceTranscriptCard({
   }, [copied]);
 
   return (
-    <article className={`voice-card voice-card--${variant}`}>
-      <header className="voice-card-header">
-        <div className="voice-card-identity">
-          <span className="voice-card-avatar" aria-hidden="true">
-            <IconUser size={14} />
-            <span className="voice-card-avatar-badge">{speaker}</span>
-          </span>
-          <h3 className="voice-card-title">{title}</h3>
-        </div>
-        <div className="voice-card-menu" ref={menuRef}>
+    <article className={`card voice-card voice-card--${variant}`}>
+      <header className="voice-card__head">
+        <span className="voice-card__speaker" aria-hidden="true">{speaker}</span>
+        <h3 className="voice-card__title">{title}</h3>
+        <div className="voice-card__menu" ref={menuRef}>
           <button
             type="button"
-            className="voice-card-icon-btn"
+            className="btn btn--icon btn--ghost btn--sm"
             onClick={() => setMenuOpen((open) => !open)}
             disabled={!text}
             aria-expanded={menuOpen}
             aria-haspopup="menu"
             aria-label={tUi("{title} actions", { title: title })}
           >
-            <IconMore />
+            <Icon name="more_horiz" size={17} />
           </button>
           {menuOpen && text && (
-            <div className="voice-card-menu-panel" role="menu">
+            <div className="popover voice-card__menu-panel" role="menu">
               <button
                 type="button"
-                className="voice-card-menu-item"
+                className="menu-item"
                 role="menuitem"
                 onClick={onCopy}
               >
-                {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
-                {copied ? tUi("Copied") : tUi("Copy text")}
+                <Icon name={copied ? 'check' : 'content_copy'} size={17} className="menu-item__icon" />
+                <span className="menu-item__label">{copied ? tUi("Copied") : tUi("Copy text")}</span>
               </button>
             </div>
           )}
@@ -108,34 +97,35 @@ export function VoiceTranscriptCard({
       </header>
 
       {text ? (
-        <p className="voice-card-body">{text}</p>
+        <p className="voice-card__body" dir="auto">{text}</p>
       ) : (
-        <p className="voice-card-empty">{emptyLabel}</p>
+        <p className="voice-card__empty">{emptyLabel}</p>
       )}
 
-      <footer className="voice-card-footer">
-        <button
-          type="button"
-          className="voice-play-btn"
+      <footer className="voice-card__foot">
+        <IconButton
+          icon={<Icon name="play_arrow" size={18} />}
+          size="sm"
           onClick={onPlay}
           disabled={!text || isPlaying}
           aria-label={variant === 'original' ? tUi("Play original transcript") : tUi("Play translation")}
-        >
-          <IconPlay size={14} />
-        </button>
-        <span className="voice-card-time">{timestamp ?? '—'}</span>
+        />
+        <span className="voice-card__time">{timestamp ?? '—'}</span>
+        <span className="spacer" />
         {showBookmark ? (
           <button
             type="button"
-            className={`voice-bookmark-btn${isBookmarked ? ' is-saved' : ''}`}
+            className={`btn btn--ghost btn--sm voice-bookmark-btn${isBookmarked ? ' is-saved' : ''}`}
             onClick={onBookmark}
             disabled={!text}
             aria-pressed={isBookmarked}
             aria-label={tUi("Save to vocabulary as an SRS card")}
           >
-            <IconBookmark filled={isBookmarked} />{tUi("Bookmark (SRS)")}</button>
+            <Icon name={isBookmarked ? 'bookmark_added' : 'bookmark_add'} size={17} />
+            <span>{tUi("Bookmark (SRS)")}</span>
+          </button>
         ) : (
-          <span className="voice-card-live-hint">{tUi("Not saved")}</span>
+          <span className="voice-card__hint">{tUi("Not saved")}</span>
         )}
       </footer>
     </article>

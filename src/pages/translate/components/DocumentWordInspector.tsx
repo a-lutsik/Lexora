@@ -8,10 +8,10 @@ import { useI18n } from "../../../hooks/useI18n";
 import { useEffect } from 'react';
 import { useTranslate } from '../../../hooks/useTranslate';
 import { useAddToVocabulary } from '../../../hooks/useVocabulary';
-import { Button } from '../../../components/ui/Button';
+import { Button, IconButton } from '../../../components/ui/Button';
+import { Icon } from '../../../components/ui/Icon';
 import { AudioButton } from '../../../components/domain/AudioButton';
 import { formatIpcError } from '../../../lib/utils';
-import { IconBookmark, IconCheck } from '../../../components/ui/LuminousIcons';
 
 type DocumentWordInspectorProps = {
   word: string;
@@ -65,49 +65,40 @@ export function DocumentWordInspector({
 
   return (
     <aside
-      className="doc-inspector animate-slide-up"
+      className="card doc-inspector animate-slide-up"
       aria-labelledby="doc-inspector-title"
     >
-      <div className="doc-inspector-header">
-        <div className="doc-inspector-header-left">
-          <div className="doc-inspector-kicker-row">
-            <span className="doc-inspector-kicker-badge">{tUi("WORD CARD")}</span>
-            {data?.partOfSpeech && (
-              <span className="doc-inspector-pos-badge">{data.partOfSpeech}</span>
-            )}
-          </div>
-          <h3 id="doc-inspector-title" className="doc-inspector-word">
+      <div className="doc-inspector__head">
+        <div className="doc-inspector__head-text">
+          <h3 id="doc-inspector-title" className="doc-inspector__word" dir="auto">
             {word}
           </h3>
+          {data?.partOfSpeech && (
+            <span className="pos">{data.partOfSpeech}</span>
+          )}
         </div>
-        <div className="doc-inspector-header-actions">
-          <AudioButton
-            text={word}
-            language={data?.sourceLanguage || (sourceLanguage === 'auto' ? undefined : sourceLanguage)}
-            ariaLabel={tUi("Pronounce {word}", { word: word })}
-          />
-          <button
-            type="button"
-            className="doc-inspector-close-btn"
-            onClick={onClose}
-            aria-label={tUi("Close word inspector")}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M1 1L13 13M1 13L13 1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
+        <AudioButton
+          text={word}
+          language={data?.sourceLanguage || (sourceLanguage === 'auto' ? undefined : sourceLanguage)}
+          ariaLabel={tUi("Pronounce {word}", { word: word })}
+        />
+        <IconButton
+          icon={<Icon name="close" size={17} />}
+          size="sm"
+          onClick={onClose}
+          aria-label={tUi("Close word inspector")}
+        />
       </div>
 
       {translateMutation.isPending && (
-        <div className="doc-inspector-loading">
-          <span className="doc-inspector-spinner" aria-hidden="true" />
-          <p className="text-muted text-sm">{tUi("Looking up ")}<strong>{word}</strong>…</p>
+        <div className="doc-inspector__loading">
+          <span className="translate-spinner" aria-hidden="true" />
+          <p>{tUi("Looking up ")}<strong>{word}</strong>…</p>
         </div>
       )}
 
       {translateMutation.isError && (
-        <p className="text-danger text-sm" role="alert">
+        <p className="inline-error" role="alert">
           {formatIpcError(
             translateMutation.error,
             tUi("Could not look up this word. Check the AI provider in Settings."),
@@ -116,18 +107,18 @@ export function DocumentWordInspector({
       )}
 
       {data && (
-        <div className="doc-inspector-body">
-          <div className="doc-inspector-translation-box">
-            <p className="doc-inspector-translation-label text-xs text-muted">{tUi("TRANSLATION")}</p>
-            <p className="doc-inspector-translation">{translation}</p>
+        <div className="doc-inspector__body">
+          <div className="doc-inspector__section">
+            <p className="section-label">{tUi("Translation")}</p>
+            <p className="doc-inspector__translation" dir="auto">{translation}</p>
           </div>
 
           {synonyms.length > 0 && (
-            <div className="doc-inspector-section">
-              <p className="doc-inspector-section-title text-xs text-muted">{tUi("SYNONYMS")}</p>
-              <div className="doc-inspector-chips">
+            <div className="doc-inspector__section">
+              <p className="section-label">{tUi("Synonyms")}</p>
+              <div className="doc-inspector__tags">
                 {synonyms.map((syn) => (
-                  <span key={syn} className="doc-inspector-chip">
+                  <span key={syn} className="tag">
                     {syn}
                   </span>
                 ))}
@@ -136,11 +127,11 @@ export function DocumentWordInspector({
           )}
 
           {alternatives.length > 0 && (
-            <div className="doc-inspector-section">
-              <p className="doc-inspector-section-title text-xs text-muted">{tUi("ALSO TRANSLATED AS")}</p>
-              <div className="doc-inspector-chips">
+            <div className="doc-inspector__section">
+              <p className="section-label">{tUi("Also translated as")}</p>
+              <div className="doc-inspector__tags">
                 {alternatives.map((alt) => (
-                  <span key={alt} className="doc-inspector-chip doc-inspector-chip--alt">
+                  <span key={alt} className="tag">
                     {alt}
                   </span>
                 ))}
@@ -149,19 +140,19 @@ export function DocumentWordInspector({
           )}
 
           {data.exampleSentence && (
-            <div className="doc-inspector-section">
-              <p className="doc-inspector-section-title text-xs text-muted">{tUi("EXAMPLE")}</p>
-              <blockquote className="doc-inspector-example">
+            <div className="doc-inspector__section">
+              <p className="section-label">{tUi("Example")}</p>
+              <blockquote className="example doc-inspector__example" dir="auto">
                 {data.exampleSentence}
               </blockquote>
             </div>
           )}
 
           {data.usageNote && (
-            <p className="doc-inspector-note text-xs text-secondary">{data.usageNote}</p>
+            <p className="inline-note">{data.usageNote}</p>
           )}
 
-          <div className="doc-inspector-footer">
+          <div className="doc-inspector__foot">
             <Button
               variant={addMutation.isSuccess ? 'secondary' : 'primary'}
               size="md"
@@ -169,17 +160,8 @@ export function DocumentWordInspector({
               isLoading={addMutation.isPending}
               disabled={addMutation.isSuccess}
             >
-              {addMutation.isSuccess ? (
-                <>
-                  <IconCheck size={16} />
-                  <span>{tUi("Added to Vocabulary")}</span>
-                </>
-              ) : (
-                <>
-                  <IconBookmark size={16} />
-                  <span>{tUi("Add to Vocabulary")}</span>
-                </>
-              )}
+              <Icon name={addMutation.isSuccess ? 'bookmark_added' : 'bookmark_add'} size={17} />
+              <span>{addMutation.isSuccess ? tUi("Added to Vocabulary") : tUi("Add to Vocabulary")}</span>
             </Button>
           </div>
         </div>
@@ -187,4 +169,3 @@ export function DocumentWordInspector({
     </aside>
   );
 }
-
