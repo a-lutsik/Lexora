@@ -8,7 +8,8 @@ import { useI18n } from "../hooks/useI18n";
 
 import { useEffect } from 'react';
 import { writingLabel } from '../lib/interfaceText';
-import { issueContext } from '../lib/grammarFix';
+import { issueContext, issueKind } from '../lib/grammarFix';
+import { Icon } from '../components/ui/Icon';
 import type { WritingIssueDto } from '../lib/types';
 
 export type PanelStatus = 'checking' | 'error' | 'ready';
@@ -32,15 +33,6 @@ type GrammarPanelProps = {
   onExcludeApp: () => void;
   onClose: () => void;
 };
-
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
 
 function panelTitle(status: PanelStatus, count: number): string {
   if (status === 'checking') return tUi("Checking…");
@@ -87,7 +79,7 @@ export function GrammarPanel({
           {appName && <span className="grammar-panel-app"> · {appName}</span>}
         </h1>
         <button type="button" className="grammar-icon-btn" onClick={onClose} aria-label={tUi("Close suggestions")}>
-          <CloseIcon />
+          <Icon name="close" size={18} />
         </button>
       </header>
 
@@ -111,9 +103,12 @@ export function GrammarPanel({
             {issues.map((issue) => {
               const context = issueContext(text, issue);
               const change = `${issue.originalFragment || '…'} → ${issue.suggestedFix || tUi('Remove')}`;
+              const kind = issueKind(issue);
               return (
-                <li key={issue.id} className="grammar-card">
-                  <span className="grammar-card-category">{writingLabel(issue.category)}</span>
+                <li key={issue.id} className={`grammar-card is-${kind}`}>
+                  <span className={`tag grammar-card-category ${kind === 'error' ? 'tag--live' : 'tag--accent'}`}>
+                    {writingLabel(issue.category)}
+                  </span>
                   <p className="grammar-card-context">
                     {context.before}
                     <del>{context.fragment}</del>

@@ -1,5 +1,9 @@
 /* ============================================================
-   LEXORA — Writing-check badge & panel («Grammarly mode»)
+   LEXORA — Writing-check badge, panel & hover card («Grammarly mode»)
+   Lingora: floating surfaces use --ov + --line2 + radius 10 +
+   --shadow-md; mistakes are --live, improvements --acc; the badge
+   is monochrome (accent). No glows. Theme comes from data-theme
+   set by the entry point (src/grammar.tsx).
    Window sizes come from src-tauri/src/grammar_watch/mod.rs:
    badge window 44×44 (hit target), panel 400×460, hover card 340×200.
    The underline window (grammar.html#marks) covers the watched field.
@@ -15,7 +19,17 @@ html.grammar-window #root {
   background: transparent;
 }
 
-/* ── Badge ─────────────────────────────────────────────────── */
+html.grammar-window {
+  --grammar-radius: 10px;
+  --grammar-badge-size: var(--space-8);
+  --grammar-swap-size: 15px;
+  --grammar-explanation-size: 13px;
+  --grammar-dot-size: 7px;
+  /* 28px controls keep a 44px hit area */
+  --grammar-hit-extend: calc((var(--touch-target-min) - var(--control-h-sm)) / -2);
+}
+
+/* ── Badge (monochrome, accent) ────────────────────────────── */
 
 .grammar-badge {
   display: flex;
@@ -33,73 +47,203 @@ html.grammar-window #root {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--space-8);
-  height: var(--space-8);
-  border-radius: var(--radius-full);
-  background: var(--color-bg-elevated);
-  border: 2px solid var(--color-border-hover);
+  width: var(--grammar-badge-size);
+  height: var(--grammar-badge-size);
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1.5px solid var(--line2);
   /* The window is only a few pixels larger than the circle: a big shadow
      would be cut off at its edge and show up as a square background. */
   box-shadow: var(--shadow-sm);
-  color: var(--color-text-primary);
+  color: var(--ink);
   font-family: var(--font-sans);
   font-size: var(--text-xs);
-  font-weight: var(--font-weight-bold);
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
   animation: grammar-badge-in var(--transition-slow);
 }
 
-.grammar-badge:hover .grammar-badge-dot,
-.grammar-badge:focus-visible .grammar-badge-dot {
-  transform: scale(1.08);
-  border-color: var(--color-accent);
+.grammar-badge:hover .grammar-badge-dot {
+  border-color: var(--acc);
 }
 
 .grammar-badge:focus-visible {
   outline: none;
 }
 
+.grammar-badge:focus-visible .grammar-badge-dot {
+  outline: 2px solid var(--acc);
+  outline-offset: 1px;
+}
+
+/* At least one mistake: solid accent */
 .grammar-badge-dot.is-issues {
-  background: var(--color-danger-strong);
-  border-color: var(--color-danger);
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--acc-ink);
 }
 
+.grammar-badge:hover .grammar-badge-dot.is-issues {
+  background: var(--acc-hover);
+  border-color: var(--acc-hover);
+}
+
+/* Only improvements: accent tint */
 .grammar-badge-dot.is-improvements {
-  background: var(--color-warn);
-  border-color: var(--color-warn);
-  color: var(--color-bg-primary);
+  background: var(--acc-soft);
+  border-color: var(--acc);
+  color: var(--acc-text);
 }
 
+/* Clean text: Lexora «L» */
 .grammar-badge-dot.is-clean {
-  overflow: hidden;
-  background: var(--color-bg-primary);
-  border-color: var(--color-accent-solid);
+  border-color: var(--acc);
+  color: var(--acc-text);
 }
 
-/* The icon is a rounded tile: scaled up a little so the circle crops
-   its transparent corners. */
-.grammar-badge-logo {
-  display: block;
-  width: 100%;
-  height: 100%;
-  transform: scale(1.18);
+.grammar-badge-mark::before {
+  content: 'L';
+  font-family: var(--font-serif);
+  font-size: var(--text-word);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
 }
 
+/* Check failed: red is reserved for errors */
 .grammar-badge-dot.is-error {
-  background: var(--color-warn);
-  border-color: var(--color-warn);
-  color: var(--color-bg-primary);
+  border-color: var(--live);
+  color: var(--live);
 }
 
 .grammar-badge-dot.is-checking {
-  border-color: var(--color-accent-dim);
-  border-top-color: var(--color-accent);
+  border: 2px solid var(--acc-soft);
+  border-top-color: var(--acc);
   animation: spin 900ms linear infinite;
 }
 
 @keyframes grammar-badge-in {
   from { opacity: 0; transform: scale(0.6); }
   to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Shared controls ───────────────────────────────────────── */
+
+.grammar-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-h-sm);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.grammar-btn::after,
+.grammar-link-btn::after {
+  content: '';
+  position: absolute;
+  inset: var(--grammar-hit-extend) 0;
+}
+
+.grammar-btn:hover:not(:disabled),
+.grammar-btn:focus-visible:not(:disabled) {
+  background: var(--sunk);
+  border-color: var(--line2);
+}
+
+.grammar-btn:focus-visible,
+.grammar-link-btn:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+.grammar-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.grammar-btn.is-primary {
+  border-color: var(--acc);
+  background: var(--acc);
+  color: var(--acc-ink);
+}
+
+.grammar-btn.is-primary:hover:not(:disabled),
+.grammar-btn.is-primary:focus-visible:not(:disabled) {
+  border-color: var(--acc-hover);
+  background: var(--acc-hover);
+}
+
+.grammar-link-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-h-sm);
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink2);
+  font-family: var(--font-sans);
+  font-size: var(--text-label);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.grammar-link-btn:hover,
+.grammar-link-btn:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.grammar-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink3);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.grammar-icon-btn::after {
+  content: '';
+  position: absolute;
+  inset: var(--grammar-hit-extend);
+}
+
+.grammar-icon-btn:hover,
+.grammar-icon-btn:focus-visible {
+  background: var(--sunk);
+  color: var(--ink);
+}
+
+.grammar-icon-btn:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: -2px;
+}
+
+.grammar-footer-spacer {
+  flex: 1;
 }
 
 /* ── Panel ─────────────────────────────────────────────────── */
@@ -109,12 +253,13 @@ html.grammar-window #root {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  box-sizing: border-box;
-  background: var(--color-bg-secondary);
-  border: var(--glass-border);
-  border-radius: var(--radius-lg);
-  color: var(--color-text-primary);
+  background: var(--ov);
+  border: 1px solid var(--line2);
+  border-radius: var(--grammar-radius);
+  box-shadow: var(--shadow-md);
+  color: var(--ink);
   font-family: var(--font-sans);
+  font-size: var(--text-ui);
   overflow: hidden;
   animation: slide-up var(--transition-slow);
 }
@@ -123,15 +268,15 @@ html.grammar-window #root {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  padding: 10px 10px 10px var(--space-4);
+  border-bottom: 1px solid var(--line);
 }
 
 .grammar-panel-title {
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-ui);
   font-weight: var(--font-weight-semibold);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -139,153 +284,93 @@ html.grammar-window #root {
 }
 
 .grammar-panel-app {
-  color: var(--color-text-secondary);
+  color: var(--ink3);
   font-weight: var(--font-weight-regular);
-}
-
-.grammar-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.grammar-icon-btn:hover,
-.grammar-icon-btn:focus-visible {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
 }
 
 .grammar-panel-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-1) var(--space-4);
 }
 
 .grammar-panel-note {
   margin: var(--space-4) 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
+  color: var(--ink2);
+  font-size: var(--text-ui);
   line-height: var(--line-height-normal);
 }
 
 .grammar-panel-note.is-clean {
-  color: var(--color-success);
+  color: var(--ok);
 }
 
 .grammar-alert {
-  margin: 0 0 var(--space-3);
+  margin: var(--space-3) 0;
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--color-danger-dim);
-  color: var(--color-danger-text);
-  font-size: var(--text-sm);
+  border-radius: var(--radius-md);
+  background: var(--live-soft);
+  color: var(--live);
+  font-size: var(--text-ui);
+  line-height: var(--line-height-snug);
 }
 
+/* Suggestions: rows separated by hairlines, no card-in-card */
 .grammar-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .grammar-card {
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 14px 0;
 }
 
-.grammar-card-category {
-  display: inline-block;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--color-accent-dim);
-  color: var(--color-accent-hover);
-  font-size: var(--text-xs);
-  text-transform: capitalize;
+.grammar-card + .grammar-card {
+  border-top: 1px solid var(--line);
 }
 
 .grammar-card-context {
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-sm);
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--grammar-swap-size);
   line-height: var(--line-height-normal);
-  color: var(--color-text-secondary);
+  color: var(--ink2);
   overflow-wrap: anywhere;
 }
 
 .grammar-card-context del {
-  color: var(--color-danger-text);
+  color: var(--live);
+}
+
+.grammar-card.is-improvement .grammar-card-context del {
+  color: var(--ink3);
 }
 
 .grammar-card-context ins {
-  margin-left: var(--space-1);
-  color: var(--color-success);
+  margin-inline-start: var(--space-1);
+  color: var(--ok);
   text-decoration: none;
   font-weight: var(--font-weight-semibold);
 }
 
 .grammar-card-why {
-  margin: var(--space-2) 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
+  margin: 0;
+  color: var(--ink2);
+  font-size: var(--grammar-explanation-size);
   line-height: var(--line-height-normal);
 }
 
 .grammar-card-actions {
   display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-}
-
-.grammar-btn {
-  min-height: 44px;
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-border-hover);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.grammar-btn:hover,
-.grammar-btn:focus-visible {
-  background: var(--color-bg-overlay);
-  border-color: var(--color-accent);
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.grammar-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.grammar-btn.is-primary {
-  border-color: transparent;
-  background: var(--color-accent);
-}
-
-.grammar-btn.is-primary:hover,
-.grammar-btn.is-primary:focus-visible {
-  background: var(--color-accent-hover);
+  gap: 6px;
 }
 
 .grammar-panel-footer {
@@ -293,31 +378,8 @@ html.grammar-window #root {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--color-border);
-}
-
-.grammar-footer-spacer {
-  flex: 1;
-}
-
-.grammar-link-btn {
-  min-height: 44px;
-  padding: 0 var(--space-2);
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-
-.grammar-link-btn:hover,
-.grammar-link-btn:focus-visible {
-  color: var(--color-text-primary);
-  text-decoration: underline;
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  padding: 10px var(--space-3) 10px var(--space-4);
+  border-top: 1px solid var(--line);
 }
 
 /* ── Underlines (overlay window over the watched field) ────── */
@@ -334,11 +396,11 @@ html.grammar-window #root {
 }
 
 .grammar-mark-line.is-error {
-  fill: var(--color-danger);
+  fill: var(--live);
 }
 
 .grammar-mark-line.is-improvement {
-  fill: var(--color-warn);
+  fill: var(--acc);
 }
 
 /* ── Hover card (shown under an underline) ─────────────────── */
@@ -349,13 +411,15 @@ html.grammar-window #root {
   gap: var(--space-2);
   width: 100%;
   height: 100%;
-  box-sizing: border-box;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-secondary);
-  border: var(--glass-border);
-  border-radius: var(--radius-lg);
-  color: var(--color-text-primary);
+  padding: var(--space-3) 14px;
+  background: var(--ov);
+  border: 1px solid var(--line2);
+  border-radius: var(--grammar-radius);
+  /* Clipped by the window edge; kept for windows with a margin. */
+  box-shadow: var(--shadow-md);
+  color: var(--ink);
   font-family: var(--font-sans);
+  font-size: var(--text-ui);
   overflow: hidden;
   animation: slide-up var(--transition-base);
 }
@@ -365,29 +429,30 @@ html.grammar-window #root {
   align-items: center;
   gap: var(--space-2);
   margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-medium);
+  color: var(--ink2);
+  font-size: var(--text-label);
 }
 
 .grammar-hover-dot {
-  width: var(--space-2);
-  height: var(--space-2);
-  border-radius: var(--radius-full);
+  flex: none;
+  width: var(--grammar-dot-size);
+  height: var(--grammar-dot-size);
+  border-radius: 50%;
 }
 
 .grammar-hover-dot.is-error {
-  background: var(--color-danger);
+  background: var(--live);
 }
 
 .grammar-hover-dot.is-improvement {
-  background: var(--color-warn);
+  background: var(--acc);
 }
 
 .grammar-hover-change {
   margin: 0;
-  font-size: var(--text-base);
-  line-height: var(--line-height-normal);
+  font-family: var(--font-serif);
+  font-size: var(--grammar-swap-size);
+  line-height: var(--line-height-snug);
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -396,19 +461,28 @@ html.grammar-window #root {
 }
 
 .grammar-hover-change del {
-  color: var(--color-text-muted);
+  color: var(--live);
+}
+
+.grammar-hover-card.is-improvement .grammar-hover-change del {
+  color: var(--ink3);
+}
+
+.grammar-hover-arrow {
+  margin: 0 6px;
+  color: var(--ink3);
 }
 
 .grammar-hover-change ins {
-  color: var(--color-accent-text);
+  color: var(--ok);
   font-weight: var(--font-weight-semibold);
   text-decoration: none;
 }
 
 .grammar-hover-why {
   margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
+  color: var(--ink2);
+  font-size: var(--grammar-explanation-size);
   line-height: var(--line-height-normal);
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -419,20 +493,14 @@ html.grammar-window #root {
 .grammar-hover-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   margin-top: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .grammar-hover-card {
-    animation: none;
-  }
-
+  .grammar-hover-card,
   .grammar-badge-dot,
-  .grammar-panel {
-    animation: none;
-  }
-
+  .grammar-panel,
   .grammar-badge-dot.is-checking {
     animation: none;
   }

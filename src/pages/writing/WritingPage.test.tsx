@@ -109,7 +109,7 @@ describe('WritingPage', () => {
   it('renders editor and disables check when empty', () => {
     invokeMock.mockResolvedValue({ primaryLanguage: 'en' });
     renderWithQueryClient(<WritingPage />);
-    expect(screen.getByRole('heading', { name: 'Writing Assistant' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Writing' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Text to check' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Check writing' })).toBeDisabled();
     expect(screen.getByRole('switch', { name: 'Auto-check writing' })).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe('WritingPage', () => {
     );
   });
 
-  it('checks writing and renders a highlighted diff', async () => {
+  it('checks writing and shows underlines in the text, in place of the editor', async () => {
     const user = userEvent.setup();
     mockBase();
     await runCheck(user);
@@ -136,11 +136,83 @@ describe('WritingPage', () => {
     });
 
     expect(screen.getByText('72')).toBeInTheDocument();
-    expect(document.querySelector('.writing-mark')).toHaveTextContent('go');
-    expect(screen.getByLabelText('Writing diff')).toBeInTheDocument();
-    expect(screen.getByLabelText('Suggested text')).toHaveTextContent('he goes home');
+    // One surface: the checked text replaces the editor, underlines inside it.
+    const annotated = screen.getByLabelText('Original text with issues highlighted');
+    expect(annotated).toHaveTextContent('he go home');
+    expect(annotated.querySelector('.writing-mark')).toHaveTextContent('go');
     expect(screen.getByRole('button', { name: /Issue in/ })).toHaveTextContent('go');
-    expect(screen.getByText(/Click a highlighted word for a fix/)).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Text to check' })).not.toBeInTheDocument();
+    // No separate Original / Suggested panes any more.
+    expect(screen.queryByLabelText('Writing diff')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Original' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Suggested' })).not.toBeInTheDocument();
+    // The corrected text stays reachable from the bottom bar.
+    expect(screen.getByRole('button', { name: 'Copy suggested text' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use suggested text as input' })).toBeInTheDocument();
+    // Issue card: category · rule, no "All issues (N)" label.
+    expect(screen.queryByText(/All issues/)).not.toBeInTheDocument();
+    expect(document.querySelector('.writing-issue-meta')).toHaveTextContent('Grammar');
+    expect(document.querySelector('.writing-issue-meta')).toHaveTextContent('He/she/it takes -s');
+  });
+
+  it('marks the page header as a window drag region', () => {
+    invokeMock.mockResolvedValue({ primaryLanguage: 'en' });
+    renderWithQueryClient(<WritingPage />);
+    expect(document.querySelector('header.page-header')).toHaveAttribute('data-tauri-drag-region');
+  });
+
+  it('returns to editing at the clicked position in the checked text', async () => {
+    const user = userEvent.setup();
+    mockBase();
+    await runCheck(user);
+
+    const annotated = screen.getByLabelText('Original text with issues highlighted');
+    // "he go home": the trailing plain segment " home" starts at offset 5.
+    const tail = Array.from(annotated.querySelectorAll('[data-offset]')).find(
+      (el) => el.textContent === ' home'
+    );
+    expect(tail).toBeDefined();
+    const textNode = tail?.firstChild;
+    if (!textNode) throw new Error('missing text node');
+    const range = document.createRange();
+    range.setStart(textNode, 3);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.click(tail as Element);
+
+    const input = screen.getByRole('textbox', { name: 'Text to check' });
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue('he go home');
+    expect((input as HTMLTextAreaElement).selectionStart).toBe(8);
+    expect(screen.queryByLabelText('Original text with issues highlighted')).not.toBeInTheDocument();
+  });
+
+  it('returns to editing on Enter or a printable key, keeping the caret', async () => {
+    const user = userEvent.setup();
+    mockBase();
+    renderWithQueryClient(<WritingPage />);
+    const input = screen.getByRole('textbox', { name: 'Text to check' });
+    fireEvent.change(input, { target: { value: 'he go home' } });
+    (input as HTMLTextAreaElement).setSelectionRange(2, 2);
+    await user.click(screen.getByRole('button', { name: 'Check writing' }));
+    await screen.findByText('One grammar error.');
+
+    const annotated = screen.getByLabelText('Original text with issues highlighted');
+    fireEvent.keyDown(annotated, { key: 'Enter' });
+    const editor = screen.getByRole('textbox', { name: 'Text to check' });
+    expect(editor).toHaveFocus();
+    expect((editor as HTMLTextAreaElement).selectionStart).toBe(2);
+    expect(editor).toHaveValue('he go home');
+
+    // Check again, then a printable key also returns to the editor.
+    await user.click(screen.getByRole('button', { name: 'Check writing' }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Original text with issues highlighted')).toBeInTheDocument();
+    });
+    fireEvent.keyDown(screen.getByLabelText('Original text with issues highlighted'), { key: 'x' });
+    expect(screen.getByRole('textbox', { name: 'Text to check' })).toHaveFocus();
   });
 
   it('hides stale highlights when the editor text changes', async () => {
@@ -149,12 +221,14 @@ describe('WritingPage', () => {
     await runCheck(user);
     expect(document.querySelector('.writing-mark')).toBeInTheDocument();
 
+    fireEvent.keyDown(screen.getByLabelText('Original text with issues highlighted'), { key: 'Enter' });
     fireEvent.change(screen.getByRole('textbox', { name: 'Text to check' }), {
       target: { value: 'he go home now' },
     });
 
     expect(document.querySelector('.writing-mark')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Writing diff')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Original text with issues highlighted')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copy suggested text' })).not.toBeInTheDocument();
   });
 
   it('ignores a fix, persists the status and restores the fragment', async () => {
@@ -168,12 +242,14 @@ describe('WritingPage', () => {
       return Promise.resolve(null);
     });
     await runCheck(user);
-    expect(screen.getByLabelText('Suggested text')).toHaveTextContent('he goes home');
+    expect(screen.getByRole('button', { name: 'Use suggested text as input' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Issue in/ }));
     await user.click(screen.getByRole('button', { name: 'Ignore issue go' }));
-    // Overlay applies instantly.
-    expect(screen.getByLabelText('Suggested text')).toHaveTextContent('he go home');
+    // Overlay applies instantly: the fragment is plain text again, nothing to correct.
+    expect(screen.getByLabelText('Original text with issues highlighted')).toHaveTextContent('he go home');
+    expect(document.querySelector('.writing-mark')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Use suggested text as input' })).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('update_writing_issue_status', {
@@ -183,7 +259,7 @@ describe('WritingPage', () => {
     });
     // Refreshed DTO replaces the displayed check; overlay entry is dropped.
     await waitFor(() => {
-      expect(screen.getByLabelText('Suggested text')).toHaveTextContent('he go home');
+      expect(screen.getByLabelText('Original text with issues highlighted')).toHaveTextContent('he go home');
     });
     expect(screen.queryByRole('button', { name: /Issue in/ })).not.toBeInTheDocument();
   });
@@ -212,6 +288,45 @@ describe('WritingPage', () => {
     expect(await screen.findByText('accepted')).toBeInTheDocument();
     // Accept all disappears once nothing is pending.
     expect(screen.queryByRole('button', { name: 'Accept all issues' })).not.toBeInTheDocument();
+    // The applied fix replaces the fragment in the checked text…
+    expect(screen.getByRole('button', { name: /Issue in/ })).toHaveTextContent('goes');
+    expect(screen.getByLabelText('Original text with issues highlighted')).toHaveTextContent('he goes home');
+    // …and "Use as input" moves the corrected text into the editor.
+    await user.click(screen.getByRole('button', { name: 'Use suggested text as input' }));
+    expect(screen.getByRole('textbox', { name: 'Text to check' })).toHaveValue('he goes home');
+  });
+
+  it('shows the rewritten text in the side panel', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'rewrite_text') {
+        return Promise.resolve({
+          ...checkResult,
+          id: 2,
+          correctedText: 'He goes home.',
+          rewriteMode: 'clearer',
+          summary: 'Rewritten for clarity.',
+          issues: [],
+          issueCount: 0,
+          createdAt: 20,
+        });
+      }
+      if (cmd === 'get_settings') {
+        return Promise.resolve({ primaryLanguage: 'en', writingAutoCheck: false });
+      }
+      return Promise.resolve(null);
+    });
+    renderWithQueryClient(<WritingPage />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Text to check' }), {
+      target: { value: 'he go home' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Rewrite text' }));
+
+    expect(await screen.findByText('Rewritten for clarity.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Suggested text')).toHaveTextContent('He goes home.');
+    expect(screen.getByRole('textbox', { name: 'Text to check' })).toHaveValue('he go home');
+    await user.click(screen.getByRole('button', { name: 'Use suggested text as input' }));
+    expect(screen.getByRole('textbox', { name: 'Text to check' })).toHaveValue('He goes home.');
   });
 
   it('accepts all issues via accept_all_issues and refreshes the check', async () => {
@@ -259,7 +374,8 @@ describe('WritingPage', () => {
     await user.click(screen.getByRole('button', { name: /Issue in/ }));
     await user.click(screen.getByRole('button', { name: 'Ignore issue go' }));
     // Overlay still works locally without any IPC.
-    expect(screen.getByLabelText('Suggested text')).toHaveTextContent('he go home');
+    expect(screen.getByLabelText('Original text with issues highlighted')).toHaveTextContent('he go home');
+    expect(document.querySelector('.writing-mark')).not.toBeInTheDocument();
     expect(invokeMock).not.toHaveBeenCalledWith(
       'update_writing_issue_status',
       expect.anything()
@@ -280,12 +396,15 @@ describe('WritingPage', () => {
     renderWithQueryClient(<WritingPage />);
 
     expect(
-      await screen.findByRole('heading', { name: 'Your Error Patterns' })
+      await screen.findByRole('heading', { name: 'Your error patterns' })
     ).toBeInTheDocument();
     expect(screen.getByText('Grammar')).toBeInTheDocument();
-    expect(screen.getByText('×3')).toBeInTheDocument();
-    expect(screen.getByText('he go')).toBeInTheDocument();
-    expect(screen.getByText('he goes')).toBeInTheDocument();
+    // Share of all recorded mistakes, mono percent.
+    expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(screen.getByText('Grammar').closest('li')).toHaveAttribute('title', 'he go → he goes');
+    expect(
+      screen.getByRole('button', { name: 'Generate exercises from error patterns' })
+    ).toHaveTextContent('Exercises');
 
     await user.click(screen.getByRole('button', { name: 'Generate exercises from error patterns' }));
     await waitFor(() => {
@@ -315,7 +434,7 @@ describe('WritingPage', () => {
       expect(invokeMock).toHaveBeenCalledWith('get_writing_error_patterns', { language: 'en' });
     });
     expect(
-      screen.queryByRole('heading', { name: 'Your Error Patterns' })
+      screen.queryByRole('heading', { name: 'Your error patterns' })
     ).not.toBeInTheDocument();
   });
 

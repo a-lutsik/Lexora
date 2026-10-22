@@ -1,6 +1,6 @@
 // ============================================================
 // LEXORA — Hover card of an underlined suggestion
-// Appears under a red/yellow underline in another app, like the
+// Appears under a red (mistake) or accent (improvement) underline in another app, like the
 // Grammarly card: what to change, why, and «Apply» / «Dismiss».
 // The buttons are relayed through the backend to the
 // writing-check window, which owns the check and writes the fix.
@@ -11,6 +11,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useI18n } from '../hooks/useI18n';
 import { APP_EVENTS } from '../lib/constants';
 import { ipc } from '../lib/ipc';
+import { Icon } from '../components/ui/Icon';
 import type { GrammarMark, GrammarMarkActionKind } from '../lib/types';
 import './grammar.css';
 
@@ -54,14 +55,14 @@ export function GrammarCard() {
   };
 
   return (
-    <section className="grammar-hover-card" aria-label={mark.title}>
+    <section className={`grammar-hover-card is-${mark.kind}`} aria-label={mark.title}>
       <p className="grammar-hover-title">
         <span className={`grammar-hover-dot is-${mark.kind}`} aria-hidden="true" />
         {mark.title}
       </p>
-      <p className="grammar-hover-change">
+      <p className="grammar-hover-change" dir="auto">
         {mark.original && <del>{mark.original}</del>}
-        {mark.original && ' → '}
+        {mark.original && <Icon name="arrow_forward" size={14} className="grammar-hover-arrow" />}
         <ins>{mark.suggestion || tUi('Remove')}</ins>
       </p>
       {mark.explanation && <p className="grammar-hover-why">{mark.explanation}</p>}
