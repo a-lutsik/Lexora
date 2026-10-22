@@ -250,7 +250,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
     hotkey_translate        TEXT    NOT NULL DEFAULT 'CmdOrCtrl+Shift+L',
     hotkey_stickers         TEXT    NOT NULL DEFAULT 'CmdOrCtrl+Shift+S',
     -- V031__hotkey_voice_translate.sql: голосовой перевод в popup
-    hotkey_voice_translate  TEXT    NOT NULL DEFAULT 'CmdOrCtrl+Shift+Space',
+    hotkey_voice_translate  TEXT    NOT NULL DEFAULT 'CmdOrCtrl+Shift+V',
     -- V032__advanced_models.sql: продвинутый режим — модель для каждой функции
     advanced_models         INTEGER NOT NULL DEFAULT 0,
     -- V005__fallback_provider.sql: автоматический резервный AI провайдер

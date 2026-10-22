@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(settings.cloudflare_account_id, None);
         assert_eq!(settings.hotkey_translate, "CmdOrCtrl+Shift+L");
         assert_eq!(settings.hotkey_stickers, "CmdOrCtrl+Shift+S");
-        assert_eq!(settings.hotkey_voice_translate, "CmdOrCtrl+Shift+Space");
+        assert_eq!(settings.hotkey_voice_translate, "CmdOrCtrl+Shift+V");
         assert_eq!(settings.fallback_ai_provider.as_deref(), Some("gemini"));
         assert_eq!(
             settings.fallback_ai_model.as_deref(),

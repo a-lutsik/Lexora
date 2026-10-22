@@ -193,7 +193,7 @@ export function presetPackage(id: SetupProfileId): {
 /** Дефолты, если в `current` чего-то не хватает (на случай старых строк БД). */
 const DEFAULT_HOTKEY_TRANSLATE = 'CmdOrCtrl+Shift+L';
 const DEFAULT_HOTKEY_STICKERS = 'CmdOrCtrl+Shift+S';
-const DEFAULT_HOTKEY_VOICE_TRANSLATE = 'CmdOrCtrl+Shift+Space';
+const DEFAULT_HOTKEY_VOICE_TRANSLATE = 'CmdOrCtrl+Shift+V';
 
 /**
  * Строит ПОЛНЫЙ AppSettings для сценария поверх текущих настроек — то же

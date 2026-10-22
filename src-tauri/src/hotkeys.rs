@@ -23,7 +23,7 @@ pub const TRANSLATE_SHORTCUT: &str = "CmdOrCtrl+Shift+L";
 pub const STICKERS_SHORTCUT: &str = "CmdOrCtrl+Shift+S";
 
 /// Хоткей голосового перевода (popup сразу слушает микрофон) по умолчанию.
-pub const VOICE_TRANSLATE_SHORTCUT: &str = "CmdOrCtrl+Shift+Space";
+pub const VOICE_TRANSLATE_SHORTCUT: &str = "CmdOrCtrl+Shift+V";
 
 /// Максимальная длина захваченного текста (по символам, не по байтам).
 #[cfg(any(target_os = "macos", target_os = "windows", test))]
@@ -137,6 +137,8 @@ pub fn validate_shortcuts(shortcuts: &ShortcutStrings) -> Result<ValidShortcuts,
 
 /// Перерегистрировать глобальные хоткеи: снять все старые, привязать новые
 /// и обновить HotkeyState для диспетчеризации в обработчике плагина.
+/// Каждый хоткей регистрируется независимо: отказ ОС для одного (комбинация
+/// занята другим приложением) не оставляет остальные без привязки.
 pub fn register_shortcuts(app: &AppHandle, shortcuts: &ShortcutStrings) -> Result<(), AppError> {
     let valid = validate_shortcuts(shortcuts)?;
 
@@ -144,20 +146,29 @@ pub fn register_shortcuts(app: &AppHandle, shortcuts: &ShortcutStrings) -> Resul
     manager
         .unregister_all()
         .map_err(|e| AppError::Validation(format!("Failed to reset global shortcuts: {e}")))?;
-    manager
-        .register(valid.translate)
-        .map_err(|e| AppError::Validation(format!("Failed to register translate hotkey: {e}")))?;
-    manager
-        .register(valid.stickers)
-        .map_err(|e| AppError::Validation(format!("Failed to register stickers hotkey: {e}")))?;
-    manager.register(valid.voice).map_err(|e| {
-        AppError::Validation(format!("Failed to register voice translate hotkey: {e}"))
-    })?;
+
+    let mut failures = Vec::new();
+    for (shortcut, field, text) in [
+        (valid.translate, "translate", &shortcuts.translate),
+        (valid.stickers, "stickers", &shortcuts.stickers),
+        (valid.voice, "voice translate", &shortcuts.voice),
+    ] {
+        if let Err(e) = manager.register(shortcut) {
+            failures.push(format!("{field} hotkey '{text}': {e}"));
+        }
+    }
 
     if let Some(state) = app.try_state::<HotkeyState>() {
         state.set_bindings(valid);
     }
-    Ok(())
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(AppError::Validation(format!(
+            "Failed to register {}",
+            failures.join("; ")
+        )))
+    }
 }
 
 /// Trim + отсечение слишком длинного захвата. Пустая строка → None.
