@@ -28,6 +28,9 @@ const STICKER_HEIGHT: f64 = 150.0;
 /// Вертикальный шаг между стикерами и отступ от краёв монитора.
 const STICKER_GAP: f64 = 16.0;
 const STICKER_MARGIN: f64 = 24.0;
+/// Stickers float above all other windows until the user hides or closes them
+/// (or the words run out); the per-card pin button can still drop one behind.
+const STICKERS_PINNED_BY_DEFAULT: bool = true;
 const MAX_STICKERS: i64 = 3;
 const MAX_STICKER_SLOTS: usize = MAX_STICKERS as usize;
 /// Очередь стикеров длиннее числа окон: после dismiss слот берёт новое
@@ -643,7 +646,7 @@ pub fn apply_sticker_policy(app: &AppHandle) -> Result<(), AppError> {
             .decorations(false)
             .transparent(true)
             .resizable(false)
-            .always_on_top(false)
+            .always_on_top(STICKERS_PINNED_BY_DEFAULT)
             .skip_taskbar(true)
             .visible(false)
             .focused(false)
@@ -660,7 +663,7 @@ pub fn apply_sticker_policy(app: &AppHandle) -> Result<(), AppError> {
             window.set_position(LogicalPosition::new(x, y))?;
         }
         configure_sticker_overlay(&window)?;
-        apply_sticker_pin(&window, false)?;
+        apply_sticker_pin(&window, STICKERS_PINNED_BY_DEFAULT)?;
         // Окно остаётся скрытым: фронтенд покажет его, только если есть карточка.
     }
 
@@ -1275,7 +1278,7 @@ mod macos {
         ns_window.setHidesOnDeactivate(false);
         ns_window.setCanHide(false);
         // Уровень окна не трогаем: его задаёт apply_pin_level (при создании —
-        // незакреплённый), иначе каждый повторный показ снимал бы закрепление.
+        // закреплённый поверх окон), иначе каждый повторный показ сбрасывал бы выбор булавки.
         Ok(())
     }
 

@@ -33,6 +33,9 @@ import {
 import { stickerSlotFromLabel } from './stickerSlots';
 import './sticker.css';
 
+/** New sticker windows float above all other windows (see stickers.rs). */
+const STICKERS_PINNED_BY_DEFAULT = true;
+
 const MS_PER_SECOND = 1000;
 
 function ExampleSentence({ sentence, word }: { sentence: string; word: string }) {
@@ -73,7 +76,9 @@ export function StickerApp() {
   // Перевод скрыт до явного reveal: иначе «Помню» оценивает узнавание
   // подсказки, а не вспоминание, и SRS завышает интервалы.
   const [revealed, setRevealed] = useState(false);
-  const [pinned, setPinned] = useState(false);
+  // Stickers stay above other windows until hidden, closed or the words run out;
+  // the pin button lets a single card drop back behind other windows.
+  const [pinned, setPinned] = useState(STICKERS_PINNED_BY_DEFAULT);
   const [showContext, setShowContext] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [userHidden, setUserHidden] = useState(false);
@@ -90,7 +95,7 @@ export function StickerApp() {
     && (stickerSources.length === 0 || stickerSources.some((source) => source.startsWith('cat:')));
 
   useEffect(() => {
-    void ipc.window.setStickerPinned(false);
+    void ipc.window.setStickerPinned(STICKERS_PINNED_BY_DEFAULT);
   }, []);
 
   useEffect(() => {

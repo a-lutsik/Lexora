@@ -457,7 +457,7 @@ describe('StickerApp', () => {
     expect(screen.getByRole('button', { name: "Later" })).toBeInTheDocument();
   });
 
-  it('pin and close buttons talk to the current window', async () => {
+  it('stays above other windows by default; the pin lets one card drop behind', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) =>
       Promise.resolve(cmd === 'get_sticker_card' ? makeEntry() : null),
@@ -466,14 +466,16 @@ describe('StickerApp', () => {
 
     await screen.findByText('apple');
 
+    // Cards must not get lost under other windows until hidden, closed or done.
     const pin = screen.getByRole('button', { name: 'Pin on top' });
-    expect(invokeMock).toHaveBeenCalledWith('set_sticker_pinned', { pinned: false });
-    expect(pin).toHaveAttribute('aria-pressed', 'false');
-    expect(pin).not.toHaveClass('pinned');
+    expect(invokeMock).toHaveBeenCalledWith('set_sticker_pinned', { pinned: true });
+    expect(invokeMock).not.toHaveBeenCalledWith('set_sticker_pinned', { pinned: false });
+    expect(pin).toHaveAttribute('aria-pressed', 'true');
+    expect(pin).toHaveClass('pinned');
 
     await user.click(pin);
-    expect(invokeMock).toHaveBeenCalledWith('set_sticker_pinned', { pinned: true });
-    expect(pin).toHaveAttribute('aria-pressed', 'true');
+    expect(invokeMock).toHaveBeenCalledWith('set_sticker_pinned', { pinned: false });
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(screen.getByRole('button', { name: 'Close sticker' }));
     expect(tauriWindowMock.hide).toHaveBeenCalled();
