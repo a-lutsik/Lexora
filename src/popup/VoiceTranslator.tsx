@@ -13,9 +13,11 @@ import { useSessionLanguagePair } from '../hooks/useSessionLanguagePair';
 import { useTranslateAudioHub } from '../hooks/useTranslationHub';
 import { LanguageSelect } from '../components/ui/LanguageSelect';
 import { BrandBadge } from '../components/ui/Logo';
-import { IconMic } from '../components/ui/LuminousIcons';
+import { Button, IconButton } from '../components/ui/Button';
+import { Icon } from '../components/ui/Icon';
 import { blobToBase64, revokeObjectUrl } from '../lib/audioRecorder';
 import { ipc } from '../lib/ipc';
+import { languageLabel } from '../lib/languages';
 import { formatIpcError } from '../lib/utils';
 import type { AudioTranslationResult } from '../lib/types';
 
@@ -24,17 +26,22 @@ type CapturedClip = {
   mimeType: string;
 };
 
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
+const MS_PER_SECOND = 1000;
+/** Key name on the keycap, not interface copy. */
+const ESC_KEY_LABEL = 'Esc';
+const SECONDS_PER_MINUTE = 60;
+const TIMER_TICK_MS = 250;
+const WAVE_BAR_COUNT = 24;
+const WAVE_BARS = Array.from({ length: WAVE_BAR_COUNT }, (_, index) => index);
+
+function formatElapsed(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
+  const seconds = totalSeconds % SECONDS_PER_MINUTE;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 export function VoiceTranslator() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { targetLang, setTargetLang, settingsReady } = useSessionLanguagePair({ allowAutoSource: true });
   const langOptions = useLanguageOptions([targetLang]);
   const translateMutation = useTranslateAudioHub();
@@ -96,6 +103,18 @@ export function VoiceTranslator() {
   const { start: startRecorder, stop: stopRecorder } = recorder;
   const isRecording = recorder.status === 'recording';
   const isBusy = recorder.status === 'stopping' || translateMutation.isPending;
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // Recording time (data, not an animation): restarts with every take.
+  useEffect(() => {
+    if (!isRecording) return;
+    const startedAt = Date.now();
+    setElapsedSeconds(0);
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / MS_PER_SECOND));
+    }, TIMER_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [isRecording]);
 
   const listen = useCallback(() => {
     setError(null);
@@ -172,11 +191,25 @@ export function VoiceTranslator() {
       <div className="popup-header" data-tauri-drag-region>
         <div className="popup-header-brand" data-tauri-drag-region>
           <BrandBadge />
-          <span className="popup-detected-pair">{t('Voice translate')}</span>
+          <span className="voice-translator-label" data-tauri-drag-region>{t('Voice translate')}</span>
+          <span className="popup-pair" data-tauri-drag-region aria-hidden="true">
+            <span className="popup-pair-code">{t('Auto')}</span>
+            <Icon name="arrow_forward" size={14} />
+            <span className="popup-pair-code">{targetLang.toUpperCase()}</span>
+          </span>
+          <span className="sr-only">
+            {t('Auto')}
+            {' → '}
+            {languageLabel(targetLang, false, locale)}
+          </span>
         </div>
-        <button type="button" className="popup-close-btn" onClick={handleClose} aria-label={t('Close window')}>
-          <CloseIcon />
-        </button>
+        <IconButton
+          icon={<Icon name="close" size={18} />}
+          aria-label={t('Close window')}
+          onClick={handleClose}
+          size="sm"
+          className="popup-close-btn"
+        />
       </div>
 
       <div className="popup-toolbar">
@@ -205,8 +238,17 @@ export function VoiceTranslator() {
           aria-label={isRecording ? t('Stop recording') : t('Start recording')}
           aria-pressed={isRecording}
         >
-          <IconMic size={28} />
+          <Icon name={isRecording ? 'stop' : 'mic'} size={28} />
         </button>
+
+        <div className="voice-translator-meter" aria-hidden="true">
+          <span className={`voice-wave${isRecording ? ' is-live' : ''}`}>
+            {WAVE_BARS.map((bar) => (
+              <span key={bar} className="voice-wave-bar" />
+            ))}
+          </span>
+          <span className="num voice-translator-timer">{formatElapsed(isRecording ? elapsedSeconds : 0)}</span>
+        </div>
 
         <p className="voice-translator-status" aria-live="polite">
           {status}
@@ -233,15 +275,25 @@ export function VoiceTranslator() {
       </div>
 
       <div className="voice-translator-actions">
-        <span className="popup-hotkey-hint">{t('↵ to accept · Esc to close')}</span>
-        <button
-          type="button"
-          className="popup-add-btn"
+        <span className="popup-hints">
+          <span className="hint">
+            <kbd className="kbd">↵</kbd>
+            {t('Accept')}
+          </span>
+          <span className="hint">
+            <kbd className="kbd">{ESC_KEY_LABEL}</kbd>
+            {t('Close')}
+          </span>
+        </span>
+        <span className="spacer" />
+        <Button
+          variant="primary"
           onClick={() => void handleAccept()}
           disabled={!translatedText || isBusy}
         >
+          <Icon name="check" size={17} />
           {t('Accept')}
-        </button>
+        </Button>
       </div>
     </div>
   );

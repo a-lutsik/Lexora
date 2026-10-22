@@ -874,3 +874,55 @@ describe('PopupTranslator collocations', () => {
     expect(screen.queryByRole('button', { name: 'Show collocations' })).not.toBeInTheDocument();
   });
 });
+
+describe('PopupTranslator language pair', () => {
+  function mockSettings(primaryLanguage: string, interfaceLanguage: string) {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_settings') return Promise.resolve({ primaryLanguage, interfaceLanguage });
+      if (cmd === 'translate_text') return Promise.resolve(translationResult);
+      return Promise.resolve(null);
+    });
+  }
+
+  it('always shows the pair as codes in the header, before any lookup', async () => {
+    mockSettings('en', 'ru');
+    renderWithQueryClient(<PopupTranslator />);
+
+    const pair = await screen.findByTestId('popup-language-pair');
+    await waitFor(() => expect(pair).toHaveTextContent(/Auto.*RU/));
+    expect(screen.getByText(/Auto\s*→\s*Russian/)).toBeInTheDocument();
+  });
+
+  it('swaps source and target from the header', async () => {
+    const user = userEvent.setup();
+    mockSettings('en', 'ru');
+    renderWithQueryClient(<PopupTranslator />);
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Target language' })).toHaveTextContent('Russian'),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Swap languages' }));
+
+    expect(screen.getByRole('combobox', { name: 'Source language' })).toHaveTextContent('Russian');
+    expect(screen.getByRole('combobox', { name: 'Target language' })).toHaveTextContent('English');
+  });
+
+  it('refuses to translate when source and target are the same language', async () => {
+    const user = userEvent.setup();
+    mockSettings('en', 'en');
+    renderWithQueryClient(<PopupTranslator />);
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Target language' })).toHaveTextContent('English'),
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Source language' }));
+    await user.click(screen.getAllByRole('option', { name: /^English/ })[0] as HTMLElement);
+    expect(screen.getByRole('combobox', { name: 'Source language' })).toHaveTextContent('English');
+
+    expect(screen.getByText(/Source and target languages are the same/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Translate' })).toBeDisabled();
+
+    await user.type(screen.getByRole('textbox', { name: 'Translate query' }), 'apple{Enter}');
+    expect(invokeMock).not.toHaveBeenCalledWith('translate_text', expect.anything());
+  });
+});

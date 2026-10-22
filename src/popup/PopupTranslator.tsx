@@ -1,9 +1,9 @@
 import { useI18n } from "../hooks/useI18n";
 // ============================================================
 // LEXORA — PopupTranslator Component
-// Exact match to mockup: language badge, word header,
-// badges (pos + frequency), translation, context quote,
-// associative visual, and wide glowing action buttons.
+// Lingora floating panel: brand + language pair (mono codes),
+// word in Literata with IPA, translation, alternatives as tags,
+// examples, and a footer with key hints and the primary action.
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
@@ -15,12 +15,14 @@ import { useTranslate } from '../hooks/useTranslate';
 import { useAddToVocabulary } from '../hooks/useVocabulary';
 import { useSessionLanguagePair } from '../hooks/useSessionLanguagePair';
 import { useLanguageOptions } from '../hooks/useLanguages';
-import { Badge, PosBadge } from '../components/ui/Badge';
+import { PosBadge } from '../components/ui/Badge';
+import { Button, IconButton } from '../components/ui/Button';
+import { Icon } from '../components/ui/Icon';
 import { LanguageSelect } from '../components/ui/LanguageSelect';
 import { TranslationDomainSelect } from '../components/domain/TranslationDomainSelect';
 import { BrandBadge } from '../components/ui/Logo';
 import { ipc } from '../lib/ipc';
-import { languageLabel, getLanguageEntry } from '../lib/languages';
+import { languageLabel, getLanguageEntry, normalizeLangCode } from '../lib/languages';
 import { isCardEnrichComplete, type CardEnrichEvent } from '../lib/types';
 import { isLongWritingText, OPEN_WRITING_EVENT, saveWritingDraft } from '../lib/writingText';
 import { classifyPopupText, formatImageProviderError, formatProviderError } from '../lib/inlineAssistant';
@@ -30,6 +32,8 @@ import { canHaveCollocations } from '../lib/collocations';
 import type { LexicalDomain } from '../lib/translationDomain';
 
 const AUTO_TEXT_DEBOUNCE_MS = 800;
+/** Key name on the keycap, not interface copy. */
+const ESC_KEY_LABEL = 'Esc';
 
 type EnrichPatch = {
   usageNote: string | null;
@@ -58,39 +62,19 @@ function uniqueExampleSentences(
   return out;
 }
 
-function SpeakerIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-    </svg>
-  );
+/** Drops a leading «+ » / «✓ » from a label that is shown next to an icon. */
+function withoutLeadingGlyph(label: string): string {
+  return label.replace(/^[+✓]\s*/u, '');
 }
 
-function BookmarkIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-    </svg>
-  );
+/** EN → EN is never a translation; `auto` has no code yet and never matches. */
+function isSameLanguagePair(source: string | null | undefined, target: string | null | undefined): boolean {
+  const from = normalizeLangCode(source);
+  return from != null && from === normalizeLangCode(target);
 }
 
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function ClearFieldIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
+function languageCode(code: string | null | undefined): string | null {
+  return normalizeLangCode(code)?.toUpperCase() ?? null;
 }
 
 export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
@@ -115,10 +99,11 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
   const lastAutoTextRef = useRef('');
   const lastAutoAtRef = useRef(0);
   const onOpenAssistantRef = useRef(onOpenAssistant);
+  const retranslateAfterSwapRef = useRef(false);
   queryRef.current = query;
   onOpenAssistantRef.current = onOpenAssistant;
 
-  const { sourceLang, targetLang, setSourceLang, setTargetLang } = useSessionLanguagePair({
+  const { sourceLang, targetLang, setSourceLang, setTargetLang, swap } = useSessionLanguagePair({
     allowAutoSource: true,
   });
   const { lexicalDomain, setLexicalDomain } = useSessionLexicalDomain('auto');
@@ -185,6 +170,9 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
 
   const handleTranslate = (text: string, overrideTarget?: string, overrideDomain?: LexicalDomain) => {
     if (!text.trim()) return;
+    if (isSameLanguagePair(langsRef.current.sourceLang, overrideTarget ?? langsRef.current.targetLang)) {
+      return;
+    }
     setAdded(false);
     setCollocationsOpen(false);
     addMutation.reset();
@@ -210,6 +198,19 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
       handleTranslate(query, nextTarget);
     }
   };
+
+  const handleSwap = () => {
+    retranslateAfterSwapRef.current = true;
+    swap(translateMutation.data?.sourceLanguage);
+  };
+
+  // The swapped pair is in langsRef only after the re-render.
+  useEffect(() => {
+    if (!retranslateAfterSwapRef.current) return;
+    retranslateAfterSwapRef.current = false;
+    if (queryRef.current.trim()) handleTranslate(queryRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceLang, targetLang]);
 
   const handleDomainChange = (nextDomain: LexicalDomain) => {
     setLexicalDomain(nextDomain);
@@ -419,6 +420,18 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
     !data.isOfflineFallback &&
     !added;
 
+  // Pair shown in every popup; with Auto it shows the detected source once known.
+  const shownSource = sourceLang === 'auto' ? data?.sourceLanguage : sourceLang;
+  const sourceCode = languageCode(shownSource) ?? tUi("Auto");
+  const targetCode = languageCode(targetLang) ?? targetLang.toUpperCase();
+  const sourceName =
+    getLanguageEntry(shownSource)?.name
+    ?? (sourceLang === 'auto' ? tUi("Auto") : languageLabel(sourceLang, false, locale));
+  const targetName = languageLabel(targetLang, false, locale);
+  const pairConflict = isSameLanguagePair(shownSource, targetLang);
+  const translateBlocked = sourceLang !== 'auto' && pairConflict;
+  const addLabel = added ? tUi("✓ Added to Vocabulary") : tUi("+ Add Word");
+
   // Highlights the query word inside the example sentence
   const renderHighlightedExample = (sentence: string, targetWord: string) =>
     splitByTerm(sentence, targetWord).map((segment, i) =>
@@ -434,23 +447,36 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
       <div className="popup-header" data-tauri-drag-region>
         <div className="popup-header-brand" data-tauri-drag-region>
           <BrandBadge />
-          {data && (
-            <span className="popup-detected-pair">
-              {getLanguageEntry(sourceLang === 'auto' ? data.sourceLanguage : sourceLang)?.name
-                ?? (sourceLang === 'auto' ? tUi("Auto") : languageLabel(sourceLang, false, locale))}
-              {' → '}
-              {languageLabel(targetLang, false, locale)}
-            </span>
-          )}
+          <span
+            className="popup-pair"
+            data-testid="popup-language-pair"
+            data-tauri-drag-region
+            aria-hidden="true"
+          >
+            <span className="popup-pair-code">{sourceCode}</span>
+            <Icon name="arrow_forward" size={14} />
+            <span className="popup-pair-code">{targetCode}</span>
+          </span>
+          <span className="sr-only">
+            {sourceName}
+            {' → '}
+            {targetName}
+          </span>
+          <IconButton
+            icon={<Icon name="swap_horiz" size={17} />}
+            aria-label={tUi("Swap languages")}
+            onClick={handleSwap}
+            size="sm"
+            className="popup-swap-btn"
+          />
         </div>
-        <button
-          type="button"
-          className="popup-close-btn"
-          onClick={handleClose}
+        <IconButton
+          icon={<Icon name="close" size={18} />}
           aria-label={tUi("Close window")}
-        >
-          <CloseIcon />
-        </button>
+          onClick={handleClose}
+          size="sm"
+          className="popup-close-btn"
+        />
       </div>
 
       <div className="popup-toolbar">
@@ -469,11 +495,9 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             }}
             ariaLabel={tUi("Source language")}
           />
-          <span className="popup-lang-arrow" aria-hidden="true">
-            →
-          </span>
+          <Icon name="arrow_forward" size={16} className="popup-lang-arrow" />
           <LanguageSelect
-            className="popup-lang-select"
+            className={`popup-lang-select${pairConflict ? ' popup-lang-select--conflict' : ''}`}
             compact
             value={targetLang}
             options={langOptions}
@@ -497,11 +521,18 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
         </div>
       </div>
 
+      {pairConflict && (
+        <p className="inline-note popup-pair-note" aria-live="polite">
+          {tUi("Source and target languages are the same. Choose another target language.")}
+        </p>
+      )}
+
       <div className="popup-input-row">
-        <div className="popup-input-wrap">
+        <div className="field popup-input-field">
+          <Icon name="search" size={17} className="field__icon" />
           <input dir="auto"
             type="text"
-            className="popup-input"
+            className="field__input popup-input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleTranslate(query)}
@@ -510,42 +541,40 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             aria-label={tUi("Translate query")}
           />
           {query.length > 0 && (
-            <button
-              type="button"
-              className="popup-field-clear"
-              onClick={handleClearQuery}
+            <IconButton
+              icon={<Icon name="close" size={16} />}
               aria-label={tUi("Clear text")}
-            >
-              <ClearFieldIcon />
-            </button>
+              onClick={handleClearQuery}
+              size="sm"
+              className="popup-field-clear"
+            />
           )}
         </div>
-        <button
-          type="button"
-          className="popup-search-btn"
+        <Button
+          variant="secondary"
           onClick={() => handleTranslate(query)}
-          disabled={translateMutation.isPending}
+          disabled={translateMutation.isPending || translateBlocked}
           aria-label={translateMutation.isPending ? tUi("Translating with AI...") : tUi("Translate")}
+          className="popup-search-btn"
         >
           {translateMutation.isPending ? (
             <>
-              <div className="popup-spinner-icon" />
+              <span className="popup-spinner-icon" aria-hidden="true" />
               <span>{tUi("Translating…")}</span>
             </>
           ) : (
             tUi("Translate")
           )}
-        </button>
+        </Button>
       </div>
 
       {/* Body */}
       {translateMutation.isPending && (
         <div className="popup-body animate-fade-in" aria-busy="true" aria-live="polite">
-          {/* AI Status Pill */}
-          <div className="popup-status-pill-ai">
-            <div className="popup-ai-pulse-dot" />
+          <p className="popup-status-ai">
+            <span className="popup-ai-pulse-dot" aria-hidden="true" />
             <span>{tUi("Analyzing context & fetching nuances…")}</span>
-          </div>
+          </p>
 
           {/* Word Header Skeleton */}
           <div className="popup-hero">
@@ -554,10 +583,6 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
                 <div className="popup-shimmer-block popup-skel-word" />
                 <div className="popup-shimmer-block popup-skel-ipa" />
               </div>
-              <div className="popup-badges-row">
-                <div className="popup-shimmer-block popup-skel-badge" />
-                <div className="popup-shimmer-block popup-skel-badge-wide" />
-              </div>
             </div>
             <div className="associated-image-frame associated-image-frame--hero associated-image-frame--loading" aria-hidden="true">
               <div className="popup-shimmer-block popup-skel-hero-image" />
@@ -565,9 +590,9 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
           </div>
 
           {/* Translation Skeleton */}
-          <div className="popup-skeleton-trans-main" />
+          <div className="popup-shimmer-block popup-skel-trans" />
 
-          {/* Alternative Chips Skeleton */}
+          {/* Alternative tags skeleton */}
           <div className="popup-alternatives">
             <div className="popup-shimmer-block popup-skel-chip" />
             <div className="popup-shimmer-block popup-skel-chip-wide" />
@@ -575,24 +600,16 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
           </div>
 
           <div className="popup-examples" aria-hidden="true">
-            <div className="popup-example-box">
-              <div className="popup-skel-example-lines">
-                <div className="popup-shimmer-block popup-skel-line" />
-                <div className="popup-shimmer-block popup-skel-line-short" />
-              </div>
-            </div>
-            <div className="popup-example-box">
-              <div className="popup-skel-example-lines">
-                <div className="popup-shimmer-block popup-skel-line" />
-                <div className="popup-shimmer-block popup-skel-line-mid" />
-              </div>
+            <div className="popup-skel-example-lines">
+              <div className="popup-shimmer-block popup-skel-line" />
+              <div className="popup-shimmer-block popup-skel-line-short" />
             </div>
           </div>
         </div>
       )}
 
       {translateMutation.isError && !translateMutation.isPending && (
-        <div className="popup-body popup-body--error animate-fade-in">
+        <div className="popup-body animate-fade-in">
           <div className="popup-error-box" role="alert">
             <div className="popup-error-box-title">{tUi("Couldn’t translate")}</div>
             <div>
@@ -604,8 +621,8 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
 
       {!data && !translateMutation.isPending && !translateMutation.isError && (
         <div className="popup-body popup-body--centered">
-          <p className="popup-empty-title">{tUi("Translate a word")}</p>
-          <p className="popup-empty-hint">{tUi("Type or paste a word, then press ")}<kbd className="popup-kbd">{tUi("Enter")}</kbd>
+          <p className="empty__title popup-empty-title">{tUi("Translate a word")}</p>
+          <p className="popup-empty-hint">{tUi("Type or paste a word, then press ")}<kbd className="kbd">{tUi("Enter")}</kbd>
           </p>
           <p className="popup-empty-hint">{tUi("Open from the menu bar anytime, or select text and use your translate shortcut.")}</p>
         </div>
@@ -626,7 +643,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
         <div className="popup-body animate-fade-in">
           {/* Offline fallback notice */}
           {data.isOfflineFallback && (
-            <div className="popup-offline-chip" role="status">{tUi("⚠ Offline result — configure AI provider in Settings")}</div>
+            <div className="tag tag--warn popup-offline-chip" role="status">{tUi("⚠ Offline result — configure AI provider in Settings")}</div>
           )}
 
           {/* Hero: word + IPA on the left, square photo on the right */}
@@ -634,31 +651,28 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
             <div className="popup-hero-copy">
               <div className="popup-word-header">
                 <h1 className="popup-source-text">{data.text}</h1>
-                <div className="popup-phonetic-row">
-                  {data.phonetic && <span className="popup-phonetic">{data.phonetic}</span>}
-                  <button
-                    type="button"
-                    className="popup-speaker-inline"
-                    onClick={handleSpeak}
+                <div className="popup-meta-row">
+                  {data.phonetic && <span className="ipa popup-phonetic">{data.phonetic}</span>}
+                  <PosBadge pos={data.partOfSpeech} />
+                  {frequencyLabel && <span className="num popup-frequency">{frequencyLabel}</span>}
+                  <IconButton
+                    icon={<Icon name="volume_up" size={17} />}
                     aria-label={tUi("Pronounce word")}
-                  >
-                    <SpeakerIcon />
-                  </button>
+                    onClick={handleSpeak}
+                    variant="secondary"
+                    size="sm"
+                    className="popup-speaker-inline"
+                  />
                 </div>
                 {data.sourceSynonyms.length > 0 && (
                   <div className="popup-source-synonyms" aria-label={tUi("Source language synonyms")}>
                     {data.sourceSynonyms.map((syn) => (
-                      <span key={syn} className="popup-syn-chip">
+                      <span key={syn} className="tag">
                         {syn}
                       </span>
                     ))}
                   </div>
                 )}
-              </div>
-
-              <div className="popup-badges-row">
-                <PosBadge pos={data.partOfSpeech} />
-                {frequencyLabel && <Badge variant="warn">{frequencyLabel}</Badge>}
               </div>
             </div>
             <div className="popup-hero-visual">
@@ -672,7 +686,7 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
                 onRegenerate={data.lexemeId ? handleRegenerateImage : undefined}
               />
               {imageError && (
-                <p className="popup-image-error" role="alert">
+                <p className="inline-error popup-image-error" role="alert">
                   {imageError}
                 </p>
               )}
@@ -681,11 +695,11 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
 
           {/* Main Translation & Alternatives */}
           <div className="popup-translation-section">
-            <div className="popup-main-trans">{data.mainTranslation}</div>
+            <div className="popup-main-trans" dir="auto">{data.mainTranslation}</div>
             {data.alternatives?.length > 0 && (
               <div className="popup-alternatives">
                 {data.alternatives.map((alt) => (
-                  <span key={alt} className="popup-alt-chip">
+                  <span key={alt} className="tag">
                     {alt}
                   </span>
                 ))}
@@ -695,9 +709,10 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
               <button
                 ref={showCollocationsRef}
                 type="button"
-                className="popup-collocations-btn"
+                className="btn btn--ghost btn--sm popup-collocations-btn"
                 onClick={() => setCollocationsOpen(true)}
               >
+                <Icon name="link" size={17} />
                 {tUi("Show collocations")}
               </button>
             )}
@@ -706,19 +721,15 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
           {(exampleSentences.length > 0 || waitingForExamples) && (
             <div className="popup-examples" aria-label={tUi("Example sentences in context")}>
               {exampleSentences.map((sentence) => (
-                <div key={sentence} className="popup-example-box">
-                  <p className="popup-example-text">
-                    "{renderHighlightedExample(sentence, data.text)}"
-                  </p>
-                </div>
+                <p key={sentence} className="example popup-example-text" dir="auto">
+                  “{renderHighlightedExample(sentence, data.text)}”
+                </p>
               ))}
               {waitingForExamples &&
                 Array.from({ length: 2 - exampleSentences.length }, (_, i) => (
-                  <div key={`example-skel-${i}`} className="popup-example-box" aria-hidden="true">
-                    <div className="popup-skel-example-lines">
-                      <div className="popup-shimmer-block popup-skel-line" />
-                      <div className="popup-shimmer-block popup-skel-line-short" />
-                    </div>
+                  <div key={`example-skel-${i}`} className="popup-skel-example-lines" aria-hidden="true">
+                    <div className="popup-shimmer-block popup-skel-line" />
+                    <div className="popup-shimmer-block popup-skel-line-short" />
                   </div>
                 ))}
             </div>
@@ -727,60 +738,68 @@ export function PopupTranslator({ onOpenAssistant }: PopupTranslatorProps) {
       )}
 
       {addMutation.isError && !added && (
-        <p className="popup-add-error" role="alert">{tUi("Couldn’t add this word. Please try again.")}</p>
+        <p className="inline-error popup-add-error" role="alert">{tUi("Couldn’t add this word. Please try again.")}</p>
       )}
 
       {/* Footer action */}
       <div className="popup-footer">
-        <div className="popup-footer-left">
-          <button
-            type="button"
-            className="popup-icon-btn"
-            onClick={handleSpeak}
-            disabled={!data}
-            aria-label={tUi("Listen audio")}
-          >
-            <SpeakerIcon />
-          </button>
-          <button
-            type="button"
-            className="popup-icon-btn"
-            onClick={handleAdd}
-            disabled={!data || added || addMutation.isPending}
-            aria-label={tUi("Save bookmark")}
-          >
-            <BookmarkIcon />
-          </button>
-          <span className="popup-hotkey-hint">{tUi("Press ↵ to translate · Esc to close")}</span>
-        </div>
+        <IconButton
+          icon={<Icon name="volume_up" size={18} />}
+          aria-label={tUi("Listen audio")}
+          onClick={handleSpeak}
+          disabled={!data}
+          size="sm"
+        />
+        <IconButton
+          icon={<Icon name="bookmark" size={18} />}
+          aria-label={tUi("Save bookmark")}
+          onClick={handleAdd}
+          disabled={!data || added || addMutation.isPending}
+          size="sm"
+        />
+        <span className="popup-hints">
+          <span className="hint">
+            <kbd className="kbd">↵</kbd>
+            {tUi("Translate")}
+          </span>
+          <span className="hint">
+            <kbd className="kbd">{ESC_KEY_LABEL}</kbd>
+            {tUi("Close")}
+          </span>
+        </span>
+        <span className="spacer" />
 
         {canOpenAssistant ? (
-          <button
-            type="button"
-            className="popup-add-btn"
+          <Button
+            variant="primary"
             onClick={() => onOpenAssistant?.(query.trim())}
             aria-label={tUi("Open AI Assistant")}
-          >{tUi("AI Assistant")}</button>
+          >
+            <Icon name="auto_awesome" size={17} />
+            {tUi("AI Assistant")}
+          </Button>
         ) : isWritingQuery ? (
-          <button
-            type="button"
-            className="popup-add-btn"
+          <Button
+            variant="primary"
             onClick={handleCheckWriting}
             aria-label={tUi("Check Writing")}
-          >{tUi("Check Writing")}</button>
+          >
+            <Icon name="spellcheck" size={17} />
+            {tUi("Check Writing")}
+          </Button>
         ) : (
-          <button
-            type="button"
-            className={`popup-add-btn${added ? ' added' : ''}`}
+          <Button
+            variant="primary"
+            className={`popup-add-btn${added ? ' is-added' : ''}`}
             onClick={handleAdd}
             disabled={!data || added || addMutation.isPending}
-            aria-label={added ? tUi("✓ Added to Vocabulary") : tUi("+ Add Word")}
+            aria-label={addLabel}
           >
-            {added ? tUi("✓ Added to Vocabulary") : tUi("+ Add Word")}
-          </button>
+            <Icon name={added ? 'check' : 'bookmark_add'} size={17} />
+            {withoutLeadingGlyph(addLabel)}
+          </Button>
         )}
       </div>
     </div>
   );
 }
-

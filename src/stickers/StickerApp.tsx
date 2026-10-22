@@ -2,10 +2,9 @@ import { useCategories } from '../hooks/useCategories';
 import { useI18n } from "../hooks/useI18n";
 // ============================================================
 // LEXORA — Desktop Sticker App Component
-// Floating ambient card with multiple visual states matching mockup:
-// - Default glassmorphism state
-// - Due now indicator state (● Due now)
-// - Mature word state with emerald aurora glow
+// Compact Lingora card on --ov: word in Literata, translation,
+// SRS status as dot + label. Due = accent border, mature = --ok-soft
+// tint; controls are 28px ghost icon buttons.
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react';
@@ -20,6 +19,7 @@ import { resolveLanguageId, useLanguages } from '../hooks/useLanguages';
 import { useSettingsStore } from '../stores/settingsStore';
 import { AudioButton } from '../components/domain/AudioButton';
 import { StickerSourcePicker } from '../components/domain/StickerSourcePicker';
+import { Icon } from '../components/ui/Icon';
 import { ipc } from '../lib/ipc';
 import { APP_EVENTS, QUERY_KEYS } from '../lib/constants';
 import { DEFAULT_STICKER_SOURCES } from '../lib/stickerSources';
@@ -34,49 +34,6 @@ import { stickerSlotFromLabel } from './stickerSlots';
 import './sticker.css';
 
 const MS_PER_SECOND = 1000;
-
-function PinIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <line x1="12" y1="17" x2="12" y2="22" />
-      <path d="M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a1 1 0 001-1V3a1 1 0 00-1-1H8a1 1 0 00-1 1v2a1 1 0 001 1h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z" />
-    </svg>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function QuoteIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V21z" />
-      <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3z" />
-    </svg>
-  );
-}
-
-function FilterIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-    </svg>
-  );
-}
 
 function ExampleSentence({ sentence, word }: { sentence: string; word: string }) {
   return (
@@ -281,11 +238,16 @@ export function StickerApp() {
         <div className="sticker-card sticker-empty-topic" data-tauri-drag-region="deep">
           <p role="status">{tUi('No words in selected sources. Choose other categories or add words in Vocabulary.')}</p>
           <div className="sticker-empty-actions">
-            <button type="button" className="sticker-source-empty-button" onClick={() => setShowFilter(!showFilter)}>{tUi('Sources')}</button>
-            <button type="button" className="sticker-source-empty-button" onClick={handleClose} aria-label={tUi('Close sticker')}><CloseIcon /></button>
+            <button type="button" className="sticker-source-empty-button" onClick={() => setShowFilter(!showFilter)}>
+              <Icon name="filter_list" size={17} />
+              {tUi('Sources')}
+            </button>
+            <button type="button" className="sticker-icon-btn" onClick={handleClose} aria-label={tUi('Close sticker')}>
+              <Icon name="close" size={17} />
+            </button>
           </div>
           {showFilter && <div className="sticker-filter-panel" data-tauri-drag-region="false">
-            <button type="button" className="sticker-source-empty-button" onClick={() => setShowFilter(false)}>{tUi('Close source filter')}</button>
+            <button type="button" className="sticker-source-empty-button sticker-source-empty-button--ghost" onClick={() => setShowFilter(false)}>{tUi('Close source filter')}</button>
             <StickerSourcePicker sources={stickerSources} categories={categories} collections={collections} onChange={handleSourcesChange} compact />
           </div>}
         </div>
@@ -308,7 +270,7 @@ export function StickerApp() {
                 onClick={() => setShowFilter(false)}
                 aria-label={tUi("Close source filter")}
               >
-                <CloseIcon />
+                <Icon name="close" size={17} />
               </button>
             </div>
             <StickerSourcePicker
@@ -340,7 +302,7 @@ export function StickerApp() {
               aria-label={tUi("Toggle translation visibility")}
               aria-pressed={revealed}
             >
-              <EyeIcon />
+              <Icon name={revealed ? 'visibility_off' : 'visibility'} size={17} />
             </button>
             <button
               type="button"
@@ -356,7 +318,7 @@ export function StickerApp() {
               }
               aria-pressed={showContext}
             >
-              <QuoteIcon />
+              <Icon name="format_quote" size={17} />
             </button>
             <button
               type="button"
@@ -365,7 +327,7 @@ export function StickerApp() {
               aria-label={tUi("Filter sticker sources")}
               aria-pressed={showFilter}
             >
-              <FilterIcon />
+              <Icon name="filter_list" size={17} />
             </button>
             <button
               type="button"
@@ -374,7 +336,7 @@ export function StickerApp() {
               aria-label={tUi("Pin on top")}
               aria-pressed={pinned}
             >
-              <PinIcon />
+              <Icon name="push_pin" size={17} />
             </button>
             <button
               type="button"
@@ -382,7 +344,7 @@ export function StickerApp() {
               onClick={handleClose}
               aria-label={tUi("Close sticker")}
             >
-              <CloseIcon />
+              <Icon name="close" size={17} />
             </button>
           </div>
         </div>
@@ -398,10 +360,10 @@ export function StickerApp() {
             <span className="sticker-translation sticker-translation--hidden">••••••</span>
           )}
           {isDueNow && (
-            <div className="sticker-due-pill">
-              <div className="sticker-due-dot" />
-              <span>{tUi("Due now")}</span>
-            </div>
+            <span className="status sticker-status">
+              <span className="status-dot" data-status="review" aria-hidden="true" />
+              {tUi("Due now")}
+            </span>
           )}
         </div>
 

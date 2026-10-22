@@ -59,7 +59,7 @@ export function InlineFixSuggestions({ check, issues, onSetStatus }: InlineFixSu
           return (
             <li key={issue.id} className={`inline-fix-item${dismissed ? ' is-dismissed' : ''}`}>
               <div className="inline-fix-head">
-                <span className="inline-fix-category">{issue.category}</span>
+                <span className="tag inline-fix-category">{issue.category}</span>
                 <span className="inline-fix-change">
                   <del>{issue.originalFragment}</del>
                   <span aria-hidden="true">→</span>
@@ -67,7 +67,7 @@ export function InlineFixSuggestions({ check, issues, onSetStatus }: InlineFixSu
                 </span>
                 <button
                   type="button"
-                  className="inline-fix-toggle"
+                  className="btn btn--ghost btn--sm inline-fix-toggle"
                   onClick={() => onSetStatus(issue, dismissed ? 'pending' : 'rejected')}
                   aria-label={dismissed
                     ? tUi("Restore fix: {change}", { change })

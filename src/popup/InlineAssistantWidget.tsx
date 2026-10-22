@@ -10,6 +10,8 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { BrandBadge } from '../components/ui/Logo';
+import { IconButton } from '../components/ui/Button';
+import { Icon } from '../components/ui/Icon';
 import { ipc } from '../lib/ipc';
 import { copyToClipboard } from '../lib/utils';
 import { findPasteRisks, stripInvisibleChars } from '../lib/pasteSafety';
@@ -49,34 +51,6 @@ type InlineAssistantWidgetProps = {
   targetLanguage?: string;
   onSwitchToDictionary: () => void;
 };
-
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function ClearFieldIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function RefreshIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <polyline points="23 4 23 10 17 10" />
-      <polyline points="1 20 1 14 7 14" />
-      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-    </svg>
-  );
-}
 
 function mutationErrorMessage(error: unknown): string {
   return formatProviderError(error);
@@ -451,18 +425,17 @@ export function InlineAssistantWidget({
     <div className="inline-assistant">
       <div className="inline-header" data-tauri-drag-region>
         <BrandBadge />
-        <button
-          type="button"
-          className="inline-close-btn"
-          onClick={handleClose}
+        <IconButton
+          icon={<Icon name="close" size={18} />}
           aria-label={tUi("Close window")}
-        >
-          <CloseIcon />
-        </button>
+          onClick={handleClose}
+          size="sm"
+          className="inline-close-btn"
+        />
       </div>
 
       <div className="inline-mode-bar" role="tablist" aria-label={tUi("AI actions")}>
-        <div className="inline-mode-tabs">
+        <div className="seg inline-mode-tabs">
           {INLINE_MODE_TABS.map((tab) => (
             <button
               key={tab.id}
@@ -470,7 +443,7 @@ export function InlineAssistantWidget({
               role="tab"
               aria-selected={mode === tab.id}
               aria-label={`${tUi(tab.label)} (${tab.shortcut})`}
-              className={`inline-mode-btn${mode === tab.id ? ' is-active' : ''}`}
+              className={`seg__item inline-mode-btn${mode === tab.id ? ' is-active' : ''}`}
               onClick={() => setMode(tab.id)}
             >
               {tUi(tab.label)}
@@ -513,7 +486,7 @@ export function InlineAssistantWidget({
                     type="button"
                     role="radio"
                     aria-checked={textRegister === option.id}
-                    className={`inline-register-btn${textRegister === option.id ? ' is-active' : ''}`}
+                    className={`chip inline-register-btn${textRegister === option.id ? ' is-active' : ''}`}
                     onClick={() => setTextRegister(option.id)}
                   >
                     {tUi(option.label)}
@@ -523,7 +496,7 @@ export function InlineAssistantWidget({
               <div className="inline-compose-wrap">
                 <textarea dir="auto"
                   ref={composeRef}
-                  className="inline-compose"
+                  className="field field--textarea inline-compose"
                   value={composeText}
                   onChange={(event) => setComposeText(event.target.value)}
                   placeholder={tUi("Type in Russian or any language…")}
@@ -531,14 +504,13 @@ export function InlineAssistantWidget({
                   rows={3}
                 />
                 {composeText.length > 0 && (
-                  <button
-                    type="button"
-                    className="inline-field-clear"
-                    onClick={handleClearCompose}
+                  <IconButton
+                    icon={<Icon name="close" size={16} />}
                     aria-label={tUi("Clear text")}
-                  >
-                    <ClearFieldIcon />
-                  </button>
+                    onClick={handleClearCompose}
+                    size="sm"
+                    className="inline-field-clear"
+                  />
                 )}
               </div>
             </>
@@ -591,7 +563,7 @@ export function InlineAssistantWidget({
       <div className="inline-footer">
         <button
           type="button"
-          className="inline-accept"
+          className="btn btn--primary btn--md inline-accept"
           onClick={() => void handleAccept()}
           disabled={!outputText || isLoading}
           aria-label={applied ? tUi("Applied") : acceptLabel}
@@ -620,7 +592,7 @@ export function InlineAssistantWidget({
 
         <button
           type="button"
-          className="inline-util-btn"
+          className="btn btn--ghost btn--md inline-util-btn"
           onClick={() => void handleCopy()}
           disabled={!outputText}
           aria-label={copied ? tUi("Copied") : tUi("Copy")}
@@ -631,19 +603,19 @@ export function InlineAssistantWidget({
         <div className="inline-menu-wrap" ref={menuRef}>
           <button
             type="button"
-            className="inline-util-btn"
+            className="btn btn--ghost btn--icon btn--md inline-util-btn"
             onClick={() => setMenuOpen((open) => !open)}
             aria-label={tUi("More actions")}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
           >
-            •••
+            <Icon name="more_horiz" size={18} />
           </button>
           {menuOpen && (
-            <div className="inline-menu" role="menu">
+            <div className="popover inline-menu" role="menu">
               <button
                 type="button"
-                className="inline-menu-item"
+                className="menu-item inline-menu-item"
                 role="menuitem"
                 onClick={() => {
                   setMenuOpen(false);
@@ -652,7 +624,7 @@ export function InlineAssistantWidget({
               >{tUi("Dictionary card")}</button>
               <button
                 type="button"
-                className="inline-menu-item"
+                className="menu-item inline-menu-item"
                 role="menuitem"
                 onClick={() => {
                   setMenuOpen(false);
@@ -665,12 +637,12 @@ export function InlineAssistantWidget({
 
         <button
           type="button"
-          className="inline-util-btn"
+          className="btn btn--ghost btn--icon btn--md inline-util-btn"
           onClick={() => void runGeneration(mode, true)}
           disabled={!canRegenerate}
           aria-label={tUi("Regenerate")}
         >
-          <RefreshIcon />
+          <Icon name="refresh" size={18} />
         </button>
       </div>
 
