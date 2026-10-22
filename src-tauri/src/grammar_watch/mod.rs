@@ -222,6 +222,7 @@ pub(crate) fn report(
     {
         return;
     }
+    log::debug!("Grammar watch: {code:?} (app {app_name:?}, detail {detail:?})");
     *activity = WatchActivity::new(
         code,
         app_name.map(str::to_string),
@@ -271,6 +272,14 @@ fn write_config(app: &AppHandle, update: impl FnOnce(&mut WatchConfig)) {
 
 /// Send the payload to the badge window and remember it for a late mount.
 pub(crate) fn publish(app: &AppHandle, payload: FieldPayload) {
+    log::debug!(
+        "Grammar field payload: {}",
+        match &payload {
+            FieldPayload::Hidden => "hidden",
+            FieldPayload::Pending { .. } => "pending",
+            FieldPayload::Check { .. } => "check",
+        }
+    );
     if let Some(state) = app.try_state::<GrammarWatchState>() {
         if let Ok(mut last) = state.last_payload.lock() {
             *last = payload.clone();
@@ -392,8 +401,17 @@ pub fn set_panel_open(app: &AppHandle, open: bool) -> Result<(), AppError> {
 /// Underline the suggestions in the watched field; `None` clears them.
 /// Measuring words talks to the other app: call off the async runtime.
 pub fn set_marks(app: &AppHandle, input: Option<SetMarksInput>) -> Result<(), AppError> {
-    if let Some(input) = input.as_ref() {
-        validate_marks(input)?;
+    match input.as_ref() {
+        Some(input) => {
+            log::debug!(
+                "Grammar set_marks: field {}, {} chars, {} mark(s)",
+                input.field_id,
+                input.text.chars().count(),
+                input.marks.len()
+            );
+            validate_marks(input).inspect_err(|e| log::debug!("Grammar set_marks rejected: {e}"))?;
+        }
+        None => log::debug!("Grammar set_marks: clear"),
     }
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     {

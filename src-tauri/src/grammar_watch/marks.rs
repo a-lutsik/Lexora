@@ -119,6 +119,11 @@ pub(super) fn set(app: &AppHandle, input: Option<SetMarksInput>) -> Result<(), A
         clear(app);
         return Ok(());
     };
+    log::debug!(
+        "Grammar marks set: field {} with {} suggestion(s)",
+        input.field_id,
+        input.marks.len()
+    );
     {
         let mut shared = lock();
         shared.version += 1;
@@ -186,8 +191,17 @@ fn refresh(app: &AppHandle) {
         )
     };
     platform::prepare_thread();
-    let geometry = platform::mark_geometry(field_id, &text, &marks)
-        .filter(|geometry| geometry.regions.iter().any(|(_, rects)| !rects.is_empty()));
+    let measured = platform::mark_geometry(field_id, &text, &marks);
+    match measured.as_ref() {
+        None => log::debug!("Grammar marks: the field or its text could not be read"),
+        Some(geometry) => log::debug!(
+            "Grammar marks: measured {} of {} word(s)",
+            geometry.regions.len(),
+            marks.len()
+        ),
+    }
+    let geometry =
+        measured.filter(|geometry| geometry.regions.iter().any(|(_, rects)| !rects.is_empty()));
     match geometry {
         Some(geometry) => show_marks(app, version, geometry),
         None => hide_marks(app, version),

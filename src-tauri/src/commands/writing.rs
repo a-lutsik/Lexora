@@ -250,6 +250,11 @@ pub async fn check_writing(
     app: AppHandle,
 ) -> Result<WritingCheckDto, AppError> {
     let text = validate_writing_text(&input.text)?.to_string();
+    log::debug!(
+        "Writing check started ({} chars, ephemeral: {})",
+        text.chars().count(),
+        input.ephemeral
+    );
 
     let pool = db.inner().clone();
     let settings = {
@@ -282,7 +287,9 @@ pub async fn check_writing(
             text: text.clone(),
             language: language.clone(),
         })
-        .await?;
+        .await
+        .inspect_err(|e| log::debug!("Writing check failed: {e}"))?;
+    log::debug!("Writing check returned {} issue(s)", ai.issues.len());
     realign_writing_issues(&text, &mut ai.issues);
 
     // Privacy mode: чувствительный текст не попадает в БД вообще —

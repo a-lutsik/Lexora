@@ -13,7 +13,8 @@ use super::{
 };
 use crate::display::{pick_bounds_for_point, LogicalBounds};
 use crate::error::AppError;
-use core_foundation::base::{CFGetTypeID, CFRelease, CFRetain, CFTypeRef, TCFType};
+use core_foundation::array::{CFArray, CFArrayRef};
+use core_foundation::base::{CFGetTypeID, CFRelease, CFRetain, CFType, CFTypeRef, TCFType};
 use core_foundation::boolean::CFBoolean;
 use core_foundation::number::CFNumber;
 use core_foundation::string::{CFString, CFStringRef};
@@ -30,6 +31,7 @@ use objc2_quartz_core::kCACornerCurveContinuous;
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::ptr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -69,6 +71,15 @@ const ATTR_SIZE: &str = "AXSize";
 const ATTR_WINDOW: &str = "AXWindow";
 const ATTR_BOUNDS_FOR_RANGE: &str = "AXBoundsForRange";
 const ATTR_STRING_FOR_RANGE: &str = "AXStringForRange";
+const ATTR_CHILDREN: &str = "AXChildren";
+const ROLE_STATIC_TEXT: &str = "AXStaticText";
+/// How many text nodes and how deep the search below a field goes.
+const MAX_TEXT_NODES: usize = 400;
+const MAX_NODE_DEPTH: usize = 6;
+/// A flagged word is at most this tall (points); taller is not a word.
+const MAX_WORD_HEIGHT: f64 = 120.0;
+/// Tolerance when checking that a word lies inside its field (points).
+const RECT_SLACK: f64 = 6.0;
 /// Chromium/Electron build their accessibility tree only on request.
 const ATTR_MANUAL_ACCESSIBILITY: &str = "AXManualAccessibility";
 /// Chrome and other Chromium browsers react to this one (VoiceOver-style hint).
@@ -279,7 +290,11 @@ impl AxElement {
             )
         };
         unsafe { CFRelease(param) };
-        (err == AX_ERROR_SUCCESS && !value.is_null()).then_some(value)
+        if err != AX_ERROR_SUCCESS || value.is_null() {
+            log_once(&format!("{attr} for {location}+{length} failed (AXError {err})"));
+            return None;
+        }
+        Some(value)
     }
 
     /// Screen rectangle (points, origin top-left) the app draws the range in.
@@ -289,12 +304,16 @@ impl AxElement {
         let covered = self.copy_for_range(ATTR_STRING_FOR_RANGE, location, length)?;
         if unsafe { CFGetTypeID(covered) } != CFString::type_id() {
             unsafe { CFRelease(covered) };
+            log_once("AXStringForRange is not a string");
             return None;
         }
         let covered = unsafe { CFString::wrap_under_create_rule(covered as CFStringRef) }
             .to_string()
             .replace('\u{a0}', " ");
         if covered != expected {
+            log_once(&format!(
+                "range {location}+{length} holds {covered:?}, expected {expected:?}"
+            ));
             return None;
         }
         let value = self.copy_for_range(ATTR_BOUNDS_FOR_RANGE, location, length)?;
@@ -309,7 +328,11 @@ impl AxElement {
             width: raw.size.width,
             height: raw.size.height,
         };
-        (ok && rect.is_usable()).then_some(rect)
+        if !(ok && rect.is_usable()) {
+            log_once(&format!("AXBoundsForRange {location}+{length} gave unusable {rect:?}"));
+            return None;
+        }
+        Some(rect)
     }
 
     /// Rectangles of a flagged fragment, one per line. The app answers with
@@ -318,7 +341,7 @@ impl AxElement {
     fn fragment_rects(&self, location: usize, fragment: &str) -> Vec<Rect> {
         let length = fragment.encode_utf16().count();
         let Some(whole) = self.range_rect(location, length, fragment) else {
-            return Vec::new();
+            return self.char_rects(location, fragment);
         };
         let first_char_len = fragment.chars().next().map_or(0, char::len_utf16);
         let first = fragment
@@ -338,6 +361,90 @@ impl AxElement {
             if word_units > 0 {
                 if let Some(rect) = self.range_rect(offset, word_units, word) {
                     rects.push(rect);
+                }
+            }
+            offset += units;
+        }
+        rects
+    }
+
+    fn children(&self) -> Vec<AxElement> {
+        let Some(raw) = self.copy_raw(ATTR_CHILDREN) else {
+            return Vec::new();
+        };
+        if unsafe { CFGetTypeID(raw) } != CFArray::<CFType>::type_id() {
+            unsafe { CFRelease(raw) };
+            return Vec::new();
+        }
+        let array = unsafe { CFArray::<CFType>::wrap_under_create_rule(raw as CFArrayRef) };
+        array
+            .iter()
+            .filter_map(|item| {
+                let raw = item.as_CFTypeRef();
+                unsafe { CFRetain(raw) };
+                AxElement::from_owned(raw)
+            })
+            .collect()
+    }
+
+    /// The text nodes below the element, in document order. Chromium draws
+    /// the words of a rich-text field there and knows their geometry even when
+    /// the field itself answers an empty range rectangle.
+    fn collect_text_nodes(&self, depth: usize, out: &mut Vec<AxElement>) {
+        for child in self.children() {
+            if out.len() >= MAX_TEXT_NODES {
+                return;
+            }
+            if child.copy_string(ATTR_ROLE).as_deref() == Some(ROLE_STATIC_TEXT) {
+                out.push(child);
+            } else if depth > 0 {
+                child.collect_text_nodes(depth - 1, out);
+            }
+        }
+    }
+
+    /// Where each text node starts inside the field value (UTF-16).
+    fn text_runs(&self, field_text: &str) -> Vec<TextRun> {
+        let mut nodes = Vec::new();
+        self.collect_text_nodes(MAX_NODE_DEPTH, &mut nodes);
+        let mut runs = Vec::new();
+        let mut cursor = 0;
+        for element in nodes {
+            let Some(text) = element.field_value().filter(|text| !text.is_empty()) else {
+                continue;
+            };
+            let Some(found) = field_text.get(cursor..).and_then(|rest| rest.find(&text)) else {
+                continue;
+            };
+            let at = cursor + found;
+            runs.push(TextRun {
+                element,
+                start: field_text[..at].encode_utf16().count(),
+                len: text.encode_utf16().count(),
+                text: text.clone(),
+            });
+            cursor = at + text.len();
+        }
+        runs
+    }
+
+    /// Fallback for apps (Chromium: Teams, Outlook) that answer a multi-character
+    /// range with an empty rectangle: measure character by character and merge
+    /// the neighbours that sit on one line.
+    fn char_rects(&self, location: usize, fragment: &str) -> Vec<Rect> {
+        let mut rects: Vec<Rect> = Vec::new();
+        let mut offset = location;
+        for (index, ch) in fragment.chars().enumerate() {
+            let units = ch.len_utf16();
+            if !ch.is_whitespace() {
+                match self.range_rect(offset, units, &ch.to_string()) {
+                    Some(rect) => match rects.last_mut() {
+                        Some(last) if same_line(last, &rect) => *last = union(last, &rect),
+                        _ => rects.push(rect),
+                    },
+                    // Nothing measurable at the start: do not probe the rest.
+                    None if index == 0 => return Vec::new(),
+                    None => {}
                 }
             }
             offset += units;
@@ -371,6 +478,73 @@ impl AxElement {
             self.copy_element(ATTR_WINDOW)
                 .and_then(|window| window.frame())
         })
+    }
+}
+
+/// The text-node dump is logged once per run, not on every refresh.
+static CAPABILITIES_LOGGED: AtomicBool = AtomicBool::new(false);
+/// The last message of `log_once`: measuring repeats every 400 ms, the log must not.
+static LAST_LOGGED: Mutex<String> = Mutex::new(String::new());
+
+fn log_once(message: &str) {
+    let mut last = LAST_LOGGED.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if last.as_str() != message {
+        log::debug!("Grammar marks: {message}");
+        *last = message.to_string();
+    }
+}
+
+/// A text node of a rich-text field and the part of the field value it holds.
+struct TextRun {
+    element: AxElement,
+    /// UTF-16 offset of the node text inside the field value.
+    start: usize,
+    len: usize,
+    text: String,
+}
+
+/// Rectangles of `[location, location + fragment)` measured on the text nodes.
+fn run_rects(runs: &[TextRun], location: usize, fragment: &str) -> Vec<Rect> {
+    let end = location + fragment.encode_utf16().count();
+    let mut rects = Vec::new();
+    for run in runs {
+        let from = location.max(run.start);
+        let to = end.min(run.start + run.len);
+        if from >= to {
+            continue;
+        }
+        let Some(piece) = logic::utf16_slice(&run.text, from - run.start, to - run.start) else {
+            continue;
+        };
+        rects.extend(run.element.fragment_rects(from - run.start, &piece));
+    }
+    rects
+}
+
+/// A word is never taller than a couple of lines: a bigger rectangle is the
+/// app's answer for "the whole control", not for the word.
+fn is_word_rect(rect: &Rect, field: &Rect) -> bool {
+    rect.height <= MAX_WORD_HEIGHT
+        && rect.x >= field.x - RECT_SLACK
+        && rect.y >= field.y - RECT_SLACK
+        && rect.right() <= field.right() + RECT_SLACK
+        && rect.bottom() <= field.bottom() + RECT_SLACK
+}
+
+/// Both rectangles hold the same text line (they overlap mostly vertically).
+fn same_line(a: &Rect, b: &Rect) -> bool {
+    let overlap = a.bottom().min(b.bottom()) - a.y.max(b.y);
+    overlap >= a.height.min(b.height) * 0.5
+}
+
+fn union(a: &Rect, b: &Rect) -> Rect {
+    let x = a.x.min(b.x);
+    let y = a.y.min(b.y);
+    Rect {
+        x,
+        y,
+        width: a.right().max(b.right()) - x,
+        height: a.bottom().max(b.bottom()) - y,
     }
 }
 
@@ -1256,17 +1430,55 @@ pub(super) fn mark_geometry(
     text: &str,
     marks: &[MarkInput],
 ) -> Option<MarkGeometry> {
-    let (element, _, fallback) = current_field(field_id).ok()?;
-    let current = element.field_value()?;
+    let (element, _, fallback) = current_field(field_id)
+        .inspect_err(|e| log::debug!("Grammar marks: {e}"))
+        .ok()?;
+    let Some(current) = element.field_value() else {
+        log::debug!("Grammar marks: the field has no text value");
+        return None;
+    };
     // The field must still hold the text the offsets refer to.
-    let lead = logic::body_offset_utf16(&current, text)?;
-    let field_bounds = element.bounds().or(fallback)?;
+    let Some(lead) = logic::body_offset_utf16(&current, text) else {
+        log::debug!(
+            "Grammar marks: the field text ({} chars) differs from the checked text ({} chars)",
+            current.chars().count(),
+            text.chars().count()
+        );
+        return None;
+    };
+    let Some(field_bounds) = element.bounds().or(fallback) else {
+        log::debug!("Grammar marks: the field has no frame");
+        return None;
+    };
     let mut regions = Vec::new();
+    let mut runs: Option<Vec<TextRun>> = None;
     for mark in marks {
         let Some(fragment) = logic::utf16_slice(text, mark.start, mark.end) else {
             continue;
         };
-        let rects = element.fragment_rects(lead + mark.start, &fragment);
+        let location = lead + mark.start;
+        let mut rects = element.fragment_rects(location, &fragment);
+        rects.retain(|rect| is_word_rect(rect, &field_bounds));
+        if rects.is_empty() {
+            let runs = runs.get_or_insert_with(|| {
+                let runs = element.text_runs(&current);
+                log_once(&format!("{} text node(s) below the field", runs.len()));
+                if !CAPABILITIES_LOGGED.swap(true, Ordering::Relaxed) {
+                    for run in runs.iter().take(3) {
+                        log::debug!(
+                            "Grammar marks: text node {}+{} {:?} frame {:?}",
+                            run.start,
+                            run.len,
+                            run.text,
+                            run.element.frame()
+                        );
+                    }
+                }
+                runs
+            });
+            rects = run_rects(runs, location, &fragment);
+            rects.retain(|rect| is_word_rect(rect, &field_bounds));
+        }
         if !rects.is_empty() {
             regions.push((mark.id, rects));
         }
