@@ -10,6 +10,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import './styles/global.css';
+import { applyTheme } from './lib/theme';
+import { useSettingsStore } from './stores/settingsStore';
+
+// Тема (light/dark/system) из общего localStorage — до первого рендера, чтобы не мигало.
+applyTheme(useSettingsStore.getState().theme);
 
 function bindViewportBox(): void {
   const sync = () => {

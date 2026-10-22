@@ -13,6 +13,7 @@ import { OPEN_WRITING_EVENT, peekWritingDraft } from './lib/writingText';
 import { shouldSuggestSetupWizard } from './lib/setupProfile';
 import { useSettings, useApiKeysStatus } from './hooks/useSettings';
 import { useSyncActiveLanguage } from './hooks/useSyncActiveLanguage';
+import { useTheme } from './hooks/useTheme';
 
 // Lazy load pages — only load what's needed
 const VocabularyPage = lazy(() => import('./pages/vocabulary/VocabularyPage'));
@@ -56,6 +57,11 @@ function WritingDraftListener() {
 
 function LanguageSync() {
   useSyncActiveLanguage();
+  return null;
+}
+
+function ThemeSync() {
+  useTheme();
   return null;
 }
 
@@ -119,6 +125,7 @@ export default function App() {
     <>
       <AppLayout>
         <LanguageSync />
+        <ThemeSync />
         <WritingDraftListener />
         <RoutedPages />
       </AppLayout>

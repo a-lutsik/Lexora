@@ -1,0 +1,702 @@
+/* ============================================================
+   LEXORA — Shared UI patterns (Lingora)
+   Переиспользуемые классы для страниц: заголовок страницы, поля,
+   чипы, сегменты, kbd, точка статуса, теги, статистика, меню,
+   анатомия модалки. Страницы добавляют только свои отличия.
+   ============================================================ */
+
+/* ── Page skeleton ─────────────────────────────────────── */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding: 30px var(--page-gutter) 18px;
+  flex: none;
+}
+
+.page-header__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: -0.01em;
+  line-height: var(--line-height-tight);
+  color: var(--ink);
+}
+
+.page-subtitle {
+  color: var(--ink3);
+  font-size: var(--text-ui);
+  margin-top: 5px;
+}
+
+.page-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--page-gutter) var(--space-4);
+  flex: none;
+}
+
+.page-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--page-gutter);
+}
+
+/* Фокус-режим без сайдбара (study session): верхняя полоса */
+.focus-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--topbar-height);
+  padding: 0 var(--space-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--side);
+  flex: none;
+}
+
+/* ── Section label (12.5px, без капса) ─────────────────── */
+
+.section-label {
+  font-size: var(--text-label);
+  color: var(--ink3);
+  margin-bottom: var(--space-2);
+}
+
+.label {
+  display: block;
+  font-size: var(--text-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--ink2);
+  margin-bottom: 6px;
+}
+
+.label__optional {
+  font-weight: var(--font-weight-regular);
+  color: var(--ink3);
+  margin-inline-start: var(--space-1);
+}
+
+/* ── Text roles ────────────────────────────────────────── */
+
+.word {
+  font-family: var(--font-serif);
+  font-size: var(--text-word);
+  font-weight: var(--font-weight-medium);
+  color: var(--ink);
+}
+
+.translation {
+  font-size: var(--text-md);
+  color: var(--ink);
+}
+
+.ipa {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink3);
+  letter-spacing: 0;
+}
+
+.pos {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--text-ui);
+  color: var(--ink3);
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink2);
+  font-variant-numeric: tabular-nums;
+}
+
+.example {
+  padding: var(--space-2) var(--space-3);
+  border-inline-start: 2px solid var(--line2);
+  background: var(--sunk);
+  border-radius: 0 7px 7px 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--ink2);
+}
+
+.example u {
+  text-decoration-color: var(--acc);
+  text-underline-offset: 2px;
+  color: var(--ink);
+}
+
+/* ── Keyboard key ──────────────────────────────────────── */
+
+.kbd {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1;
+  padding: 3px 5px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  color: var(--ink3);
+  background: var(--surface);
+}
+
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-label);
+  color: var(--ink3);
+}
+
+/* ── Field (input / select trigger) ────────────────────── */
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--field-h);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--text-ui);
+  color: var(--ink);
+  min-width: 0;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.field:focus-within,
+.field.is-focused {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px var(--acc-soft);
+}
+
+.field--sm {
+  height: var(--control-h-sm);
+  font-size: var(--text-label);
+}
+
+.field--textarea {
+  height: auto;
+  min-height: 64px;
+  align-items: flex-start;
+  padding: 9px 11px;
+}
+
+.field__icon {
+  color: var(--ink3);
+  flex: none;
+}
+
+.field__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  color: var(--ink);
+  padding: 0;
+  height: 100%;
+}
+
+.field__input::placeholder {
+  color: var(--ink3);
+}
+
+/* The surrounding .field shows focus (:focus-within ring); the global
+   :focus-visible outline on the inner input would draw a second frame. */
+.field__input:focus,
+.field__input:focus-visible {
+  outline: none;
+}
+
+.field__input:disabled {
+  color: var(--ink3);
+}
+
+textarea.field__input {
+  resize: vertical;
+  height: auto;
+  line-height: var(--line-height-snug);
+}
+
+/* ── Filter chips (счётчик внутри) ─────────────────────── */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: 15px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  flex: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.chip:hover,
+.chip:focus-visible {
+  background: var(--sunk);
+  color: var(--ink);
+}
+
+.chip.is-active,
+.chip[aria-pressed='true'],
+.chip[aria-selected='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+
+.chip__count {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  opacity: 0.65;
+}
+
+/* ── Segmented control ─────────────────────────────────── */
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--sunk);
+  border-radius: var(--radius-md);
+  gap: 2px;
+  flex: none;
+}
+
+.seg__item {
+  height: var(--control-h-sm);
+  padding: 0 11px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  color: var(--ink2);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.seg__item:hover,
+.seg__item:focus-visible {
+  color: var(--ink);
+}
+
+.seg__item.is-active,
+.seg__item[aria-pressed='true'],
+.seg__item[aria-selected='true'],
+.seg__item[aria-checked='true'] {
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--ink);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ── SRS status: точка + подпись ───────────────────────── */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--ink2);
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink3);
+  flex: none;
+  display: inline-block;
+}
+
+.status-dot[data-status='new']       { background: var(--color-status-new); }
+.status-dot[data-status='learning']  { background: var(--color-status-learning); }
+.status-dot[data-status='review']    { background: var(--color-status-review); }
+.status-dot[data-status='mature']    { background: var(--color-status-mature); }
+.status-dot[data-status='suspended'] { background: var(--line2); }
+
+/* ── Tag (synonym, collocation) ────────────────────────── */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--sunk);
+  font-size: var(--text-label);
+  color: var(--ink2);
+  white-space: nowrap;
+}
+
+.tag--accent {
+  background: var(--acc-soft);
+  color: var(--acc-text);
+}
+
+.tag--ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.tag--live {
+  background: var(--live-soft);
+  color: var(--live);
+}
+
+.tag--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+/* ── Count pill (sidebar due, counters) ────────────────── */
+
+.count-pill {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--acc-soft);
+  color: var(--acc-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Stat grid (линии вместо карточек) ─────────────────── */
+
+.stat-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.stat-grid--plain {
+  background: transparent;
+}
+
+.stat {
+  padding: 14px 18px;
+  min-width: 0;
+}
+
+.stat + .stat {
+  border-inline-start: 1px solid var(--line);
+}
+
+.stat__label {
+  font-size: var(--text-label);
+  color: var(--ink3);
+}
+
+.stat__value {
+  font-family: var(--font-serif);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-medium);
+  margin-top: 2px;
+  color: var(--ink);
+}
+
+.stat__value--mono {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: var(--font-weight-regular);
+}
+
+/* ── Card / surface ────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.card--selectable {
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.card--selectable:hover,
+.card--selectable:focus-visible {
+  border-color: var(--line2);
+}
+
+.card.is-selected,
+.card--selectable[aria-pressed='true'],
+.card--selectable[aria-checked='true'] {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 1px var(--acc);
+}
+
+.well {
+  background: var(--sunk);
+  border-radius: var(--radius-md);
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  border: none;
+  margin: 0;
+}
+
+.divider--v {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  margin: 0 var(--space-1);
+}
+
+/* ── Progress bar ──────────────────────────────────────── */
+
+.progress {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.progress__fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--acc);
+  transition: width var(--transition-base);
+}
+
+/* ── Popover / menu ────────────────────────────────────── */
+
+.popover {
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  padding: 5px;
+  z-index: 40;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--control-h);
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-ui);
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: start;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible,
+.menu-item.is-active {
+  background: var(--sunk);
+}
+
+.menu-item__icon {
+  color: var(--ink2);
+}
+
+.menu-item__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-item__shortcut {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+
+.menu-item--danger {
+  color: var(--live);
+}
+
+/* ── Modal anatomy: заголовок · тело · футер ───────────── */
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  z-index: 100;
+  animation: fade-in var(--transition-base) both;
+}
+
+.modal {
+  width: min(540px, 100%);
+  max-height: calc(100% - var(--space-8));
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  animation: slide-up var(--transition-slow) both;
+}
+
+.modal--sm { width: min(420px, 100%); }
+.modal--md { width: min(520px, 100%); }
+.modal--lg { width: min(680px, 100%); }
+
+.modal__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 20px 22px 4px;
+  flex: none;
+}
+
+.modal__head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal__title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.modal__desc {
+  font-size: 13px;
+  color: var(--ink3);
+  margin: 4px 0 0;
+  line-height: var(--line-height-snug);
+}
+
+.modal__close {
+  flex: none;
+  margin: -6px -8px 0 0;
+}
+
+.modal__body {
+  padding: 16px 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow: auto;
+  min-height: 0;
+}
+
+.modal__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  flex: none;
+}
+
+.modal__foot .spacer,
+.spacer {
+  flex: 1;
+}
+
+/* ── Empty / inline states ─────────────────────────────── */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+  color: var(--ink3);
+  font-size: var(--text-ui);
+}
+
+.empty__title {
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
+  font-weight: var(--font-weight-medium);
+  color: var(--ink);
+}
+
+.inline-error {
+  font-size: var(--text-label);
+  color: var(--live);
+}
+
+.inline-note {
+  font-size: var(--text-label);
+  color: var(--ink3);
+}
+
+/* ── Row actions appear on hover (таблица остаётся спокойной) ── */
+
+.row-actions-hover {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.is-hoverable:hover .row-actions-hover,
+.is-hoverable:focus-within .row-actions-hover,
+.is-hoverable.is-selected .row-actions-hover {
+  opacity: 1;
+}

@@ -1,99 +1,186 @@
 /* ============================================================
-   LEXORA — Design Tokens
+   LEXORA — Design Tokens (Lingora visual language)
    Единственный источник цветов, отступов и типографики.
    Не используй магические числа нигде в коде — только var().
+
+   Палитра: тёплые нейтральные + один приглушённый индиго.
+   Красный — только ошибки и запись. Зелёный — успех/mature.
+   Светлая тема по умолчанию, тёмная — через [data-theme="dark"]
+   на <html> (см. src/lib/theme.ts).
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root,
+[data-theme='light'] {
+  /* ── Semantic surfaces (Lingora names) ───────────────── */
+  --desk:      oklch(0.93 0.008 75);   /* desk behind windows */
+  --bg:        oklch(0.99 0.003 80);   /* page background */
+  --side:      oklch(0.968 0.005 80);  /* sidebar / toolbars */
+  --surface:   oklch(1 0 0);           /* cards, inputs, menus */
+  --sunk:      oklch(0.955 0.006 80);  /* sunken wells, tags, hover rows */
+  --line:      oklch(0.915 0.007 80);  /* hairlines */
+  --line2:     oklch(0.86 0.009 80);   /* stronger lines, checkboxes */
+  --ink:       oklch(0.24 0.012 70);   /* primary text */
+  --ink2:      oklch(0.46 0.012 70);   /* secondary text */
+  --ink3:      oklch(0.6 0.01 70);     /* muted text, labels */
+  --acc:       oklch(0.5 0.12 268);    /* indigo accent (fills) */
+  --acc-hover: oklch(0.45 0.12 268);
+  --acc-ink:   #fff;                   /* text on accent fill */
+  --acc-soft:  oklch(0.95 0.022 268);  /* accent tint */
+  --acc-text:  oklch(0.46 0.12 268);   /* accent-coloured text */
+  --live:      oklch(0.58 0.17 27);    /* errors, recording, destructive */
+  --live-soft: oklch(0.95 0.03 27);
+  --ok:        oklch(0.55 0.11 155);
+  --ok-soft:   oklch(0.95 0.03 155);
+  --warn:      oklch(0.64 0.12 70);
+  --warn-soft: oklch(0.95 0.04 80);
+  --ov:        oklch(0.995 0.003 80);  /* floating overlays (popup/stickers) */
+  --scrim:     oklch(0.3 0.01 70 / 0.28);
+  --on-ink:    var(--bg);              /* text on --ink fill (active chips) */
+  --ov-glass:  oklch(0.995 0.003 80 / 0.86); /* translucent overlay (stickers over the desktop) */
+
+  /* Shadows (minimal, warm) */
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md:    0 12px 30px -8px rgba(0, 0, 0, 0.25);
+  --shadow-lg:    0 24px 60px -12px rgba(0, 0, 0, 0.35);
+  --shadow-xl:    0 30px 80px -24px rgba(0, 0, 0, 0.28);
+  --shadow-glass: var(--shadow-md);
+  --shadow-accent: none;
+
+  /* Window chrome (frameless overlays) */
+  --glass-bg:       var(--ov);
+  --glass-bg-light: var(--surface);
+  --glass-blur:     blur(24px);
+  --glass-border:   1px solid var(--line2);
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --desk:      oklch(0.13 0.005 70);
+  --bg:        oklch(0.195 0.006 70);
+  --side:      oklch(0.17 0.006 70);
+  --surface:   oklch(0.23 0.007 70);
+  --sunk:      oklch(0.255 0.007 70);
+  --line:      oklch(0.285 0.007 70);
+  --line2:     oklch(0.36 0.008 70);
+  --ink:       oklch(0.94 0.006 80);
+  --ink2:      oklch(0.76 0.008 80);
+  --ink3:      oklch(0.6 0.008 80);
+  --acc:       oklch(0.7 0.1 268);
+  --acc-hover: oklch(0.76 0.1 268);
+  --acc-ink:   oklch(0.17 0.02 268);
+  --acc-soft:  oklch(0.29 0.04 268);
+  --acc-text:  oklch(0.8 0.08 268);
+  --live:      oklch(0.68 0.15 27);
+  --live-soft: oklch(0.3 0.05 27);
+  --ok:        oklch(0.72 0.11 155);
+  --ok-soft:   oklch(0.29 0.04 155);
+  --warn:      oklch(0.78 0.11 75);
+  --warn-soft: oklch(0.3 0.04 75);
+  --ov:        oklch(0.21 0.006 70);
+  --scrim:     oklch(0.05 0.005 70 / 0.55);
+  --on-ink:    var(--bg);
+  --ov-glass:  oklch(0.21 0.006 70 / 0.86);
+
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md:    0 12px 30px -8px rgba(0, 0, 0, 0.6);
+  --shadow-lg:    0 24px 60px -12px rgba(0, 0, 0, 0.7);
+  --shadow-xl:    0 30px 80px -24px rgba(0, 0, 0, 0.7);
+
+  color-scheme: dark;
+}
 
 :root {
-  /* ── Colors: Backgrounds ───────────────────────────────── */
-  --color-bg-primary:      #0f0f13;
-  --color-bg-secondary:    #1a1a24;
-  --color-bg-elevated:     #22222f;
-  --color-bg-overlay:      rgba(15, 15, 19, 0.85);
+  /* ── Legacy aliases (старые имена → новая палитра) ────
+     Все страницы продолжают работать; новые стили используют
+     семантические имена выше. ─────────────────────────── */
+  --color-bg-primary:      var(--bg);
+  --color-bg-secondary:    var(--side);
+  --color-bg-elevated:     var(--surface);
+  --color-bg-sunk:         var(--sunk);
+  --color-bg-overlay:      var(--scrim);
 
-  /* ── Colors: Accent (Indigo) ──────────────────────────── */
-  --color-accent:          #6366f1;
-  --color-accent-hover:    #818cf8;
-  --color-accent-active:   #4f46e5;
-  /* Filled-accent surfaces under white text: --color-accent is 4.47:1, these meet WCAG AA (≥4.5:1). */
-  --color-accent-text:        #a5b4fc; /* accent-coloured text on --color-accent-dim chips (≥ 7:1) */
-  --color-accent-solid:       #5b5ef0;
-  --color-accent-solid-hover: #5154e8;
-  --color-accent-dim:      rgba(99, 102, 241, 0.15);
-  --color-accent-glow:     rgba(99, 102, 241, 0.25);
+  --color-accent:          var(--acc);
+  --color-accent-hover:    var(--acc-hover);
+  --color-accent-active:   var(--acc-hover);
+  --color-accent-text:     var(--acc-text);
+  --color-accent-solid:    var(--acc);
+  --color-accent-solid-hover: var(--acc-hover);
+  --color-accent-dim:      var(--acc-soft);
+  --color-accent-glow:     transparent;
+  --color-on-accent:       var(--acc-ink);
 
-  /* ── Colors: Semantic ─────────────────────────────────── */
-  --color-warn:            #f59e0b;   /* Amber — frequency badges */
-  --color-warn-dim:        rgba(245, 158, 11, 0.15);
-  --color-success:         #10b981;   /* Emerald — mature/learned */
-  --color-success-dim:     rgba(16, 185, 129, 0.15);
-  --color-danger:          #ef4444;
-  --color-danger-dim:      rgba(239, 68, 68, 0.15);
-  /* WCAG AA: #ef4444 как ТЕКСТ на тёмных/dim-фонах даёт только 3.6–4.4:1.
-     Для текста ошибок используй --color-danger-text (#f87171 → 4.9–6.9:1). */
-  --color-danger-text:     #f87171;
-  /* Белый текст на #ef4444 — 3.76:1 (FAIL). Для бейджей с белым текстом — #dc2626 (4.83:1). */
-  --color-danger-strong:   #dc2626;
-  --color-info:            #3b82f6;
-  --color-info-dim:        rgba(59, 130, 246, 0.15);
+  --color-warn:            var(--warn);
+  --color-warn-dim:        var(--warn-soft);
+  --color-success:         var(--ok);
+  --color-success-dim:     var(--ok-soft);
+  --color-danger:          var(--live);
+  --color-danger-dim:      var(--live-soft);
+  --color-danger-text:     var(--live);
+  --color-danger-strong:   var(--live);
+  --color-info:            var(--acc);
+  --color-info-dim:        var(--acc-soft);
 
-  /* ── Colors: Voice studio neon ────────────────────────── */
-  --color-neon-cyan:           #22d3ee;
-  --color-neon-cyan-text:      #67e8f9;
-  --color-neon-cyan-glow:      rgba(34, 211, 238, 0.45);
-  --color-neon-magenta:        #e879f9;
-  --color-neon-magenta-text:   #f0abfc;
-  --color-neon-magenta-glow:   rgba(232, 121, 249, 0.45);
-  --color-neon-green:          #34d399;
-  --color-neon-green-text:     #6ee7b7;
-  --color-neon-green-glow:     rgba(52, 211, 153, 0.45);
+  /* Бывший «неон» голосовых экранов — теперь приглушённые тона палитры. */
+  --color-neon-cyan:           var(--acc);
+  --color-neon-cyan-text:      var(--acc-text);
+  --color-neon-cyan-glow:      transparent;
+  --color-neon-magenta:        var(--live);
+  --color-neon-magenta-text:   var(--live);
+  --color-neon-magenta-glow:   transparent;
+  --color-neon-green:          var(--ok);
+  --color-neon-green-text:     var(--ok);
+  --color-neon-green-glow:     transparent;
 
-  /* ── Colors: Text ─────────────────────────────────────── */
-  --color-text-primary:    #f1f5f9;
-  --color-text-secondary:  #94a3b8;
-  /* WCAG AA fix: было #475569 (2.1–2.5:1 — FAIL). #7d92a8 даёт 5.96:1 на bg-primary,
-     5.38:1 на bg-secondary, 4.90:1 на bg-elevated. */
-  --color-text-muted:      #7d92a8;
-  --color-text-disabled:   #334155;
+  --color-text-primary:    var(--ink);
+  --color-text-secondary:  var(--ink2);
+  --color-text-muted:      var(--ink3);
+  --color-text-disabled:   var(--line2);
 
-  /* ── Colors: Borders ──────────────────────────────────── */
-  --color-border:          rgba(255, 255, 255, 0.08);
-  --color-border-hover:    rgba(255, 255, 255, 0.14);
-  --color-border-focus:    var(--color-accent);
+  --color-border:          var(--line);
+  --color-border-hover:    var(--line2);
+  --color-border-focus:    var(--acc);
 
-  /* ── SRS Status Colors ────────────────────────────────── */
-  --color-status-new:      #94a3b8;
-  --color-status-new-dim:  rgba(148, 163, 184, 0.15);
-  --color-status-learning: #60a5fa;
-  --color-status-learning-dim: rgba(96, 165, 250, 0.15);
-  --color-status-review:   #a5b4fc; /* WCAG AA: accent-hover на accent-dim/elevated давал 4.48:1; #a5b4fc → 6.7:1 */
-  --color-status-review-dim: var(--color-accent-dim);
-  --color-status-mature:   var(--color-success);
-  --color-status-mature-dim: var(--color-success-dim);
+  /* SRS status: точка + подпись (см. .status-dot в patterns.css) */
+  --color-status-new:          var(--ink3);
+  --color-status-new-dim:      var(--sunk);
+  --color-status-learning:     var(--warn);
+  --color-status-learning-dim: var(--warn-soft);
+  --color-status-review:       var(--acc);
+  --color-status-review-dim:   var(--acc-soft);
+  --color-status-mature:       var(--ok);
+  --color-status-mature-dim:   var(--ok-soft);
 
   /* ── Typography ───────────────────────────────────────── */
-  --font-sans:   'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono:   'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans:   'Onest', system-ui, -apple-system, sans-serif;      /* UI */
+  --font-serif:  'Literata', Georgia, 'Times New Roman', serif;      /* words & translations */
+  --font-mono:   'JetBrains Mono', 'Fira Code', ui-monospace, monospace; /* IPA, time, keys */
+  --font-icon:   'Material Symbols Rounded';
 
+  --text-2xs:    0.6875rem;  /* 11px — kbd, counters */
   --text-xs:     0.75rem;    /* 12px */
+  --text-label:  0.78125rem; /* 12.5px — labels, captions */
+  --text-ui:     0.84375rem; /* 13.5px — base UI size */
   --text-sm:     0.875rem;   /* 14px */
+  --text-md:     0.90625rem; /* 14.5px — translation in lists */
   --text-base:   1rem;       /* 16px */
+  --text-word:   1.0625rem;  /* 17px — word in lists (Literata) */
   --text-lg:     1.125rem;   /* 18px */
   --text-xl:     1.25rem;    /* 20px */
-  --text-2xl:    1.5rem;     /* 24px */
-  --text-3xl:    1.875rem;   /* 30px */
-  --text-4xl:    2.25rem;    /* 36px */
+  --text-2xl:    1.5rem;     /* 24px — stat values */
+  --text-3xl:    1.875rem;   /* 30px — page title */
+  --text-4xl:    2.5rem;     /* 40px — word in detail panel */
+  --text-hero:   3.75rem;    /* 60px — word in study session */
 
   --font-weight-regular: 400;
   --font-weight-medium:  500;
   --font-weight-semibold: 600;
-  --font-weight-bold:    700;
+  --font-weight-bold:    600; /* тяжелее 600 в Lingora не используется */
 
-  --line-height-tight:  1.25;
+  --line-height-tight:  1.15;
+  --line-height-snug:   1.45;
   --line-height-normal: 1.5;
-  --line-height-relaxed: 1.75;
+  --line-height-relaxed: 1.55;
 
   /* ── Spacing (4px base grid) ──────────────────────────── */
   --space-1:   0.25rem;   /*  4px */
@@ -102,60 +189,29 @@
   --space-4:   1rem;      /* 16px */
   --space-5:   1.25rem;   /* 20px */
   --space-6:   1.5rem;    /* 24px */
+  --space-7:   1.75rem;   /* 28px */
   --space-8:   2rem;      /* 32px */
+  --space-9:   2.25rem;   /* 36px — page gutter */
   --space-10:  2.5rem;    /* 40px */
   --space-12:  3rem;      /* 48px */
   --space-16:  4rem;      /* 64px */
 
-  /* ── Accessibility ────────────────────────────────────── */
+  /* ── Controls ─────────────────────────────────────────── */
+  --control-h:      34px;  /* buttons */
+  --control-h-sm:   28px;  /* compact buttons */
+  --field-h:        36px;  /* inputs, selects */
+  --row-h:          52px;  /* list rows */
+  --nav-item-h:     32px;
   --touch-target-min: 44px; /* AGENTS §10: min interactive target size */
 
   /* ── Border Radius ────────────────────────────────────── */
-  --radius-sm:   6px;
-  --radius-md:   10px;
-  --radius-lg:   16px;
-  --radius-xl:   20px;
-  --radius-2xl:  24px;
+  --radius-xs:   5px;   /* kbd */
+  --radius-sm:   6px;   /* tags, menu items */
+  --radius-md:   8px;   /* buttons, inputs, nav */
+  --radius-lg:   12px;  /* cards */
+  --radius-xl:   14px;  /* modals */
+  --radius-2xl:  16px;
   --radius-full: 9999px;
-
-  /* ── Shadows ──────────────────────────────────────────── */
-  --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-lg:    0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-xl:    0 16px 48px rgba(0, 0, 0, 0.7);
-  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.4),
-                  inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --shadow-accent: 0 0 24px rgba(99, 102, 241, 0.2);
-
-  /* ── Glassmorphism ────────────────────────────────────── */
-  --glass-bg:     rgba(15, 15, 19, 0.75);
-  --glass-bg-light: rgba(34, 34, 47, 0.7);
-  --glass-blur:   blur(24px);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.1);
-
-  /* ── Desktop stickers (src/stickers) ──────────────────── */
-  --sticker-surface:        rgba(18, 18, 26, 0.84);
-  --sticker-surface-solid:  rgba(18, 18, 26, 0.96);
-  --sticker-border:         rgba(255, 255, 255, 0.12);
-  --sticker-border-hover:   rgba(255, 255, 255, 0.2);
-  --sticker-control-bg:       rgba(255, 255, 255, 0.05);
-  --sticker-control-bg-hover: rgba(255, 255, 255, 0.15);
-  --sticker-shadow:        0 12px 32px rgba(0, 0, 0, 0.55),
-                           inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  --sticker-shadow-due:    0 12px 36px rgba(0, 0, 0, 0.6),
-                           0 0 20px rgba(99, 102, 241, 0.2);
-  --sticker-border-due:    rgba(99, 102, 241, 0.35);
-  --sticker-surface-mature: linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(18, 18, 26, 0.88) 55%);
-  --sticker-border-mature: rgba(16, 185, 129, 0.4);
-  --sticker-shadow-mature: 0 12px 36px rgba(0, 0, 0, 0.6),
-                           0 0 28px rgba(16, 185, 129, 0.35),
-                           inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  --sticker-success-border: rgba(16, 185, 129, 0.35);
-  --sticker-success-bg-hover: rgba(16, 185, 129, 0.3);
-  --sticker-success-glow:   0 0 10px rgba(16, 185, 129, 0.3);
-  --sticker-danger-border:  rgba(239, 68, 68, 0.35);
-  --sticker-danger-bg-hover: rgba(239, 68, 68, 0.3);
-  --sticker-danger-glow:    0 0 10px rgba(239, 68, 68, 0.3);
 
   /* ── Transitions ──────────────────────────────────────── */
   --transition-fast:   100ms ease;
@@ -164,11 +220,33 @@
   --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* ── Layout ───────────────────────────────────────────── */
-  --sidebar-width:    260px;
-  --topbar-height:    60px;
+  --sidebar-width:    220px;
+  --detail-width:     460px;
+  --topbar-height:    52px;
+  --page-gutter:      var(--space-9);
   --content-max-width: 1200px;
   --lang-select-width: 10rem;
   --scroll-fade-size:  var(--space-8);
+
+  /* ── Desktop stickers (src/stickers) ──────────────────── */
+  --sticker-surface:        var(--ov-glass);
+  --sticker-surface-solid:  var(--surface);
+  --sticker-border:         var(--line2);
+  --sticker-border-hover:   var(--ink3);
+  --sticker-control-bg:       var(--sunk);
+  --sticker-control-bg-hover: var(--line);
+  --sticker-shadow:        var(--shadow-md);
+  --sticker-shadow-due:    var(--shadow-md);
+  --sticker-border-due:    var(--acc);
+  --sticker-surface-mature: var(--ov-glass); /* статус показывает точка, не заливка */
+  --sticker-border-mature: var(--line2);
+  --sticker-shadow-mature: var(--shadow-md);
+  --sticker-success-border: var(--ok);
+  --sticker-success-bg-hover: var(--ok-soft);
+  --sticker-success-glow:   none;
+  --sticker-danger-border:  var(--live);
+  --sticker-danger-bg-hover: var(--live-soft);
+  --sticker-danger-glow:    none;
 }
 
 @media (prefers-reduced-motion: reduce) {

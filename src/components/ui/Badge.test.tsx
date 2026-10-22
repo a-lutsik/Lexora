@@ -19,7 +19,7 @@ describe('Badge', () => {
 describe('PosBadge', () => {
   it('renders the part of speech', () => {
     render(<PosBadge pos="noun" />);
-    expect(screen.getByText('noun')).toHaveClass('badge--neutral');
+    expect(screen.getByText('noun')).toHaveClass('pos');
   });
 
   it('renders nothing for null', () => {

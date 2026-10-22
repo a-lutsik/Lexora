@@ -1,13 +1,16 @@
 /* ============================================================
-   LEXORA — Button
+   LEXORA — Button (Lingora)
+   34px по умолчанию, 28px compact. Без свечений и трансформов.
+   primary — индиго, secondary — поверхность с линией, ghost — текст,
+   danger — красный только для деструктивных действий.
    ============================================================ */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  border: none;
+  gap: 6px;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   font-family: var(--font-sans);
   font-weight: var(--font-weight-medium);
@@ -15,124 +18,149 @@
   transition:
     background var(--transition-fast),
     color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    transform var(--transition-fast);
+    border-color var(--transition-fast);
   position: relative;
   flex-shrink: 0;
   text-decoration: none;
   white-space: nowrap;
+  line-height: 1;
 }
 
 .btn:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
 }
 
 /* ── Sizes ──────────────────────────────────────────────── */
 
-.btn--sm  { font-size: var(--text-xs);   padding: var(--space-1) var(--space-3); min-height: 32px; }
-.btn--md  { font-size: var(--text-sm);   padding: var(--space-2) var(--space-4); min-height: 38px; }
-.btn--lg  { font-size: var(--text-base); padding: var(--space-3) var(--space-6); min-height: 44px; }
+.btn--sm  { font-size: var(--text-label); padding: 0 10px; height: var(--control-h-sm); border-radius: 7px; }
+.btn--md  { font-size: var(--text-ui);    padding: 0 14px; height: var(--control-h); }
+.btn--lg  { font-size: var(--text-sm);    padding: 0 18px; height: 40px; }
 
 /* ── Variants ───────────────────────────────────────────── */
 
 .btn--primary {
-  background: var(--color-accent-solid);
-  color: white;
-  box-shadow: 0 0 0 0 var(--color-accent-glow);
+  background: var(--acc);
+  color: var(--acc-ink);
+  border-color: var(--acc);
 }
 
 .btn--primary:hover:not(:disabled),
 .btn--primary:focus-visible:not(:disabled) {
-  background: var(--color-accent-solid-hover);
-  box-shadow: 0 0 20px var(--color-accent-glow);
-  transform: translateY(-1px);
-}
-
-.btn--primary:active:not(:disabled) {
-  background: var(--color-accent-active);
-  transform: translateY(0);
+  background: var(--acc-hover);
+  border-color: var(--acc-hover);
 }
 
 .btn--secondary {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
-  border: 1px solid var(--color-border);
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
 }
 
 .btn--secondary:hover:not(:disabled),
 .btn--secondary:focus-visible:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: var(--color-border-hover);
+  background: var(--sunk);
+  border-color: var(--line2);
 }
 
 .btn--ghost {
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--ink2);
 }
 
 .btn--ghost:hover:not(:disabled),
 .btn--ghost:focus-visible:not(:disabled) {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
+  background: var(--sunk);
+  color: var(--ink);
 }
 
 .btn--danger {
-  background: var(--color-danger-dim);
-  color: var(--color-danger-text);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--live);
+  color: #fff;
+  border-color: var(--live);
 }
 
-.btn--danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.2);
+.btn--danger:hover:not(:disabled),
+.btn--danger:focus-visible:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+/* Текстовая деструктивная кнопка («Remove from vocabulary» в футере) */
+.btn--danger-ghost {
+  background: transparent;
+  color: var(--live);
+}
+
+.btn--danger-ghost:hover:not(:disabled),
+.btn--danger-ghost:focus-visible:not(:disabled) {
+  background: var(--live-soft);
+}
+
+/* ── Split button (Add word ▾) ──────────────────────────── */
+
+.btn-split {
+  display: inline-flex;
+}
+
+.btn-split > .btn:first-child {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.btn-split > .btn:last-child {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  padding: 0 9px;
+}
+
+.btn-split > .btn--primary:last-child {
+  border-inline-start-color: oklch(1 0 0 / 0.25);
 }
 
 /* ── Icon button ─────────────────────────────────────────── */
 
 .btn--icon {
   padding: 0;
-  border-radius: var(--radius-sm);
 }
 
-/* A11y: визуально 30/36px, кликабельная область ≥ 44×44px */
+/* A11y: визуально 28/34px, кликабельная область ≥ 44×44px */
 .btn--icon::after {
   content: '';
   position: absolute;
   border-radius: inherit;
 }
 
-.btn--icon.btn--sm { width: 30px; height: 30px; }
-.btn--icon.btn--sm::after { inset: -7px; }
-.btn--icon.btn--md { width: 36px; height: 36px; }
-.btn--icon.btn--md::after { inset: -4px; }
+.btn--icon.btn--sm { width: var(--control-h-sm); height: var(--control-h-sm); }
+.btn--icon.btn--sm::after { inset: -8px; }
+.btn--icon.btn--md { width: var(--control-h); height: var(--control-h); }
+.btn--icon.btn--md::after { inset: -5px; }
 
 /* ── Loading ─────────────────────────────────────────────── */
 
 .btn--loading .btn-content {
-  opacity: 0.5;
+  opacity: 0.4;
+}
+
+.btn-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .btn-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
   border-radius: 50%;
   position: absolute;
+  opacity: 0.7;
 }
 
 /* ── Focus ───────────────────────────────────────────────── */
 
 .btn:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--acc);
   outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .btn--primary:hover:not(:disabled),
-  .btn--primary:focus-visible:not(:disabled),
-  .btn--primary:active:not(:disabled) {
-    transform: none;
-  }
 }

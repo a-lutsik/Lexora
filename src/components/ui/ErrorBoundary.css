@@ -13,6 +13,7 @@
   height: 100%;
   min-height: 100%;
   padding: var(--space-6);
+  background: var(--bg);
 }
 
 .error-boundary-card {
@@ -23,23 +24,24 @@
   max-width: var(--error-boundary-card-width);
   padding: var(--space-6);
   text-align: center;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
 }
 
 .error-boundary-title {
   margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
+  font-weight: var(--font-weight-medium);
+  color: var(--ink);
 }
 
 .error-boundary-text {
   margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
+  font-size: var(--text-ui);
+  line-height: var(--line-height-snug);
+  color: var(--ink2);
 }
 
 .error-boundary-actions {

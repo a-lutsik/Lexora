@@ -2,9 +2,11 @@
    LEXORA — Global Styles
    ============================================================ */
 
+@import './fonts.css';
 @import './tokens.css';
 @import './typography.css';
 @import './animations.css';
+@import './patterns.css';
 
 *,
 *::before,
@@ -31,15 +33,16 @@ html {
 
 body {
   font-family: var(--font-sans);
-  font-size: var(--text-base);
+  font-size: var(--text-ui);
   font-weight: var(--font-weight-regular);
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-primary);
+  color: var(--ink);
+  background-color: var(--bg);
   line-height: var(--line-height-normal);
   height: 100%;
   width: 100%;
   overflow: hidden; /* Desktop app — no page scroll */
   user-select: none; /* Prevent text selection in app chrome */
+  transition: background-color var(--transition-base), color var(--transition-base);
 }
 
 #root {
@@ -53,10 +56,19 @@ input, textarea, [data-selectable] {
   user-select: text;
 }
 
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--acc-soft);
+  color: var(--ink);
+}
+
 /* ── Scrollbar ─────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -64,12 +76,15 @@ input, textarea, [data-selectable] {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-hover);
+  background: var(--line2);
   border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
+  background: var(--ink3);
+  background-clip: padding-box;
 }
 
 /* ── Focus ─────────────────────────────────────────────── */
@@ -78,21 +93,19 @@ input, textarea, [data-selectable] {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--acc);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 
 /* ── Links ─────────────────────────────────────────────── */
 a {
-  color: var(--color-accent-hover);
+  color: var(--acc-text);
   text-decoration: none;
   transition: color var(--transition-fast);
 }
 
 a:hover {
-  /* accent (#6366f1) даёт только 4.28:1 — ниже WCAG AA; выделяем подчёркиванием */
-  color: var(--color-accent-hover);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -120,37 +133,34 @@ a:hover {
 
 /* ── Shared audio (TTS) button — used in popup, vocabulary & study ── */
 .popup-audio-btn {
-  background: var(--color-accent-dim);
-  border: none;
-  color: var(--color-accent-hover);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
   cursor: pointer;
-  border-radius: var(--radius-full);
-  width: 26px;
-  height: 26px;
+  border-radius: 7px;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
   position: relative;
 }
 
-/* A11y: визуально 26px, но кликабельная область ≥ 44×44px (WCAG target size) */
+/* A11y: визуально 28px, но кликабельная область ≥ 44×44px (WCAG target size) */
 .popup-audio-btn::after {
   content: '';
   position: absolute;
-  inset: -9px;
+  inset: -8px;
   border-radius: inherit;
 }
 
-.popup-audio-btn:hover {
-  background: var(--color-accent-solid);
-  color: white;
+.popup-audio-btn:hover,
+.popup-audio-btn:focus-visible {
+  background: var(--sunk);
+  border-color: var(--line2);
 }
 
 /* ── Tauri drag region for frameless windows ─────────────
    В Tauri 2 атрибут data-tauri-drag-region обрабатывается
-   нативным JS внутри webview (mousedown → startDragging).
-   CSS-хак -webkit-app-region — это Electron-стиль, в Tauri
-   он игнорируется и не нужен. Кнопки внутри drag-региона
-   остаются кликабельными: drag стартует только с элемента,
-   у которого сам атрибут установлен. */
+   нативным JS внутри webview (mousedown → startDragging). */

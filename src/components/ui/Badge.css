@@ -1,13 +1,16 @@
 /* ============================================================
-   LEXORA — Badge
+   LEXORA — Badge (Lingora)
+   Статус SRS — точка и подпись, не цветная пилюля.
+   Остальные бейджи — мягкий фон без капса.
    ============================================================ */
 
 .badge {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   font-family: var(--font-sans);
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--radius-full);
+  font-weight: var(--font-weight-regular);
+  border-radius: var(--radius-sm);
   white-space: nowrap;
   flex-shrink: 0;
   line-height: 1;
@@ -16,65 +19,61 @@
 /* ── Sizes ──────────────────────────────────────────────── */
 
 .badge--sm {
-  font-size: var(--text-xs);
-  padding: 3px 8px;
+  font-size: var(--text-label);
+  height: 24px;
+  padding: 0 var(--space-2);
 }
 
 .badge--md {
-  font-size: var(--text-xs);
-  padding: 4px 10px;
+  font-size: 13px;
+  height: 26px;
+  padding: 0 10px;
 }
 
 /* ── Variants ───────────────────────────────────────────── */
 
 .badge--neutral {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--color-text-secondary);
+  background: var(--sunk);
+  color: var(--ink2);
 }
 
 .badge--accent {
-  background: var(--color-accent-dim);
-  color: var(--color-accent-hover);
+  background: var(--acc-soft);
+  color: var(--acc-text);
 }
 
 .badge--warn {
-  background: var(--color-warn-dim);
-  color: var(--color-warn);
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .badge--success {
-  background: var(--color-success-dim);
-  color: var(--color-success);
+  background: var(--ok-soft);
+  color: var(--ok);
 }
 
 .badge--danger {
-  background: var(--color-danger-dim);
-  color: var(--color-danger-text);
+  background: var(--live-soft);
+  color: var(--live);
 }
 
-/* ── SRS Status ─────────────────────────────────────────── */
+/* ── SRS Status: точка + подпись (прозрачный фон) ───────── */
 
-.badge--new {
-  background: var(--color-status-new-dim);
-  color: var(--color-status-new);
-}
-
-.badge--learning {
-  background: var(--color-status-learning-dim);
-  color: var(--color-status-learning);
-}
-
-.badge--review {
-  background: var(--color-status-review-dim);
-  color: var(--color-status-review);
-}
-
-.badge--mature {
-  background: var(--color-status-mature-dim);
-  color: var(--color-status-mature);
-}
-
+.badge--new,
+.badge--learning,
+.badge--review,
+.badge--mature,
 .badge--suspended {
-  background: rgba(100, 100, 120, 0.15);
-  color: var(--color-text-secondary);
+  background: transparent;
+  color: var(--ink2);
+  padding: 0;
+  height: auto;
+  font-size: 13px;
+  gap: 7px;
 }
+
+.badge--new .status-dot       { background: var(--color-status-new); }
+.badge--learning .status-dot  { background: var(--color-status-learning); }
+.badge--review .status-dot    { background: var(--color-status-review); }
+.badge--mature .status-dot    { background: var(--color-status-mature); }
+.badge--suspended .status-dot { background: var(--line2); }

@@ -9,6 +9,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StickerApp } from './stickers/StickerApp';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import './styles/global.css';
+import { startThemeSync } from './lib/themeSync';
+
+// Тема (light/dark/system) из общего localStorage — до первого рендера, чтобы не мигало;
+// дальше окно следует за сменой темы в главном окне (событие Tauri).
+startThemeSync();
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,6 +1,7 @@
 import { useI18n } from "../../hooks/useI18n";
 // ============================================================
 // LEXORA — Badge Component
+// Статус SRS — точка + подпись (Lingora), остальные — мягкий фон.
 // ============================================================
 
 import './Badge.css';
@@ -14,9 +15,13 @@ type BadgeProps = {
   size?: 'sm' | 'md';
 };
 
+const STATUS_VARIANTS: ReadonlySet<string> = new Set<SrsStatus>(['new', 'learning', 'review', 'mature', 'suspended']);
+
 export function Badge({ children, variant = 'neutral', size = 'sm' }: BadgeProps) {
+  const isStatus = STATUS_VARIANTS.has(variant);
   return (
     <span className={`badge badge--${variant} badge--${size}`}>
+      {isStatus && <span className="status-dot" data-status={variant} aria-hidden="true" />}
       {children}
     </span>
   );
@@ -38,7 +43,7 @@ export function SrsStatusBadge({ status }: { status: SrsStatus }) {
 
 export function PosBadge({ pos }: { pos: string | null }) {
   if (pos === null) return null;
-  return <Badge variant="neutral">{pos}</Badge>;
+  return <span className="pos">{pos}</span>;
 }
 
 // Обратная совместимость: компонент перенесён в domain/FreqBadge.

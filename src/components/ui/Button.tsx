@@ -4,7 +4,7 @@
 
 import './Button.css';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-ghost';
 type ButtonSize    = 'sm' | 'md' | 'lg';
 
 type ButtonProps = {
@@ -52,9 +52,10 @@ type IconButtonProps = {
   icon: React.ReactNode;
   'aria-label': string;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
-  variant?: 'ghost' | 'secondary';
+  variant?: 'ghost' | 'secondary' | 'danger-ghost';
   size?: 'sm' | 'md';
   disabled?: boolean;
+  className?: string;
 };
 
 export function IconButton({
@@ -64,11 +65,12 @@ export function IconButton({
   variant = 'ghost',
   size = 'md',
   disabled = false,
+  className,
 }: IconButtonProps) {
   return (
     <button
       type="button"
-      className={`btn btn--icon btn--${variant} btn--${size}`}
+      className={`btn btn--icon btn--${variant} btn--${size}${className ? ` ${className}` : ''}`}
       disabled={disabled}
       onClick={onClick}
       aria-label={ariaLabel}

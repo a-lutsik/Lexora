@@ -1,24 +1,40 @@
 /* ============================================================
    LEXORA — Typography
+   Onest — интерфейс; Literata — заголовки страниц, слова, переводы;
+   JetBrains Mono — IPA, время, клавиши, числа.
    ============================================================ */
 
 /* ── Headings ──────────────────────────────────────────── */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-sans);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
-  color: var(--color-text-primary);
+  color: var(--ink);
 }
 
-h1 { font-size: var(--text-4xl); }
-h2 { font-size: var(--text-3xl); }
-h3 { font-size: var(--text-2xl); }
-h4 { font-size: var(--text-xl); }
-h5 { font-size: var(--text-lg); }
-h6 { font-size: var(--text-base); }
+h1 {
+  font-family: var(--font-serif);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--text-3xl);
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-family: var(--font-serif);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--text-2xl);
+  letter-spacing: -0.01em;
+}
+
+h3 { font-family: var(--font-sans); font-size: 17px; }
+h4 { font-family: var(--font-sans); font-size: var(--text-md); }
+h5 { font-family: var(--font-sans); font-size: var(--text-ui); }
+h6 { font-family: var(--font-sans); font-size: var(--text-label); }
 
 /* ── Utility classes ───────────────────────────────────── */
+.text-2xs     { font-size: var(--text-2xs); }
 .text-xs      { font-size: var(--text-xs); }
+.text-label   { font-size: var(--text-label); }
+.text-ui      { font-size: var(--text-ui); }
 .text-sm      { font-size: var(--text-sm); }
 .text-base    { font-size: var(--text-base); }
 .text-lg      { font-size: var(--text-lg); }
@@ -26,25 +42,26 @@ h6 { font-size: var(--text-base); }
 .text-2xl     { font-size: var(--text-2xl); }
 .text-3xl     { font-size: var(--text-3xl); }
 
-.text-primary   { color: var(--color-text-primary); }
-.text-secondary { color: var(--color-text-secondary); }
-.text-muted     { color: var(--color-text-muted); }
-.text-accent    { color: var(--color-accent-hover); }
-.text-warn      { color: var(--color-warn); }
-.text-success   { color: var(--color-success); }
-.text-danger    { color: var(--color-danger-text); }
+.text-primary   { color: var(--ink); }
+.text-secondary { color: var(--ink2); }
+.text-muted     { color: var(--ink3); }
+.text-accent    { color: var(--acc-text); }
+.text-warn      { color: var(--warn); }
+.text-success   { color: var(--ok); }
+.text-danger    { color: var(--live); }
 
 .font-regular  { font-weight: var(--font-weight-regular); }
 .font-medium   { font-weight: var(--font-weight-medium); }
 .font-semibold { font-weight: var(--font-weight-semibold); }
 .font-bold     { font-weight: var(--font-weight-bold); }
 
-.font-mono { font-family: var(--font-mono); }
+.font-mono  { font-family: var(--font-mono); }
+.font-serif { font-family: var(--font-serif); }
 
 /* Phonetic transcription */
 .phonetic {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  letter-spacing: 0.01em;
+  font-size: 11.5px;
+  color: var(--ink3);
+  letter-spacing: 0;
 }
