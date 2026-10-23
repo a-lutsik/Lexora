@@ -12,11 +12,13 @@ const recorder = vi.hoisted(() => ({
   stop: vi.fn(),
   status: 'idle' as 'idle' | 'recording' | 'stopping',
   error: null as string | null,
+  options: {} as UseMicrophoneRecorderOptions,
   onAutoStop: undefined as ((clip: RecordedClip) => void) | undefined,
 }));
 
 vi.mock('../hooks/useMicrophoneRecorder', () => ({
   useMicrophoneRecorder: (options: UseMicrophoneRecorderOptions = {}) => {
+    recorder.options = options;
     recorder.onAutoStop = options.onAutoStop;
     return {
       status: recorder.status,
@@ -70,13 +72,28 @@ describe('VoiceTranslator', () => {
     mockBackend();
   });
 
-  it('listens on open, translates the clip and Accept inserts the translation', async () => {
+  it('waits for the microphone press instead of listening on open', async () => {
     renderWithQueryClient(<VoiceTranslator />);
 
-    await waitFor(() => expect(recorder.start).toHaveBeenCalledTimes(1));
-    await act(async () => {
-      recorder.onAutoStop?.(clip(true));
-    });
+    const mic = await screen.findByRole('button', { name: 'Start recording' });
+    await waitFor(() => expect(mic).toBeEnabled());
+    expect(recorder.start).not.toHaveBeenCalled();
+    expect(screen.getByText('Press the microphone, speak, then press stop.')).toBeInTheDocument();
+    // Long dictation: no silence auto-stop and a ceiling well above a few seconds.
+    expect(recorder.options.vadAutoStop).toBeFalsy();
+    expect(recorder.options.maxDurationMs).toBeGreaterThanOrEqual(60_000);
+
+    fireEvent.click(mic);
+    expect(recorder.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('Stop translates the clip and Accept inserts the translation', async () => {
+    recorder.status = 'recording';
+    recorder.stop.mockResolvedValue(clip(true));
+    renderWithQueryClient(<VoiceTranslator />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop recording' }));
+    expect(recorder.stop).toHaveBeenCalledWith({ forceHeard: true });
 
     expect(await screen.findByText('hi, how are you')).toBeInTheDocument();
     expect(screen.getByText('привет, как дела')).toBeInTheDocument();
@@ -94,10 +111,21 @@ describe('VoiceTranslator', () => {
     });
   });
 
+  it('Enter stops the recording', async () => {
+    recorder.status = 'recording';
+    recorder.stop.mockResolvedValue(clip(true));
+    renderWithQueryClient(<VoiceTranslator />);
+
+    await screen.findByRole('button', { name: 'Stop recording' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(recorder.stop).toHaveBeenCalledWith({ forceHeard: true });
+    expect(await screen.findByText('hi, how are you')).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith('accept_and_replace', expect.anything());
+  });
+
   it('does not call the AI when the recording had no speech', async () => {
     renderWithQueryClient(<VoiceTranslator />);
 
-    await waitFor(() => expect(recorder.start).toHaveBeenCalled());
     await act(async () => {
       recorder.onAutoStop?.(clip(false));
     });

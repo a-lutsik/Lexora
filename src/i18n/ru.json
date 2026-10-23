@@ -1565,5 +1565,6 @@
   "<1 m": "<1 мин",
   "{value1} m": "{value1} мин",
   "{value1} h": "{value1} ч",
-  "{value1} d": "{value1} д"
+  "{value1} d": "{value1} д",
+  "Press the microphone, speak, then press stop.": "Нажмите на микрофон, говорите, затем нажмите стоп."
 }

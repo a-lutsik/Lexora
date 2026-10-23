@@ -30,11 +30,13 @@ export type RecordedClip = {
 
 export type UseMicrophoneRecorderOptions = {
   vadAutoStop?: boolean;
+  /** Auto-stop ceiling for one take; defaults to MAX_RECORDING_MS. */
+  maxDurationMs?: number;
   onAutoStop?: (clip: RecordedClip) => void;
 };
 
 export function useMicrophoneRecorder(options: UseMicrophoneRecorderOptions = {}) {
-  const { vadAutoStop = false } = options;
+  const { vadAutoStop = false, maxDurationMs = MAX_RECORDING_MS } = options;
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
@@ -170,7 +172,7 @@ export function useMicrophoneRecorder(options: UseMicrophoneRecorderOptions = {}
         if (captureRef.current) {
           stopAndNotify();
         }
-      }, MAX_RECORDING_MS);
+      }, maxDurationMs);
       if (capture.analyser) {
         startVadLoop();
       }
@@ -182,7 +184,7 @@ export function useMicrophoneRecorder(options: UseMicrophoneRecorderOptions = {}
       setError(microphoneErrorMessage(err));
       return false;
     }
-  }, [cleanupStream, startVadLoop, status, stopAndNotify]);
+  }, [cleanupStream, maxDurationMs, startVadLoop, status, stopAndNotify]);
 
   return { status, error, analyser, start, stop };
 }

@@ -1,8 +1,8 @@
 // ============================================================
 // LEXORA — VoiceTranslator Component
-// Voice hotkey mode: listens right away, stops on silence,
-// translates the clip and Accept inserts the translation into
-// the field that had the cursor.
+// Voice hotkey mode: the user starts and stops the microphone,
+// the clip is translated on stop and Accept inserts the
+// translation into the field that had the cursor.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -27,6 +27,8 @@ type CapturedClip = {
 };
 
 const MS_PER_SECOND = 1000;
+/** Manual stop: room for a long dictation; ~11 MB of 48 kHz WAV, under the STT upload limit. */
+const VOICE_MAX_RECORDING_MS = 2 * 60 * MS_PER_SECOND;
 /** Key name on the keycap, not interface copy. */
 const ESC_KEY_LABEL = 'Esc';
 const SECONDS_PER_MINUTE = 60;
@@ -51,7 +53,6 @@ export function VoiceTranslator() {
   const targetRef = useRef(targetLang);
   targetRef.current = targetLang;
   const langMenuOpenRef = useRef(false);
-  const startedRef = useRef(false);
 
   const translateClip = useCallback(
     (clip: CapturedClip, target: string) => {
@@ -96,8 +97,9 @@ export function VoiceTranslator() {
     [t, translateClip],
   );
 
+  // No VAD auto-stop: pauses while dictating must not end the take.
   const recorder = useMicrophoneRecorder({
-    vadAutoStop: true,
+    maxDurationMs: VOICE_MAX_RECORDING_MS,
     onAutoStop: (clip) => void handleClip(clip),
   });
   const { start: startRecorder, stop: stopRecorder } = recorder;
@@ -124,19 +126,11 @@ export function VoiceTranslator() {
     void startRecorder();
   }, [startRecorder, translateMutation]);
 
-  // Start listening as soon as the hotkey opened the popup and the target
-  // language from Settings is known (a clip sent before would use the fallback).
-  useEffect(() => {
-    if (!settingsReady || startedRef.current) return;
-    startedRef.current = true;
-    listen();
-  }, [listen, settingsReady]);
-
-  const handleStop = () => {
+  const handleStop = useCallback(() => {
     void stopRecorder({ forceHeard: true })
       .then((clip) => handleClip(clip))
       .catch(() => undefined);
-  };
+  }, [handleClip, stopRecorder]);
 
   const handleTargetChange = (next: string) => {
     setTargetLang(next);
@@ -168,14 +162,20 @@ export function VoiceTranslator() {
         handleClose();
         return;
       }
-      if (event.key === 'Enter' && translatedText) {
+      if (event.key !== 'Enter') return;
+      if (isRecording) {
+        event.preventDefault();
+        handleStop();
+        return;
+      }
+      if (translatedText && !isBusy) {
         event.preventDefault();
         void handleAccept();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleAccept, handleClose, translatedText]);
+  }, [handleAccept, handleClose, handleStop, isBusy, isRecording, translatedText]);
 
   const micError = recorder.error;
   const status = isRecording
@@ -184,7 +184,9 @@ export function VoiceTranslator() {
       ? t('Finishing the recording…')
       : translateMutation.isPending
         ? t('Translating…')
-        : null;
+        : result || error || micError
+          ? null
+          : t('Press the microphone, speak, then press stop.');
 
   return (
     <div className="popup-card voice-translator">
@@ -234,7 +236,8 @@ export function VoiceTranslator() {
           type="button"
           className={`voice-translator-mic${isRecording ? ' recording' : ''}`}
           onClick={isRecording ? handleStop : listen}
-          disabled={isBusy}
+          // Wait for the target language from Settings; a clip sent before would use the fallback.
+          disabled={isBusy || (!isRecording && !settingsReady)}
           aria-label={isRecording ? t('Stop recording') : t('Start recording')}
           aria-pressed={isRecording}
         >

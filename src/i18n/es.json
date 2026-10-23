@@ -1559,5 +1559,6 @@
   "<1 m": "<1 min",
   "{value1} m": "{value1} min",
   "{value1} h": "{value1} h",
-  "{value1} d": "{value1} d"
+  "{value1} d": "{value1} d",
+  "Press the microphone, speak, then press stop.": "Pulsa el micrófono, habla y luego pulsa detener."
 }
