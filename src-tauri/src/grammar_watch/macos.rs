@@ -154,6 +154,34 @@ extern "C" {
     fn CFEqual(a: CFTypeRef, b: CFTypeRef) -> u8;
 }
 
+/// `kCGAnyInputEventType`: the time since the last event of any input type.
+const ANY_INPUT_EVENT_TYPE: u32 = u32::MAX;
+
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGEventSourceSecondsSinceLastEventType(
+        state_id: CGEventSourceStateID,
+        event_type: u32,
+    ) -> f64;
+}
+
+/// When the user last pressed a key, clicked, scrolled or moved the pointer
+/// (in any app). `None` when unknown: callers then read as if there was input.
+pub(super) fn last_input() -> Option<Instant> {
+    let idle = unsafe {
+        CGEventSourceSecondsSinceLastEventType(
+            CGEventSourceStateID::HIDSystemState,
+            ANY_INPUT_EVENT_TYPE,
+        )
+    };
+    let idle = Duration::try_from_secs_f64(idle).ok()?;
+    Instant::now().checked_sub(idle)
+}
+
+/// A fix was written or the watcher was reset: read the field on the next
+/// probe even without user input.
+static FORCE_READ: AtomicBool = AtomicBool::new(false);
+
 /// Owned AXUIElement. AX elements are immutable CF objects: retain/release
 /// and AX calls are safe from any thread.
 struct AxElement(AXUIElementRef);
@@ -622,6 +650,36 @@ struct FieldSnapshot {
     pid: i32,
     app: AppInfo,
     text: String,
+    /// The text was read on this probe (not reused: no input since).
+    read: bool,
+}
+
+/// The focused field of the last probe and its last read.
+struct FocusMemo {
+    element: AxElement,
+    read_at: Instant,
+    read: FieldRead,
+}
+
+#[derive(Clone)]
+enum FieldRead {
+    Text(String),
+    TooLong,
+    NoText,
+}
+
+fn read_field(element: &AxElement) -> FieldRead {
+    let max_chars = i64::try_from(logic::MAX_CHECK_CHARS).unwrap_or(i64::MAX);
+    if element
+        .copy_i64(ATTR_CHAR_COUNT)
+        .is_some_and(|count| count > max_chars)
+    {
+        return FieldRead::TooLong;
+    }
+    match element.field_value() {
+        Some(text) => FieldRead::Text(text),
+        None => FieldRead::NoText,
+    }
 }
 
 /// Why there is no eligible field — reported to the Settings status line.
@@ -649,16 +707,26 @@ enum Probe {
     Field(FieldSnapshot),
 }
 
-fn probe(system: &AxElement, own_pid: i32, config: &WatchConfig, cache: &mut AppCache) -> Probe {
+fn probe(
+    system: &AxElement,
+    own_pid: i32,
+    config: &WatchConfig,
+    cache: &mut AppCache,
+    memo: &mut Option<FocusMemo>,
+) -> Probe {
     let Some(app_element) = system.copy_element(ATTR_FOCUSED_APP) else {
+        *memo = None;
         return Skipped::probe(ActivityCode::NoField, None, None);
     };
     let Some(pid) = app_element.pid() else {
+        *memo = None;
         return Skipped::probe(ActivityCode::NoField, None, None);
     };
     if pid == own_pid {
         return Probe::OwnApp;
     }
+    // Put back only when the same field is probed to the end.
+    let known = memo.take();
     let app = cache.info(pid);
     if logic::is_app_excluded(app.bundle_id.as_deref(), &config.excluded_apps) {
         return Skipped::probe(ActivityCode::ExcludedApp, Some(&app), app.bundle_id.clone());
@@ -679,26 +747,58 @@ fn probe(system: &AxElement, own_pid: i32, config: &WatchConfig, cache: &mut App
         };
         return Skipped::probe(ActivityCode::UnsupportedField, Some(&app), detail);
     }
-    let max_chars = i64::try_from(logic::MAX_CHECK_CHARS).unwrap_or(i64::MAX);
-    if element
-        .copy_i64(ATTR_CHAR_COUNT)
-        .is_some_and(|count| count > max_chars)
-    {
-        return Skipped::probe(ActivityCode::FieldTooLong, Some(&app), None);
-    }
-    let Some(text) = element.field_value() else {
-        return Skipped::probe(
+    // The same field and no input since it was read: its text cannot have
+    // changed, so the app is not asked again.
+    let forced = FORCE_READ.swap(false, Ordering::Relaxed);
+    let known = known.filter(|known| known.element.same_as(&element));
+    let fresh = forced
+        || known
+            .as_ref()
+            .is_none_or(|known| logic::text_read_due(last_input(), known.read_at, Instant::now()));
+    let (read_at, read) = match known {
+        Some(known) if !fresh => (known.read_at, known.read),
+        _ => (Instant::now(), read_field(&element)),
+    };
+    *memo = Some(FocusMemo {
+        element: element.clone(),
+        read_at,
+        read: read.clone(),
+    });
+    match read {
+        FieldRead::TooLong => Skipped::probe(ActivityCode::FieldTooLong, Some(&app), None),
+        FieldRead::NoText => Skipped::probe(
             ActivityCode::UnsupportedField,
             Some(&app),
             Some("no text value".to_string()),
-        );
-    };
-    Probe::Field(FieldSnapshot {
-        element,
-        pid,
-        app,
-        text,
-    })
+        ),
+        FieldRead::Text(text) => Probe::Field(FieldSnapshot {
+            element,
+            pid,
+            app,
+            text,
+            read: fresh,
+        }),
+    }
+}
+
+fn log_probe_cost(summary: &logic::PollSummary, app: Option<&str>, read: bool, next: Duration) {
+    log::debug!(
+        "Writing check probe: {:?} (slowest {:?}, text read in {} of {} probes), app {}, read now: {read}, next poll in {next:?}",
+        summary.last,
+        summary.slowest,
+        summary.reads,
+        summary.probes,
+        app.unwrap_or("-"),
+    );
+}
+
+/// App name and whether the text was read, for the probe-cost log.
+fn probe_summary(probe: &Probe) -> (Option<String>, bool) {
+    match probe {
+        Probe::OwnApp => (Some("Lexora".to_string()), false),
+        Probe::Nothing(skipped) => (skipped.app.as_ref().and_then(|app| app.name.clone()), false),
+        Probe::Field(snapshot) => (snapshot.app.name.clone(), snapshot.read),
+    }
 }
 
 // ── Watcher state ────────────────────────────────────────
@@ -769,7 +869,9 @@ fn run(app: AppHandle) {
     let own_pid = i32::try_from(std::process::id()).unwrap_or(-1);
     let mut cache = AppCache::default();
     let mut system: Option<AxElement> = None;
+    let mut memo: Option<FocusMemo> = None;
     let mut language_checked = Instant::now();
+    let mut stats = logic::PollStats::new(Instant::now());
     loop {
         let config = config_snapshot(&app);
         if !config.enabled {
@@ -789,11 +891,24 @@ fn run(app: AppHandle) {
         if system.is_none() {
             system = AxElement::system_wide();
         }
-        if let Some(system) = system.as_ref() {
-            let observed = probe(system, own_pid, &config, &mut cache);
-            tick(&app, observed, &config);
-        }
-        thread::sleep(POLL_INTERVAL);
+        let interval = match system.as_ref() {
+            Some(system) => {
+                let started = Instant::now();
+                let observed = probe(system, own_pid, &config, &mut cache, &mut memo);
+                let (app_name, read) = probe_summary(&observed);
+                tick(&app, observed, &config);
+                let spent = started.elapsed();
+                // A slow app (each AX call waits for its main thread) is asked less often.
+                let interval =
+                    logic::next_poll_interval(spent, POLL_INTERVAL, logic::MAX_POLL_INTERVAL);
+                if let Some(summary) = stats.record(spent, read, Instant::now()) {
+                    log_probe_cost(&summary, app_name.as_deref(), read, interval);
+                }
+                interval
+            }
+            None => POLL_INTERVAL,
+        };
+        thread::sleep(interval);
     }
 }
 
@@ -811,6 +926,8 @@ fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
         }
         let checkable = |text: &str| logic::text_is_checkable(text, &config.language);
         let mut field_changed = false;
+        // No input since the last read: the field has not moved either.
+        let mut fresh_read = false;
         let decision = match observed {
             // Keep the last report: the user may be reading it in Settings.
             Probe::OwnApp => return,
@@ -826,6 +943,7 @@ fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
                 watcher.state.observe(None, checkable, now)
             }
             Probe::Field(snapshot) => {
+                fresh_read = snapshot.read;
                 let same = watcher
                     .field
                     .as_ref()
@@ -890,7 +1008,7 @@ fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
                 }
             }
             Decision::Nothing => {
-                if watcher.visible {
+                if watcher.visible && (fresh_read || collapsed) {
                     if let Some(field) = watcher.field.as_ref() {
                         actions.push(UiAction::Place {
                             element: field.element.clone(),
@@ -1144,6 +1262,7 @@ fn hide_window(app: &AppHandle) {
 /// Forget the field and hide the badge (feature off, app excluded).
 pub fn reset(app: &AppHandle) {
     *lock_watcher() = None;
+    FORCE_READ.store(true, Ordering::Relaxed);
     hide_window(app);
 }
 
@@ -1219,6 +1338,8 @@ pub fn apply_fix(
     let (element, pid, _) = current_field(field_id)?;
     set_writing(true);
     let result = write_text(app, &element, pid, checked, corrected);
+    // The field changed without user input: the next probe must read it.
+    FORCE_READ.store(true, Ordering::Relaxed);
     {
         let mut guard = lock_watcher();
         if let Some(watcher) = guard.as_mut() {

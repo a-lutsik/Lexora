@@ -65,6 +65,7 @@ export const QUERY_KEYS = {
   GRAMMAR_WATCH_SETTINGS: 'grammar-watch-settings',
   GRAMMAR_WATCH_STATUS: 'grammar-watch-status',
   GRAMMAR_CHECK: 'grammar-check',
+  GRAMMAR_CHECK_PARAGRAPH: 'grammar-check-paragraph',
 } as const;
 
 /** Most underlines drawn in another app's field at once (keep in sync with `MAX_MARKS` in grammar_watch/mod.rs). */

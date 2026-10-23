@@ -20,6 +20,7 @@ use crate::error::AppError;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -39,18 +40,22 @@ use windows::Win32::System::Ole::{
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
+use windows::Win32::System::SystemInformation::GetTickCount;
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::Accessibility::{
-    CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTextPattern,
-    IUIAutomationValuePattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
-    TextUnit_Character, UIA_ComboBoxControlTypeId, UIA_DocumentControlTypeId,
-    UIA_EditControlTypeId, UIA_IsReadOnlyAttributeId, UIA_TextPatternId, UIA_ValuePatternId,
+    CUIAutomation, IUIAutomation, IUIAutomationCacheRequest, IUIAutomationElement,
+    IUIAutomationTextPattern, IUIAutomationTextRange, IUIAutomationValuePattern,
+    TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start, TextUnit_Character,
+    UIA_ClassNamePropertyId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
+    UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_IsPasswordPropertyId,
+    UIA_IsReadOnlyAttributeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId,
+    UIA_ProcessIdPropertyId, UIA_RuntimeIdPropertyId, UIA_TextPatternId, UIA_ValuePatternId,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-    VIRTUAL_KEY, VK_A, VK_CONTROL, VK_DELETE, VK_V,
+    GetLastInputInfo, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
+    KEYEVENTF_KEYUP, LASTINPUTINFO, VIRTUAL_KEY, VK_A, VK_CONTROL, VK_DELETE, VK_V,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClassNameW, GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongPtrW,
@@ -115,20 +120,89 @@ const ROLE_SECURE: &str = "AXSecureTextField";
 #[derive(Clone)]
 enum Elem {
     /// A UI Automation element.
-    Uia(IUIAutomationElement),
+    Uia(UiaElem),
     /// A plain Win32 window driven by window messages only (Scintilla):
     /// UI Automation is never called for it, because its provider chain
     /// crashed the process while typing in Notepad++.
     Win32(HWND),
 }
 
+/// A UI Automation element and, once it is the tracked field, its control
+/// patterns. Every call on them is served on the watched app's UI thread,
+/// so they are fetched once per focused element, not on every probe.
+/// Pattern objects are as agile as the element (see `Elem`).
+#[derive(Clone)]
+struct UiaElem {
+    element: IUIAutomationElement,
+    /// `None` until `Elem::with_patterns`; the getters then ask the element.
+    patterns: Option<Patterns>,
+}
+
+#[derive(Clone)]
+struct Patterns {
+    value: Option<IUIAutomationValuePattern>,
+    text: Option<IUIAutomationTextPattern>,
+}
+
 impl Elem {
+    fn from_uia(element: IUIAutomationElement) -> Self {
+        Elem::Uia(UiaElem {
+            element,
+            patterns: None,
+        })
+    }
+
     fn uia(&self) -> Option<&IUIAutomationElement> {
         match self {
-            Elem::Uia(element) => Some(element),
+            Elem::Uia(uia) => Some(&uia.element),
             Elem::Win32(_) => None,
         }
     }
+
+    /// Fetch the control patterns once and keep them with the element.
+    fn with_patterns(mut self) -> Self {
+        self.ensure_patterns();
+        self
+    }
+
+    /// Fetch the control patterns unless one is already kept. An app that
+    /// builds its accessibility tree lazily may expose none at first, so a
+    /// later read asks again. `true` when a pattern was obtained just now.
+    fn ensure_patterns(&mut self) -> bool {
+        let Elem::Uia(uia) = self else {
+            return false;
+        };
+        if uia
+            .patterns
+            .as_ref()
+            .is_some_and(|patterns| patterns.value.is_some() || patterns.text.is_some())
+        {
+            return false;
+        }
+        let element = &uia.element;
+        let patterns = Patterns {
+            value: unsafe {
+                element.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
+            }
+            .ok(),
+            text: unsafe {
+                element.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+            }
+            .ok(),
+        };
+        let obtained = patterns.value.is_some() || patterns.text.is_some();
+        uia.patterns = Some(patterns);
+        obtained
+    }
+}
+
+/// A property fetched with the focus query (`focus_cache_request`), or asked
+/// live when the element came without it. Reading a cached value is local.
+fn cached_or_current<T>(
+    cached: windows::core::Result<T>,
+    current: impl FnOnce() -> windows::core::Result<T>,
+) -> Option<T> {
+    cached.or_else(|_| current()).ok()
 }
 
 fn window_class(window: HWND) -> String {
@@ -220,11 +294,15 @@ impl Elem {
     fn scintilla(&self) -> Option<HWND> {
         match self {
             Elem::Win32(window) => Some(*window),
-            Elem::Uia(element) => {
+            Elem::Uia(uia) => {
                 if !self.class_name().eq_ignore_ascii_case(SCINTILLA_CLASS) {
                     return None;
                 }
-                let window = unsafe { element.CurrentNativeWindowHandle() }.ok()?;
+                let element = &uia.element;
+                let window =
+                    cached_or_current(unsafe { element.CachedNativeWindowHandle() }, || unsafe {
+                        element.CurrentNativeWindowHandle()
+                    })?;
                 (!window.0.is_null()).then_some(window)
             }
         }
@@ -254,9 +332,11 @@ impl Elem {
 impl Elem {
     fn same_as(&self, other: &Elem, automation: &IUIAutomation) -> bool {
         match (self, other) {
-            (Elem::Uia(a), Elem::Uia(b)) => unsafe { automation.CompareElements(a, b) }
-                .map(|same| same.as_bool())
-                .unwrap_or(false),
+            (Elem::Uia(a), Elem::Uia(b)) => {
+                unsafe { automation.CompareElements(&a.element, &b.element) }
+                    .map(|same| same.as_bool())
+                    .unwrap_or(false)
+            }
             (Elem::Win32(a), Elem::Win32(b)) => a == b,
             _ => false,
         }
@@ -264,9 +344,13 @@ impl Elem {
 
     fn pid(&self) -> Option<u32> {
         match self {
-            Elem::Uia(element) => unsafe { element.CurrentProcessId() }
-                .ok()
-                .and_then(|pid| u32::try_from(pid).ok()),
+            Elem::Uia(uia) => {
+                let element = &uia.element;
+                cached_or_current(unsafe { element.CachedProcessId() }, || unsafe {
+                    element.CurrentProcessId()
+                })
+                .and_then(|pid| u32::try_from(pid).ok())
+            }
             Elem::Win32(window) => {
                 let mut pid = 0u32;
                 unsafe { GetWindowThreadProcessId(*window, Some(&mut pid)) };
@@ -277,45 +361,83 @@ impl Elem {
 
     fn class_name(&self) -> String {
         match self {
-            Elem::Uia(element) => unsafe { element.CurrentClassName() }
+            Elem::Uia(uia) => {
+                let element = &uia.element;
+                cached_or_current(unsafe { element.CachedClassName() }, || unsafe {
+                    element.CurrentClassName()
+                })
                 .map(|name| name.to_string())
-                .unwrap_or_default(),
+                .unwrap_or_default()
+            }
             Elem::Win32(window) => window_class(*window),
         }
     }
 
     fn name(&self) -> String {
         self.uia()
-            .and_then(|element| unsafe { element.CurrentName() }.ok())
+            .and_then(|element| {
+                cached_or_current(unsafe { element.CachedName() }, || unsafe {
+                    element.CurrentName()
+                })
+            })
             .map(|name| name.to_string())
             .unwrap_or_default()
     }
 
     fn is_password(&self) -> bool {
         self.uia()
-            .and_then(|element| unsafe { element.CurrentIsPassword() }.ok())
+            .and_then(|element| {
+                cached_or_current(unsafe { element.CachedIsPassword() }, || unsafe {
+                    element.CurrentIsPassword()
+                })
+            })
             .is_some_and(|flag| flag.as_bool())
     }
 
     fn value_pattern(&self) -> Option<IUIAutomationValuePattern> {
-        let element = self.uia()?;
-        unsafe { element.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) }.ok()
+        let Elem::Uia(uia) = self else {
+            return None;
+        };
+        match uia.patterns.as_ref() {
+            Some(patterns) => patterns.value.clone(),
+            None => unsafe {
+                uia.element
+                    .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
+            }
+            .ok(),
+        }
     }
 
     fn text_pattern(&self) -> Option<IUIAutomationTextPattern> {
-        let element = self.uia()?;
-        unsafe { element.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId) }.ok()
+        let Elem::Uia(uia) = self else {
+            return None;
+        };
+        match uia.patterns.as_ref() {
+            Some(patterns) => patterns.text.clone(),
+            None => unsafe {
+                uia.element
+                    .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+            }
+            .ok(),
+        }
     }
 
     fn is_read_only(&self) -> bool {
+        if self.scintilla().is_some() {
+            return self.quick_read_only();
+        }
+        self.quick_read_only() || self.text_is_read_only()
+    }
+
+    /// The read-only signals that cost one call: checked before every fresh
+    /// read (Notepad++ switches documents inside one Scintilla window).
+    fn quick_read_only(&self) -> bool {
         if let Some(window) = self.scintilla() {
             return sci_send(window, SCI_GETREADONLY, 0, 0).is_none_or(|flag| flag != 0);
         }
-        let value_read_only = self
-            .value_pattern()
+        self.value_pattern()
             .and_then(|pattern| unsafe { pattern.CurrentIsReadOnly() }.ok())
-            .is_some_and(|flag| flag.as_bool());
-        value_read_only || self.text_is_read_only()
+            .is_some_and(|flag| flag.as_bool())
     }
 
     /// Word-style editors (Outlook) have no ValuePattern: ask the text range.
@@ -353,7 +475,7 @@ impl Elem {
 
     fn bounds(&self) -> Option<Rect> {
         let rect = match self {
-            Elem::Uia(element) => unsafe { element.CurrentBoundingRectangle() }.ok()?,
+            Elem::Uia(uia) => unsafe { uia.element.CurrentBoundingRectangle() }.ok()?,
             Elem::Win32(window) => {
                 let mut rect = RECT::default();
                 unsafe { GetWindowRect(*window, &mut rect) }.ok()?;
@@ -403,15 +525,69 @@ impl Elem {
         select().unwrap_or(false)
     }
 
+    fn select_all(&self) -> bool {
+        if let Some(window) = self.scintilla() {
+            return sci_send(window, SCI_SELECTALL, 0, 0).is_some();
+        }
+        let Some(pattern) = self.text_pattern() else {
+            return false;
+        };
+        unsafe { pattern.DocumentRange().and_then(|range| range.Select()) }.is_ok()
+    }
+}
+
+/// Measures the flagged words of one field in document order with a single
+/// text range that walks from word to word. Moving a range by N characters
+/// costs the watched app O(N) (the Word editor of Outlook walks its text),
+/// so starting every word from the document start made long texts freeze.
+struct RangeWalker {
+    pattern: IUIAutomationTextPattern,
+    /// A range whose start sits `.1` characters (as the control counts
+    /// them) into the document, left behind by the previous word.
+    cursor: Option<(IUIAutomationTextRange, i32)>,
+}
+
+impl RangeWalker {
+    fn new(element: &Elem) -> Option<Self> {
+        Some(Self {
+            pattern: element.text_pattern()?,
+            cursor: None,
+        })
+    }
+
     /// Screen rectangles (physical px, one per line) of `len` UTF-16 units
-    /// from `start`. The range must hold exactly `expected`: a control that
-    /// counts characters differently (line breaks, hidden markup) would
-    /// otherwise put the underline under the wrong words.
-    fn range_rects(&self, start: usize, len: usize, expected: &str) -> Option<Vec<Rect>> {
-        let pattern = self.text_pattern()?;
+    /// from `start`, walking on from the previous word. The range must hold
+    /// exactly `expected`: a control that counts characters differently
+    /// (line breaks, hidden markup) would otherwise put the underline under
+    /// the wrong words.
+    fn walk(&mut self, start: usize, len: usize, expected: &str) -> Option<Vec<Rect>> {
         let (start, len) = (i32::try_from(start).ok()?, i32::try_from(len).ok()?);
+        let (range, at) = self.cursor.take()?;
+        self.measure(range, at, start, len, expected, true)
+    }
+
+    /// Like `walk`, from a fresh range at the document start (the first
+    /// word, or the walk lost its way).
+    fn anchored(&mut self, start: usize, len: usize, expected: &str) -> Option<Vec<Rect>> {
+        let (start, len) = (i32::try_from(start).ok()?, i32::try_from(len).ok()?);
+        let range = unsafe { self.pattern.DocumentRange() }.ok()?;
+        self.measure(range, 0, start, len, expected, false)
+    }
+
+    /// Move `range` (its start at `at`) to `start`, cover `len` characters
+    /// and measure them. `strict`: a move by another count than asked fails
+    /// (see `logic::range_move_outcome`).
+    fn measure(
+        &mut self,
+        range: IUIAutomationTextRange,
+        at: i32,
+        start: i32,
+        len: i32,
+        expected: &str,
+        strict: bool,
+    ) -> Option<Vec<Rect>> {
+        let delta = start.checked_sub(at)?;
         unsafe {
-            let range = pattern.DocumentRange().ok()?;
             range
                 .MoveEndpointByRange(
                     TextPatternRangeEndpoint_End,
@@ -419,7 +595,18 @@ impl Elem {
                     TextPatternRangeEndpoint_Start,
                 )
                 .ok()?;
-            range.Move(TextUnit_Character, start).ok()?;
+            let moved = if delta == 0 {
+                0
+            } else {
+                range.Move(TextUnit_Character, delta).ok()?
+            };
+            match logic::range_move_outcome(delta, moved, strict) {
+                // The start is exact, whatever the text check below says:
+                // the next word walks on from here.
+                logic::RangeMove::Exact => self.cursor = Some((range.clone(), start)),
+                logic::RangeMove::Unverified => {}
+                logic::RangeMove::Abort => return None,
+            }
             range
                 .MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, len)
                 .ok()?;
@@ -429,16 +616,6 @@ impl Elem {
             }
             read_rectangles(range.GetBoundingRectangles().ok()?)
         }
-    }
-
-    fn select_all(&self) -> bool {
-        if let Some(window) = self.scintilla() {
-            return sci_send(window, SCI_SELECTALL, 0, 0).is_some();
-        }
-        let Some(pattern) = self.text_pattern() else {
-            return false;
-        };
-        unsafe { pattern.DocumentRange().and_then(|range| range.Select()) }.is_ok()
     }
 }
 
@@ -536,6 +713,10 @@ struct FieldSnapshot {
     window: Option<HWND>,
     app: AppInfo,
     text: String,
+    /// `FocusMemo::id` of the element: the same id is the same field.
+    focus_id: u64,
+    /// The text was read on this probe (not reused: no input since).
+    read: bool,
 }
 
 struct Skipped {
@@ -570,7 +751,10 @@ fn role_of(element: &Elem) -> Option<&'static str> {
     if element.scintilla().is_some() {
         return Some(ROLE_TEXT_AREA);
     }
-    let control = unsafe { element.uia()?.CurrentControlType() }.ok()?;
+    let uia = element.uia()?;
+    let control = cached_or_current(unsafe { uia.CachedControlType() }, || unsafe {
+        uia.CurrentControlType()
+    })?;
     if control == UIA_EditControlTypeId {
         Some(ROLE_TEXT_FIELD)
     } else if control == UIA_ComboBoxControlTypeId {
@@ -621,22 +805,12 @@ fn parent_processes() -> Option<HashMap<u32, u32>> {
 /// The focused element belongs to the foreground app: same process, or a
 /// descendant of it. WebView2 apps (Teams, new Outlook, ...) own the window
 /// in one process and render their text fields in a child `msedgewebview2`.
-fn is_same_app(element_pid: u32, foreground_pid: u32) -> bool {
+/// `None` when the process snapshot failed (it can, transiently).
+fn is_same_app(element_pid: u32, foreground_pid: u32) -> Option<bool> {
     if element_pid == foreground_pid {
-        return true;
+        return Some(true);
     }
-    let Some(parents) = parent_processes() else {
-        return false;
-    };
-    let mut current = element_pid;
-    for _ in 0..6 {
-        match parents.get(&current) {
-            Some(&parent) if parent == foreground_pid => return true,
-            Some(&parent) if parent != 0 && parent != current => current = parent,
-            _ => return false,
-        }
-    }
-    false
+    logic::same_app_verdict(element_pid, foreground_pid, parent_processes().as_ref())
 }
 
 /// The focused Scintilla control of the foreground window (Notepad++, SciTE).
@@ -659,75 +833,311 @@ fn focused_scintilla(window: HWND) -> Option<Elem> {
 }
 
 /// The focused text control of the foreground window: Scintilla through its
-/// window handle, anything else through UI Automation.
-fn focused_element(automation: &IUIAutomation, window: HWND) -> Option<Elem> {
+/// window handle, anything else through UI Automation. With `request` the
+/// static facts of the element arrive in the same call (`Cached*`).
+fn focused_element(
+    automation: &IUIAutomation,
+    window: HWND,
+    request: Option<&IUIAutomationCacheRequest>,
+) -> Option<Elem> {
     focused_scintilla(window).or_else(|| {
-        unsafe { automation.GetFocusedElement() }
-            .ok()
-            .map(Elem::Uia)
+        let focused = match request {
+            Some(request) => unsafe { automation.GetFocusedElementBuildCache(request) }
+                .or_else(|_| unsafe { automation.GetFocusedElement() }),
+            None => unsafe { automation.GetFocusedElement() },
+        };
+        focused.ok().map(Elem::from_uia)
     })
 }
 
-fn probe(automation: &IUIAutomation, own_pid: u32, config: &WatchConfig) -> Probe {
+/// Properties fetched together with the focused element: one round trip
+/// to the watched app instead of one per property.
+fn focus_cache_request(automation: &IUIAutomation) -> Option<IUIAutomationCacheRequest> {
+    let request = unsafe { automation.CreateCacheRequest() }.ok()?;
+    for property in [
+        UIA_RuntimeIdPropertyId,
+        UIA_ProcessIdPropertyId,
+        UIA_ControlTypePropertyId,
+        UIA_ClassNamePropertyId,
+        UIA_NamePropertyId,
+        UIA_IsPasswordPropertyId,
+        UIA_NativeWindowHandlePropertyId,
+    ] {
+        unsafe { request.AddProperty(property) }.ok()?;
+    }
+    Some(request)
+}
+
+/// When the user last pressed a key, clicked, scrolled or moved the pointer
+/// (in any app of this session). `None` when unknown: callers then read as
+/// if there was input.
+pub(super) fn last_input() -> Option<Instant> {
+    let mut info = LASTINPUTINFO {
+        cbSize: size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    if !unsafe { GetLastInputInfo(&mut info) }.as_bool() {
+        return None;
+    }
+    // Both are milliseconds since boot that wrap after 49.7 days.
+    let idle = unsafe { GetTickCount() }.wrapping_sub(info.dwTime);
+    Instant::now().checked_sub(Duration::from_millis(u64::from(idle)))
+}
+
+/// A fix was written or the watcher was reset: read the field on the next
+/// probe even without user input.
+static FORCE_READ: AtomicBool = AtomicBool::new(false);
+
+/// Why a field is skipped, as reported to the Settings status line.
+type Rejected = (ActivityCode, Option<String>);
+
+#[derive(Clone)]
+enum FieldRead {
+    Text(String),
+    TooLong,
+    NoText,
+    /// Read-only right now (a cheap signal; may change while focused).
+    ReadOnly,
+}
+
+impl FieldRead {
+    fn of(element: &Elem) -> Self {
+        if element.quick_read_only() {
+            return FieldRead::ReadOnly;
+        }
+        match element.read_text() {
+            Some(text) if text.chars().count() > logic::MAX_CHECK_CHARS => FieldRead::TooLong,
+            Some(text) => FieldRead::Text(text),
+            None => FieldRead::NoText,
+        }
+    }
+}
+
+/// Word-style editors without a ValuePattern: the whole-document read-only
+/// attribute. Expensive in long texts, so asked once per element (and once
+/// more when its patterns show up late). Never asked of Scintilla.
+fn document_read_only(element: &Elem) -> bool {
+    element.scintilla().is_none() && element.text_is_read_only()
+}
+
+fn read_only_rejection() -> Rejected {
+    (
+        ActivityCode::UnsupportedField,
+        Some("read-only".to_string()),
+    )
+}
+
+/// The focused element of the last probe and what is known about it.
+struct FocusMemo {
+    /// Identifies the element in `TrackedField` without asking UIA.
+    id: u64,
+    /// The element, with its patterns once it turned out checkable.
+    element: Elem,
+    /// Why it is never checked (role, whole-document read-only); `None`
+    /// for a checkable field. Fixed while the element stays focused.
+    rejected: Option<Rejected>,
+    /// The last read of its text and when it started.
+    read: Option<(Instant, FieldRead)>,
+}
+
+impl FocusMemo {
+    /// Everything about a newly focused element that does not change while
+    /// it stays focused. The value of a password field is never read.
+    fn learn(id: u64, element: Elem) -> Self {
+        let role = role_of(&element);
+        let subrole = (role == Some(ROLE_TEXT_FIELD) && looks_like_search(&element.name()))
+            .then_some("AXSearchField");
+        let (element, rejected) = if !logic::is_checkable_role(role, subrole) {
+            let detail = role
+                .map(str::to_string)
+                .or_else(|| Some(element.class_name()))
+                .filter(|detail| !detail.is_empty());
+            (element, Some((ActivityCode::UnsupportedField, detail)))
+        } else {
+            // The cheap read-only signals are asked before every read
+            // (`FieldRead::of`); only the whole-document one is kept.
+            let element = element.with_patterns();
+            let rejected = document_read_only(&element).then(read_only_rejection);
+            (element, rejected)
+        };
+        Self {
+            id,
+            element,
+            rejected,
+            read: None,
+        }
+    }
+}
+
+/// What the watcher thread remembers between probes, so that a field that
+/// stays focused costs the watched app as few calls as possible.
+#[derive(Default)]
+struct ProbeMemory {
+    next_id: u64,
+    focus: Option<FocusMemo>,
+    /// Executable info of the last foreground process.
+    app: Option<(u32, AppInfo)>,
+    /// `is_same_app` for the last (element pid, foreground pid) pair: the
+    /// process snapshot behind it is taken once per pair, not per probe.
+    /// A failed snapshot is not remembered.
+    same_app: Option<((u32, u32), bool)>,
+}
+
+impl ProbeMemory {
+    fn app_info(&mut self, pid: u32) -> AppInfo {
+        match self.app.as_ref() {
+            Some((known, info)) if *known == pid => info.clone(),
+            _ => {
+                let info = app_info(pid);
+                self.app = Some((pid, info.clone()));
+                info
+            }
+        }
+    }
+
+    fn is_same_app(&mut self, element_pid: u32, foreground_pid: u32) -> bool {
+        let key = (element_pid, foreground_pid);
+        match self.same_app {
+            Some((known, same)) if known == key => same,
+            _ => match is_same_app(element_pid, foreground_pid) {
+                Some(same) => {
+                    self.same_app = Some((key, same));
+                    same
+                }
+                None => false,
+            },
+        }
+    }
+}
+
+struct ProbeContext<'a> {
+    automation: &'a IUIAutomation,
+    focus_request: Option<&'a IUIAutomationCacheRequest>,
+    own_pid: u32,
+    config: &'a WatchConfig,
+}
+
+fn probe(context: &ProbeContext<'_>, memory: &mut ProbeMemory) -> Probe {
     let Some((window, pid)) = foreground_window() else {
+        memory.focus = None;
         return Skipped::probe(ActivityCode::NoField, None, None);
     };
-    if pid == own_pid {
+    if pid == context.own_pid {
         return Probe::OwnApp;
     }
-    let app = app_info(pid);
+    // Put back only when this element is probed to the end.
+    let known = memory.focus.take();
+    let app = memory.app_info(pid);
     let exe = app.bundle_id.as_deref();
     if exe.is_some_and(|exe| BUILTIN_EXCLUDED.contains(&exe))
-        || logic::is_app_excluded(exe, &config.excluded_apps)
+        || logic::is_app_excluded(exe, &context.config.excluded_apps)
     {
         return Skipped::probe(ActivityCode::ExcludedApp, Some(&app), app.bundle_id.clone());
     }
-    let Some(element) = focused_element(automation, window) else {
+    let Some(element) = focused_element(context.automation, window, context.focus_request) else {
         return Skipped::probe(ActivityCode::NoField, Some(&app), None);
     };
-    if !element.pid().is_some_and(|element_pid| is_same_app(element_pid, pid)) {
+    if !element
+        .pid()
+        .is_some_and(|element_pid| memory.is_same_app(element_pid, pid))
+    {
         return Skipped::probe(ActivityCode::NoField, Some(&app), None);
     }
-    let role = role_of(&element);
-    // Role first: the value of a password field is never read.
-    let subrole = (role == Some(ROLE_TEXT_FIELD) && looks_like_search(&element.name()))
-        .then_some("AXSearchField");
-    if !logic::is_checkable_role(role, subrole) {
-        let detail = role
-            .map(str::to_string)
-            .or_else(|| Some(element.class_name()))
-            .filter(|detail| !detail.is_empty());
-        return Skipped::probe(ActivityCode::UnsupportedField, Some(&app), detail);
-    }
-    if element.is_read_only() {
+    // Asked of the element just focused, on every probe (with the focus
+    // cache request it is local): a password field's value is never read,
+    // even when a known field turns into one.
+    if element.is_password() {
         return Skipped::probe(
             ActivityCode::UnsupportedField,
             Some(&app),
-            Some("read-only".to_string()),
+            Some(ROLE_SECURE.to_string()),
         );
     }
-    let Some(text) = element.read_text() else {
-        return Skipped::probe(
+    let mut memo = match known.filter(|known| known.element.same_as(&element, context.automation)) {
+        Some(known) => known,
+        None => {
+            memory.next_id = memory.next_id.wrapping_add(1);
+            FocusMemo::learn(memory.next_id, element)
+        }
+    };
+    if let Some((code, detail)) = memo.rejected.clone() {
+        memory.focus = Some(memo);
+        return Skipped::probe(code, Some(&app), detail);
+    }
+    // The same field and no input since it was read: its text cannot have
+    // changed, so the app is not asked again (apart from a rare idle read
+    // for text changed by dictation or another app).
+    let forced = FORCE_READ.swap(false, Ordering::Relaxed);
+    let fresh = forced
+        || memo.read.as_ref().is_none_or(|(read_at, _)| {
+            logic::text_read_due(last_input(), *read_at, Instant::now())
+        });
+    if fresh {
+        // Patterns missing at focus time (lazy accessibility) are asked
+        // for again; ones that show up late get the one-time check too.
+        if memo.element.ensure_patterns() && document_read_only(&memo.element) {
+            memo.rejected = Some(read_only_rejection());
+            memory.focus = Some(memo);
+            return Skipped::probe(
+                ActivityCode::UnsupportedField,
+                Some(&app),
+                Some("read-only".to_string()),
+            );
+        }
+        let read_at = Instant::now();
+        memo.read = Some((read_at, FieldRead::of(&memo.element)));
+    }
+    let probe = match memo.read.as_ref().map(|(_, read)| read) {
+        Some(FieldRead::Text(text)) => Probe::Field(FieldSnapshot {
+            element: memo.element.clone(),
+            window: Some(window),
+            app,
+            text: text.clone(),
+            focus_id: memo.id,
+            read: fresh,
+        }),
+        Some(FieldRead::TooLong) => Skipped::probe(ActivityCode::FieldTooLong, Some(&app), None),
+        Some(FieldRead::ReadOnly) => {
+            let (code, detail) = read_only_rejection();
+            Skipped::probe(code, Some(&app), detail)
+        }
+        Some(FieldRead::NoText) | None => Skipped::probe(
             ActivityCode::UnsupportedField,
             Some(&app),
             Some("no text value".to_string()),
-        );
+        ),
     };
-    if text.chars().count() > logic::MAX_CHECK_CHARS {
-        return Skipped::probe(ActivityCode::FieldTooLong, Some(&app), None);
+    memory.focus = Some(memo);
+    probe
+}
+
+/// App name and whether the text was read, for the probe-cost log.
+fn probe_summary(probe: &Probe) -> (Option<String>, bool) {
+    match probe {
+        Probe::OwnApp => (Some("Lexora".to_string()), false),
+        Probe::Nothing(skipped) => (skipped.app.as_ref().and_then(|app| app.name.clone()), false),
+        Probe::Field(snapshot) => (snapshot.app.name.clone(), snapshot.read),
     }
-    Probe::Field(FieldSnapshot {
-        element,
-        window: Some(window),
-        app,
-        text,
-    })
+}
+
+fn log_probe_cost(summary: &logic::PollSummary, app: Option<&str>, read: bool, next: Duration) {
+    log::debug!(
+        "Writing check probe: {:?} (slowest {:?}, text read in {} of {} probes), app {}, read now: {read}, next poll in {next:?}",
+        summary.last,
+        summary.slowest,
+        summary.reads,
+        summary.probes,
+        app.unwrap_or("-"),
+    );
 }
 
 // ── Watcher state ────────────────────────────────────────
 
 struct TrackedField {
+    /// With its patterns: underline measuring and fixes reuse them.
     element: Elem,
+    /// `FocusMemo::id` of the element.
+    focus_id: u64,
     /// Top-level window of the app, to hand the focus back after the panel.
     window: Option<SendHwnd>,
     app: AppInfo,
@@ -792,7 +1202,10 @@ pub fn spawn_watcher(app: AppHandle) {
 fn run(app: AppHandle) {
     let own_pid = std::process::id();
     let mut automation: Option<IUIAutomation> = None;
+    let mut focus_request: Option<IUIAutomationCacheRequest> = None;
+    let mut memory = ProbeMemory::default();
     let mut language_checked = Instant::now();
+    let mut stats = logic::PollStats::new(Instant::now());
     loop {
         let config = config_snapshot(&app);
         if !config.enabled {
@@ -806,19 +1219,40 @@ fn run(app: AppHandle) {
         }
         if automation.is_none() {
             automation = self::automation();
+            focus_request = automation.as_ref().and_then(focus_cache_request);
         }
-        match automation.as_ref() {
+        let interval = match automation.as_ref() {
             Some(automation) => {
-                let observed = probe(automation, own_pid, &config);
-                tick(&app, automation, observed, &config);
+                let started = Instant::now();
+                let context = ProbeContext {
+                    automation,
+                    focus_request: focus_request.as_ref(),
+                    own_pid,
+                    config: &config,
+                };
+                let observed = probe(&context, &mut memory);
+                let (app_name, read) = probe_summary(&observed);
+                tick(&app, observed, &config);
+                let spent = started.elapsed();
+                // Every UIA call waits for the watched app's UI thread: a
+                // slow app is asked less often.
+                let interval =
+                    logic::next_poll_interval(spent, POLL_INTERVAL, logic::MAX_POLL_INTERVAL);
+                if let Some(summary) = stats.record(spent, read, Instant::now()) {
+                    log_probe_cost(&summary, app_name.as_deref(), read, interval);
+                }
+                interval
             }
-            None => report(&app, ActivityCode::NoAccess, None, None),
-        }
-        thread::sleep(POLL_INTERVAL);
+            None => {
+                report(&app, ActivityCode::NoAccess, None, None);
+                POLL_INTERVAL
+            }
+        };
+        thread::sleep(interval);
     }
 }
 
-fn tick(app: &AppHandle, automation: &IUIAutomation, observed: Probe, config: &WatchConfig) {
+fn tick(app: &AppHandle, observed: Probe, config: &WatchConfig) {
     let now = Instant::now();
     let mut actions: Vec<UiAction> = Vec::new();
     let mut payload: Option<FieldPayload> = None;
@@ -832,6 +1266,8 @@ fn tick(app: &AppHandle, automation: &IUIAutomation, observed: Probe, config: &W
         }
         let checkable = |text: &str| logic::text_is_checkable(text, &config.language);
         let mut field_changed = false;
+        // No input since the last read: the field has not moved either.
+        let mut fresh_read = false;
         let decision = match observed {
             Probe::OwnApp => return,
             Probe::Nothing(skipped) => {
@@ -846,10 +1282,11 @@ fn tick(app: &AppHandle, automation: &IUIAutomation, observed: Probe, config: &W
                 watcher.state.observe(None, checkable, now)
             }
             Probe::Field(snapshot) => {
+                fresh_read = snapshot.read;
                 let same = watcher
                     .field
                     .as_ref()
-                    .is_some_and(|field| field.element.same_as(&snapshot.element, automation));
+                    .is_some_and(|field| field.focus_id == snapshot.focus_id);
                 let decision = watcher.state.observe(
                     Some(Observation {
                         same_field: same,
@@ -865,6 +1302,7 @@ fn tick(app: &AppHandle, automation: &IUIAutomation, observed: Probe, config: &W
                 }
                 watcher.field = Some(TrackedField {
                     element: snapshot.element,
+                    focus_id: snapshot.focus_id,
                     window: snapshot.window.map(SendHwnd),
                     app: snapshot.app,
                 });
@@ -908,7 +1346,7 @@ fn tick(app: &AppHandle, automation: &IUIAutomation, observed: Probe, config: &W
                 }
             }
             Decision::Nothing => {
-                if watcher.visible {
+                if watcher.visible && (fresh_read || collapsed) {
                     if let Some(field) = watcher.field.as_ref() {
                         actions.push(UiAction::Place {
                             element: field.element.clone(),
@@ -1158,8 +1596,16 @@ pub(super) fn mark_geometry(
     // The field must still hold the text the offsets refer to.
     let lead = logic::body_offset_utf16(&current, text)?;
     let field_bounds = element.bounds().or(fallback)?;
-    let mut regions = Vec::new();
-    for mark in marks {
+    let mut walker = RangeWalker::new(&element)?;
+    // Measured front to back so the range only ever walks forward; the
+    // regions keep the order of `marks`.
+    let mut order: Vec<usize> = (0..marks.len()).collect();
+    order.sort_by_key(|&index| marks.get(index).map_or(0, |mark| mark.start));
+    let mut measured: Vec<Option<Vec<Rect>>> = vec![None; marks.len()];
+    for index in order {
+        let Some(mark) = marks.get(index) else {
+            continue;
+        };
         let Some(fragment) = logic::utf16_slice(text, mark.start, mark.end) else {
             continue;
         };
@@ -1167,18 +1613,32 @@ pub(super) fn mark_geometry(
         let len = mark.end - mark.start;
         // Some controls count every line break as two characters.
         let shifted = start + logic::newlines_before_utf16(&current, start);
-        let rects = element
-            .range_rects(start, len, &fragment)
+        let offsets = if shifted == start {
+            vec![start]
+        } else {
+            vec![start, shifted]
+        };
+        let rects = offsets
+            .iter()
+            .find_map(|&offset| walker.walk(offset, len, &fragment))
             .or_else(|| {
-                (shifted != start)
-                    .then(|| element.range_rects(shifted, len, &fragment))
-                    .flatten()
-            })
-            .unwrap_or_default();
-        if !rects.is_empty() {
-            regions.push((mark.id, rects));
+                offsets
+                    .iter()
+                    .find_map(|&offset| walker.anchored(offset, len, &fragment))
+            });
+        if let Some(slot) = measured.get_mut(index) {
+            *slot = rects;
         }
     }
+    let regions = marks
+        .iter()
+        .zip(measured)
+        .filter_map(|(mark, rects)| {
+            rects
+                .filter(|rects| !rects.is_empty())
+                .map(|rects| (mark.id, rects))
+        })
+        .collect();
     Some(MarkGeometry {
         field_bounds,
         regions,
@@ -1273,6 +1733,7 @@ pub(super) fn hide_overlay(app: &AppHandle, overlay: Overlay) {
 
 pub fn reset(app: &AppHandle) {
     *lock_watcher() = None;
+    FORCE_READ.store(true, Ordering::Relaxed);
     hide_window(app);
 }
 
@@ -1344,6 +1805,8 @@ pub fn apply_fix(
     let (element, window, _) = current_field(field_id)?;
     set_writing(true);
     let result = write_text(app, &element, window, checked, corrected);
+    // The field changed without user input: the next probe must read it.
+    FORCE_READ.store(true, Ordering::Relaxed);
     {
         let mut guard = lock_watcher();
         if let Some(watcher) = guard.as_mut() {
@@ -1486,7 +1949,7 @@ fn paste_fallback(
     let same_field = automation()
         .and_then(|automation| {
             let (foreground, _) = foreground_window()?;
-            let focused = focused_element(&automation, foreground)?;
+            let focused = focused_element(&automation, foreground, None)?;
             Some(focused.same_as(element, &automation))
         })
         .unwrap_or(false);

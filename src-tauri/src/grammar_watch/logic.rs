@@ -4,6 +4,7 @@
 // The macOS layer feeds observations in and executes decisions.
 // ============================================================
 
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Typing pause after which the field text is sent for a check.
@@ -240,7 +241,17 @@ impl WatchState {
         }
         let trimmed = observation.text.trim();
         if self.settled.as_deref() == Some(trimmed) {
-            return Decision::Nothing;
+            if !self.pending {
+                return Decision::Nothing;
+            }
+            // Only whitespace changed while the badge showed «stale»: hand
+            // the same text over again so the shown result comes back.
+            self.pending = false;
+            self.badge_visible = true;
+            return Decision::Check {
+                field_id: self.field_id,
+                text: trimmed.to_string(),
+            };
         }
         self.settled = Some(trimmed.to_string());
         if checkable(trimmed) {
@@ -267,6 +278,156 @@ impl WatchState {
     /// The user dismissed the badge: hide it until the text changes.
     pub fn snooze(&mut self) -> Decision {
         self.hide()
+    }
+}
+
+// ── Polling cost ─────────────────────────────────────────
+// Every read of another app's field is served on that app's UI thread
+// (Outlook/Word freeze while typing when asked too often), so reads
+// follow the user's input and slow apps are polled less.
+
+/// Input this long before a read still triggers the next one: apps edit
+/// the text right after a keystroke (autocorrect, auto-format, IME).
+pub const INPUT_GRACE: Duration = Duration::from_millis(1000);
+/// The watcher sleeps this many times as long as its last probe took.
+pub const POLL_COST_FACTOR: u32 = 5;
+/// Longest pause between two probes of a slow app.
+pub const MAX_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
+/// Read the field (text, frame, underline positions) again? Only when the
+/// user pressed a key, clicked or moved the pointer after `grace` before
+/// the last read: nothing else changes another app's text or layout.
+pub fn read_due(last_input: Instant, last_read: Instant, grace: Duration) -> bool {
+    last_read
+        .checked_duration_since(last_input)
+        .is_none_or(|since_input| since_input < grace)
+}
+
+/// Without input the field text is still re-read this often: dictation
+/// and other apps change it without a key or click of the user.
+pub const IDLE_READ_INTERVAL: Duration = Duration::from_secs(3);
+
+/// Read the field text again? After input (`read_due`), when the input time
+/// is unknown, or when the last read is older than `IDLE_READ_INTERVAL`.
+pub fn text_read_due(last_input: Option<Instant>, last_read: Instant, now: Instant) -> bool {
+    last_input.is_none_or(|input| read_due(input, last_read, INPUT_GRACE))
+        || now.duration_since(last_read) >= IDLE_READ_INTERVAL
+}
+
+/// Pause before the next probe when the last probe and tick took `spent`.
+pub fn next_poll_interval(spent: Duration, base: Duration, max: Duration) -> Duration {
+    spent
+        .saturating_mul(POLL_COST_FACTOR)
+        .max(base)
+        .min(max.max(base))
+}
+
+/// The probe cost is logged at most this often.
+pub const POLL_LOG_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Probe costs since the previous summary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PollSummary {
+    pub probes: u32,
+    /// Probes that read the field text (the rest reused the last read).
+    pub reads: u32,
+    pub slowest: Duration,
+    pub last: Duration,
+}
+
+/// Collects probe costs for a rate-limited log line.
+#[derive(Debug)]
+pub struct PollStats {
+    since: Instant,
+    probes: u32,
+    reads: u32,
+    slowest: Duration,
+}
+
+impl PollStats {
+    pub fn new(now: Instant) -> Self {
+        Self {
+            since: now,
+            probes: 0,
+            reads: 0,
+            slowest: Duration::ZERO,
+        }
+    }
+
+    /// Count one probe; once per `POLL_LOG_INTERVAL` returns the summary
+    /// of the probes since the previous one.
+    pub fn record(&mut self, spent: Duration, read: bool, now: Instant) -> Option<PollSummary> {
+        self.probes = self.probes.saturating_add(1);
+        if read {
+            self.reads = self.reads.saturating_add(1);
+        }
+        self.slowest = self.slowest.max(spent);
+        if now.duration_since(self.since) < POLL_LOG_INTERVAL {
+            return None;
+        }
+        let summary = PollSummary {
+            probes: self.probes,
+            reads: self.reads,
+            slowest: self.slowest,
+            last: spent,
+        };
+        *self = Self::new(now);
+        Some(summary)
+    }
+}
+
+/// How many parent processes up a field may live below the app's window
+/// process (WebView2: app → msedgewebview2 → renderer).
+const MAX_PARENT_DEPTH: usize = 6;
+
+/// Does the focused element (process `element_pid`) belong to the
+/// foreground app: the same process or a descendant of it? `parents` maps a
+/// process to its parent; `None` when the process snapshot failed — then
+/// the answer is unknown (`None`), not «another app», unless the processes
+/// are the same.
+pub fn same_app_verdict(
+    element_pid: u32,
+    foreground_pid: u32,
+    parents: Option<&HashMap<u32, u32>>,
+) -> Option<bool> {
+    if element_pid == foreground_pid {
+        return Some(true);
+    }
+    let parents = parents?;
+    let mut current = element_pid;
+    for _ in 0..MAX_PARENT_DEPTH {
+        match parents.get(&current) {
+            Some(&parent) if parent == foreground_pid => return Some(true),
+            Some(&parent) if parent != 0 && parent != current => current = parent,
+            _ => return Some(false),
+        }
+    }
+    Some(false)
+}
+
+/// A text range was asked to move `requested` characters and reported
+/// `moved`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RangeMove {
+    /// It is where it was asked to go: later words may walk on from it.
+    Exact,
+    /// The count differs but the text check may still accept the range;
+    /// its position is not trusted for the next word.
+    Unverified,
+    /// A walk from the previous word lost its way: start over.
+    Abort,
+}
+
+/// `strict` for a walk from the previous word; a fresh range from the
+/// document start is judged by its text (some providers report an inexact
+/// count but move correctly).
+pub fn range_move_outcome(requested: i32, moved: i32, strict: bool) -> RangeMove {
+    if moved == requested {
+        RangeMove::Exact
+    } else if strict {
+        RangeMove::Abort
+    } else {
+        RangeMove::Unverified
     }
 }
 
@@ -831,22 +992,86 @@ mod tests {
     }
 
     #[test]
-    fn whitespace_only_change_is_not_rechecked() {
+    fn whitespace_only_change_redraws_the_same_result() {
         let t0 = Instant::now();
         let mut state = WatchState::new(t0);
         state.observe(obs(false, "She dont like it"), always, t0);
         let t1 = t0 + SETTLE_DELAY;
+        let field_id = state.field_id().expect("active");
         assert!(matches!(
             state.observe(obs(true, "She dont like it"), always, t1),
             Decision::Check { .. }
         ));
         let t2 = t1 + Duration::from_millis(10);
-        assert!(matches!(
+        assert_eq!(
             state.observe(obs(true, "She dont like it "), always, t2),
-            Decision::Pending { .. }
-        ));
+            Decision::Pending { field_id }
+        );
+        // The badge was marked stale: the same text is handed over again
+        // (the result is cached, no new AI call) instead of spinning forever.
         assert_eq!(
             state.observe(obs(true, "She dont like it "), always, t2 + SETTLE_DELAY),
+            Decision::Check {
+                field_id,
+                text: "She dont like it".to_string()
+            }
+        );
+        // ...once.
+        assert_eq!(
+            state.observe(
+                obs(true, "She dont like it "),
+                always,
+                t2 + SETTLE_DELAY * 2
+            ),
+            Decision::Nothing
+        );
+    }
+
+    #[test]
+    fn snoozed_badge_stays_hidden_after_whitespace_change() {
+        let t0 = Instant::now();
+        let mut state = WatchState::new(t0);
+        state.observe(obs(false, "She dont like it"), always, t0);
+        state.observe(obs(true, "She dont like it"), always, t0 + SETTLE_DELAY);
+        let t1 = t0 + SETTLE_DELAY * 2;
+        assert!(matches!(
+            state.observe(obs(true, "She dont like it "), always, t1),
+            Decision::Pending { .. }
+        ));
+        // Dismissed while stale: the same text does not bring the badge back.
+        assert_eq!(state.snooze(), Decision::Hide);
+        assert_eq!(
+            state.observe(obs(true, "She dont like it "), always, t1 + SETTLE_DELAY),
+            Decision::Nothing
+        );
+        // Hidden badge, whitespace-only edit: still nothing.
+        let t2 = t1 + SETTLE_DELAY * 2;
+        assert_eq!(
+            state.observe(obs(true, "She dont like it"), always, t2),
+            Decision::Nothing
+        );
+        assert_eq!(
+            state.observe(obs(true, "She dont like it"), always, t2 + SETTLE_DELAY),
+            Decision::Nothing
+        );
+    }
+
+    #[test]
+    fn rejected_text_is_not_handed_over_again() {
+        let t0 = Instant::now();
+        let mut state = WatchState::new(t0);
+        state.observe(obs(false, "She dont like it"), always, t0);
+        state.observe(obs(true, "She dont like it"), always, t0 + SETTLE_DELAY);
+        let t1 = t0 + SETTLE_DELAY * 2;
+        state.observe(obs(true, "ok"), never, t1);
+        assert_eq!(
+            state.observe(obs(true, "ok"), never, t1 + SETTLE_DELAY),
+            Decision::Hide
+        );
+        let t2 = t1 + SETTLE_DELAY * 2;
+        state.observe(obs(true, "ok "), never, t2);
+        assert_eq!(
+            state.observe(obs(true, "ok "), never, t2 + SETTLE_DELAY),
             Decision::Nothing
         );
     }
@@ -963,6 +1188,141 @@ mod tests {
             ),
             Decision::Check { .. }
         ));
+    }
+
+    // ── polling cost ──
+
+    #[test]
+    fn read_is_due_only_after_input_plus_grace() {
+        let t0 = Instant::now();
+        let grace = Duration::from_millis(1000);
+        // Input after the last read: read again.
+        assert!(read_due(t0 + Duration::from_millis(5), t0, grace));
+        // Input shortly before the read: still inside the grace period
+        // (autocorrect may rewrite the text right after a keystroke).
+        assert!(read_due(t0, t0 + Duration::from_millis(999), grace));
+        // The grace period ended before the read: nothing new to see.
+        assert!(!read_due(t0, t0 + grace, grace));
+        assert!(!read_due(t0, t0 + Duration::from_secs(30), grace));
+        // Input exactly at the read.
+        assert!(read_due(t0, t0, grace));
+        // No grace: due only for input after the read.
+        assert!(!read_due(t0, t0, Duration::ZERO));
+        assert!(read_due(t0 + Duration::from_millis(1), t0, Duration::ZERO));
+    }
+
+    #[test]
+    fn text_is_reread_after_input_or_when_the_read_is_old() {
+        let t0 = Instant::now();
+        let read = t0 + Duration::from_secs(10);
+        // Input after the read: due.
+        assert!(text_read_due(
+            Some(read + Duration::from_millis(1)),
+            read,
+            read + Duration::from_millis(2)
+        ));
+        // Old input, recent read: not due.
+        assert!(!text_read_due(
+            Some(t0),
+            read,
+            read + Duration::from_secs(1)
+        ));
+        // Old input, but the read is older than the idle interval: due
+        // (dictation and other apps change the text without input).
+        assert!(text_read_due(Some(t0), read, read + IDLE_READ_INTERVAL));
+        // Unknown input time: always due.
+        assert!(text_read_due(None, read, read));
+    }
+
+    #[test]
+    fn poll_interval_backs_off_for_slow_apps() {
+        let base = Duration::from_millis(200);
+        let max = Duration::from_secs(2);
+        // Cheap probes keep the base rate.
+        assert_eq!(next_poll_interval(Duration::ZERO, base, max), base);
+        assert_eq!(
+            next_poll_interval(Duration::from_millis(40), base, max),
+            base
+        );
+        // Five times the probe cost in between.
+        assert_eq!(
+            next_poll_interval(Duration::from_millis(41), base, max),
+            Duration::from_millis(205)
+        );
+        assert_eq!(
+            next_poll_interval(Duration::from_millis(300), base, max),
+            Duration::from_millis(1500)
+        );
+        // Capped.
+        assert_eq!(
+            next_poll_interval(Duration::from_millis(401), base, max),
+            max
+        );
+        assert_eq!(next_poll_interval(Duration::MAX, base, max), max);
+        // A cap below the base never shortens the base interval.
+        assert_eq!(
+            next_poll_interval(Duration::from_secs(5), base, Duration::from_millis(100)),
+            base
+        );
+    }
+
+    #[test]
+    fn poll_stats_summarize_once_per_log_interval() {
+        let t0 = Instant::now();
+        let mut stats = PollStats::new(t0);
+        let ms = Duration::from_millis;
+        assert_eq!(stats.record(ms(30), true, t0 + ms(200)), None);
+        assert_eq!(stats.record(ms(90), false, t0 + ms(400)), None);
+        assert_eq!(
+            stats.record(ms(10), false, t0 + POLL_LOG_INTERVAL),
+            Some(PollSummary {
+                probes: 3,
+                reads: 1,
+                slowest: ms(90),
+                last: ms(10),
+            })
+        );
+        // A new window starts after each summary.
+        assert_eq!(
+            stats.record(ms(5), true, t0 + POLL_LOG_INTERVAL + ms(200)),
+            None
+        );
+        assert_eq!(
+            stats.record(ms(7), true, t0 + POLL_LOG_INTERVAL * 2),
+            Some(PollSummary {
+                probes: 2,
+                reads: 2,
+                slowest: ms(7),
+                last: ms(7),
+            })
+        );
+    }
+
+    #[test]
+    fn same_app_verdict_needs_a_snapshot_only_for_other_processes() {
+        // Same process: no snapshot needed.
+        assert_eq!(same_app_verdict(7, 7, None), Some(true));
+        // Another process and the snapshot failed: unknown, not «different».
+        assert_eq!(same_app_verdict(9, 7, None), None);
+        // WebView2: the field lives in a grandchild of the app process.
+        let parents = HashMap::from([(9, 8), (8, 7), (7, 1), (5, 1)]);
+        assert_eq!(same_app_verdict(9, 7, Some(&parents)), Some(true));
+        assert_eq!(same_app_verdict(5, 7, Some(&parents)), Some(false));
+        // Unknown process, or a parent cycle.
+        assert_eq!(same_app_verdict(42, 7, Some(&parents)), Some(false));
+        let cycle = HashMap::from([(3, 4), (4, 3)]);
+        assert_eq!(same_app_verdict(3, 7, Some(&cycle)), Some(false));
+    }
+
+    #[test]
+    fn range_move_outcome_is_strict_only_when_walking() {
+        assert_eq!(range_move_outcome(12, 12, true), RangeMove::Exact);
+        assert_eq!(range_move_outcome(12, 12, false), RangeMove::Exact);
+        // A walk that moved a different count lost its position.
+        assert_eq!(range_move_outcome(12, 11, true), RangeMove::Abort);
+        // From the document start the text check decides; the position is
+        // not trusted for the next word.
+        assert_eq!(range_move_outcome(12, 11, false), RangeMove::Unverified);
     }
 
     // ── text replacement ──

@@ -1,9 +1,11 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GrammarApp } from './GrammarApp';
 import { invokeMock, listenMock } from '../test/mocks';
-import { renderWithQueryClient } from '../test/render';
+import { createTestQueryClient, renderWithQueryClient } from '../test/render';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { QUERY_KEYS } from '../lib/constants';
 import type { GrammarFieldPayload, WritingCheckDto, WritingIssueDto } from '../lib/types';
 
 const TEXT = 'She dont like apples and she go home.';
@@ -69,6 +71,48 @@ async function openPanel() {
   const badge = await screen.findByRole('button', { name: /2 writing suggestions/i });
   await userEvent.click(badge);
   return screen.findByRole('region', { name: /2 suggestions/i });
+}
+
+/** Backend stand-in: one "dont" issue per occurrence in the checked text. */
+function checkOf(text: string): WritingCheckDto {
+  const issues: WritingIssueDto[] = [];
+  for (let at = text.indexOf('dont'); at !== -1; at = text.indexOf('dont', at + 1)) {
+    issues.push(issue(issues.length + 1, 'dont', "doesn't", at));
+  }
+  return { ...CHECK, originalText: text, issueCount: issues.length, issues };
+}
+
+function checkedTexts(): unknown[] {
+  return argsOf('check_writing').map((args) =>
+    typeof args === 'object' && args !== null && 'input' in args ? args.input : args,
+  );
+}
+
+function fieldListenerOf(): ((event: { payload: unknown }) => void) | undefined {
+  const call = listenMock.mock.calls.find((c: unknown[]) => c[0] === 'lexora:grammar-field') as
+    | [string, (event: { payload: unknown }) => void]
+    | undefined;
+  return call?.[1];
+}
+
+const PARA_1 = 'She dont like apples.';
+const PARA_2 = 'He go home early.';
+const PARA_2_EDITED = 'He dont go home early.';
+
+function useIncrementalBackend() {
+  invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+    if (cmd === 'get_grammar_field') return field;
+    if (cmd === 'check_writing') {
+      const input =
+        typeof args === 'object' && args !== null && 'input' in args ? args.input : null;
+      const text =
+        typeof input === 'object' && input !== null && 'text' in input && typeof input.text === 'string'
+          ? input.text
+          : '';
+      return checkOf(text);
+    }
+    return null;
+  });
 }
 
 describe('GrammarApp', () => {
@@ -211,6 +255,89 @@ describe('GrammarApp', () => {
     act(() => cardListener?.[1]({ payload: { issueId: 2, action: 'dismiss' } }));
     expect(await screen.findByRole('button', { name: /checking your text|writing suggestion|No mistakes/i })).toBeInTheDocument();
     expect(argsOf('apply_grammar_fix')).toHaveLength(1);
+  });
+
+  it('re-checks only the paragraph that changed', async () => {
+    useIncrementalBackend();
+    const first = `${PARA_1}\n${PARA_2}`;
+    const second = `${PARA_1}\n${PARA_2_EDITED}`;
+    field = { ...FIELD, text: first };
+    renderWithQueryClient(<GrammarApp />);
+    expect(await screen.findByRole('button', { name: /1 writing suggestion/i })).toBeInTheDocument();
+    expect(checkedTexts()).toEqual([{ text: first, ephemeral: true }]);
+
+    act(() => fieldListenerOf()?.({ payload: { ...FIELD, text: second } }));
+    expect(await screen.findByRole('button', { name: /2 writing suggestions/i })).toBeInTheDocument();
+    expect(checkedTexts()).toEqual([
+      { text: first, ephemeral: true },
+      { text: PARA_2_EDITED, ephemeral: true },
+    ]);
+
+    // Offsets of the merged check point into the full field text.
+    const lastMarks = () => argsOf('set_grammar_marks').slice(-1)[0];
+    const secondDont = second.lastIndexOf('dont');
+    await waitFor(() =>
+      expect(lastMarks()).toMatchObject({
+        input: {
+          fieldId: 7,
+          text: second,
+          marks: [
+            { id: 1, start: 4, end: 8, original: 'dont' },
+            { id: 2, start: secondDont, end: secondDont + 4, original: 'dont' },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('does not re-send the same text focused in another field', async () => {
+    renderWithQueryClient(<GrammarApp />);
+    expect(await screen.findByRole('button', { name: /2 writing suggestions/i })).toBeInTheDocument();
+    act(() => fieldListenerOf()?.({ payload: { ...FIELD, fieldId: 8 } }));
+    const lastMarks = () => argsOf('set_grammar_marks').slice(-1)[0];
+    await waitFor(() => expect(lastMarks()).toMatchObject({ input: { fieldId: 8, text: TEXT } }));
+    expect(screen.getByRole('button', { name: /2 writing suggestions/i })).toBeInTheDocument();
+    expect(argsOf('check_writing')).toHaveLength(1);
+  });
+
+  it('re-uses the check when the same text comes back after pending', async () => {
+    renderWithQueryClient(<GrammarApp />);
+    await screen.findByRole('button', { name: /2 writing suggestions/i });
+    const marksOf = () => argsOf('set_grammar_marks');
+    await waitFor(() => expect(marksOf().slice(-1)[0]).toMatchObject({ input: { fieldId: 7, text: TEXT } }));
+    const marks = marksOf().slice(-1)[0];
+
+    act(() => fieldListenerOf()?.({ payload: { kind: 'pending', fieldId: 7 } }));
+    await waitFor(() => expect(marksOf().slice(-1)[0]).toEqual({ input: null }));
+    const sentBefore = marksOf().length;
+
+    act(() => fieldListenerOf()?.({ payload: FIELD }));
+    expect(await screen.findByRole('button', { name: /2 writing suggestions/i })).toBeInTheDocument();
+    await waitFor(() => expect(marksOf().length).toBeGreaterThan(sentBefore));
+    expect(marksOf().slice(-1)[0]).toEqual(marks);
+    expect(argsOf('check_writing')).toHaveLength(1);
+  });
+
+  it('keeps checked paragraphs in the query cache for a few minutes only', async () => {
+    useIncrementalBackend();
+    field = { ...FIELD, text: `${PARA_1}\n${PARA_2}` };
+    const queryClient = createTestQueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <GrammarApp />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('button', { name: /1 writing suggestion/i });
+    for (const paragraph of [PARA_1, PARA_2]) {
+      const query = queryClient
+        .getQueryCache()
+        .find({ queryKey: [QUERY_KEYS.GRAMMAR_CHECK_PARAGRAPH, paragraph], exact: true });
+      expect(query?.gcTime).toBe(300_000);
+    }
+    expect(
+      queryClient.getQueryData([QUERY_KEYS.GRAMMAR_CHECK_PARAGRAPH, PARA_1]),
+    ).toEqual([issue(1, 'dont', "doesn't", 4)]);
+    expect(queryClient.getQueryData([QUERY_KEYS.GRAMMAR_CHECK_PARAGRAPH, PARA_2])).toEqual([]);
   });
 
   it('follows field events from the backend', async () => {

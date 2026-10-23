@@ -70,6 +70,10 @@ struct Active {
     frame: Option<Rect>,
     shown: bool,
     last_refresh: Instant,
+    /// Start of the last measurement attempt, successful or not. Without
+    /// input since then nothing moved, so it is only re-measured now and
+    /// then (`logic::text_read_due`).
+    measured_at: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -135,6 +139,7 @@ pub(super) fn set(app: &AppHandle, input: Option<SetMarksInput>) -> Result<(), A
             frame: None,
             shown: false,
             last_refresh: Instant::now(),
+            measured_at: None,
         });
     }
     refresh(app);
@@ -161,12 +166,20 @@ pub(super) fn clear(app: &AppHandle) {
 }
 
 /// Called by the watcher on every tick: re-measure when the last
-/// measurement is old enough.
+/// measurement is old enough and the user did something since (scrolling,
+/// resizing and moving the field all take input), or after an idle pause
+/// (layout reflow without input, a result that arrived before the layout).
 pub(super) fn refresh_if_due(app: &AppHandle) {
-    let due = lock()
-        .active
-        .as_ref()
-        .is_some_and(|active| active.last_refresh.elapsed() >= REFRESH_INTERVAL);
+    let measured_at = {
+        let shared = lock();
+        match shared.active.as_ref() {
+            Some(active) if active.last_refresh.elapsed() >= REFRESH_INTERVAL => active.measured_at,
+            _ => return,
+        }
+    };
+    let due = measured_at.is_none_or(|measured_at| {
+        logic::text_read_due(platform::last_input(), measured_at, Instant::now())
+    });
     if due {
         refresh(app);
     }
@@ -176,13 +189,15 @@ fn refresh(app: &AppHandle) {
     let _serial = REFRESH_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let started = Instant::now();
     let (field_id, text, marks, version) = {
         let mut shared = lock();
         let version = shared.version;
         let Some(active) = shared.active.as_mut() else {
             return;
         };
-        active.last_refresh = Instant::now();
+        active.last_refresh = started;
+        active.measured_at = Some(started);
         (
             active.field_id,
             active.text.clone(),
