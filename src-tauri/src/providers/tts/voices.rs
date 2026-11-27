@@ -155,10 +155,7 @@ fn is_locale_tag(s: &str) -> bool {
     let Some(lang) = parts.next() else {
         return false;
     };
-    if lang.len() < 2 || lang.len() > 3 || !lang.chars().all(|c| c.is_ascii_alphabetic()) {
-        return false;
-    }
-    true
+    (2..=3).contains(&lang.len()) && lang.chars().all(|c| c.is_ascii_alphabetic())
 }
 
 fn locale_base(locale: &str) -> String {
