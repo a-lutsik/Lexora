@@ -2,7 +2,7 @@
 
 - Project root: `/Users/antonlutsenko/IdeaProjects/Lexora` (not a git repo — baseline = scratch snapshot + sha256 list, see below)
 - Status: **active**
-- Updated: 2026-10-04
+- Updated: 2026-11-27 (slice table re-checked against the code)
 - Authorized scope (user, 2026-10-04): implement `plans/ai-model-routing.md` with **Gemini as the default package**;
   provider mixing per role — agent's UX recommendation; **speech→speech live interpretation as an extra feature**.
   Out of scope unless needed by the plan: other audit findings (S1-2 flashcards etc.). No commits/publishing (not a git repo anyway).
@@ -23,16 +23,18 @@
   translate setup `{model, generationConfig{responseModalities, inputAudioTranscription, outputAudioTranscription, translationConfig{targetLanguageCode, echoTargetLanguage}}}`.
 
 ## Slices
-| # | Slice | Status |
-|---|---|---|
-| 0 | S1-1 extract_json; V023 migration (model_route, model_package, conditional dead-default → Gemini); S1-4 packs w/o enrich + images choice | backend done; UI images choice pending |
-| 1 | Roles, catalog, packages, route repo, router chain + timeouts, IPC; wire call sites | done (backend) |
-| 2 | Settings AiModelsPanel + wizard presets + e2e mock + vitest | pending |
-| 3 | TTS role (Gemini/OpenAI TTS + system fallback); image downscale/HEIC; OpenRouter input_audio; incremental live translation | backend done (TTS chain, input_audio, Gemini m4a); frontend parts pending |
-| 4 | Realtime core (Gemini Live WS) + Dialogue live mode | backend done (commands/realtime.rs); UI pending |
-| 5 | Live interpreter tab (S2S) | backend done; UI pending |
-| 6 | Usage counters panel | pending |
-| 7 | Final checks, UI verification, docs | pending |
+Statuses re-checked against the code on `main` (6b4c208) on 2026-11-27.
+
+| # | Slice | Status | Where in the code |
+|---|---|---|---|
+| 0 | S1-1 extract_json; V023 migration (model_route, model_package, conditional dead-default → Gemini); S1-4 packs w/o enrich + images choice | done | `providers/ai/mod.rs` (`extract_json`, multibyte test), `db/migrations/V023__model_routes.sql`, `db/packs.rs` (`with_images`), `commands/translate.rs` (`ENRICH_CONCURRENCY` = 2), `pages/collections/CollectionsPage.tsx` («with images» checkbox, off by default) |
+| 1 | Roles, catalog, packages, route repo, router chain + timeouts, IPC; wire call sites | done | `providers/models/{roles,catalog,packages,router}.rs`, `db/repos/model_route.rs`, `commands/models.rs` |
+| 2 | Settings AiModelsPanel + wizard presets + e2e mock + vitest | done | `pages/settings/{AiModelsPanel,RoleRouteEditor,ProviderKeysEditor}.tsx` + tests, `lib/setupPresets.ts` (`apply_model_package`), e2e 06 («choosing a package fills every role», «a retired model is shown as unavailable»), e2e 11 (Gemini free path), `e2e/helpers/tauri-mock.ts` |
+| 3 | TTS role (Gemini/OpenAI TTS + system fallback); image downscale/HEIC; OpenRouter input_audio; incremental live translation | done | `providers/tts/{gemini_tts,openai_tts,system}.rs`, `lib/imagePrepare.ts` (Image tab), `hooks/useLiveSpeechTranslate.ts` + `lib/liveSegments.ts`, `transcribe_audio_hub` in `commands/translation_hub.rs`; TTS role editable in Settings via `lib/modelRouting.ts` |
+| 4 | Realtime core (Gemini Live WS) + Dialogue live mode | done | `providers/realtime/gemini_live.rs`, `commands/realtime.rs`, `hooks/useRealtimeSession.ts`, `lib/realtimeAudio.ts`, `pages/dialogue/LiveConversationConsole.tsx` |
+| 5 | Live interpreter tab (S2S) | done | `pages/translate/tabs/LiveInterpreterTab.tsx` + test, `live_interpreter` role |
+| 6 | Usage counters panel | done | `db/migrations/V024__ai_usage.sql`, `providers/models/usage.rs`, `get_ai_usage`, `pages/settings/AiUsagePanel.tsx` + test |
+| 7 | Final checks, UI verification, docs | automated checks done; manual checks open | vitest/tsc/eslint/i18n green on `main` 6b4c208 (2026-11-18). Open: manual check on a real Mac, live smoke test with a Gemini key, Gemini Live latency target (< 1.5 s p50) — see «Next step» |
 
 ## Baseline
 - Snapshot: scratchpad `baseline/` + `baseline.sha256` (324 files) taken 2026-10-04 before any edit.
